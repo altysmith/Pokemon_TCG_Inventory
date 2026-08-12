@@ -1,0 +1,584 @@
+const photoInput = document.querySelector('#photo');
+const canvas = document.querySelector('#canvas');
+const ctx = canvas.getContext('2d');
+const stage = document.querySelector('#stage');
+const placeholder = document.querySelector('#placeholder');
+const scanButton = document.querySelector('#scan');
+const saveButton = document.querySelector('#save');
+const instruction = document.querySelector('#instruction');
+const state = document.querySelector('#state');
+const message = document.querySelector('#message');
+const literalOcr = document.querySelector('#literal_ocr');
+const ocrEngine = document.querySelector('#ocr_engine');
+const regulationMark = document.querySelector('#regulation_mark');
+const setCode = document.querySelector('#set_code');
+const cardNumber = document.querySelector('#card_number');
+const setTotal = document.querySelector('#set_total');
+const readerName = document.querySelector('#reader_name');
+const startCameraButton = document.querySelector('#start_camera');
+const captureFrameButton = document.querySelector('#capture_frame');
+const nextCardButton = document.querySelector('#next_card');
+const stopCameraButton = document.querySelector('#stop_camera');
+const cameraSelect = document.querySelector('#camera_device');
+const cameraFrame = document.querySelector('#camera_frame');
+const cameraVideo = document.querySelector('#camera_video');
+const reuseSelection = document.querySelector('#reuse_selection');
+const clearSelectionButton = document.querySelector('#clear_selection');
+const lookupButton = document.querySelector('#lookup_card');
+const lookupState = document.querySelector('#lookup_state');
+const lookupResult = document.querySelector('#lookup_result');
+const lookupImage = document.querySelector('#lookup_image');
+const lookupName = document.querySelector('#lookup_name');
+const lookupIdentity = document.querySelector('#lookup_identity');
+const lookupSource = document.querySelector('#lookup_source');
+const lookupMessage = document.querySelector('#lookup_message');
+const UI_ITERATION = 5;
+const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
+const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
+
+let image = null;
+let imageName = '';
+let selection = null;
+let selectionNormalized = null;
+let lockedSelectionNormalized = null;
+let start = null;
+let rawOcr = '';
+let scanInProgress = false;
+let scanId = '';
+let versionReady = false;
+let mediaStream = null;
+let capturedFromCamera = false;
+
+function resetOcrResult() {
+  rawOcr = '';
+  scanId = '';
+  literalOcr.textContent = 'Waiting for scan';
+  ocrEngine.textContent = '';
+  regulationMark.value = '';
+  setCode.value = '';
+  cardNumber.value = '';
+  setTotal.value = '';
+  readerName.textContent = '-';
+  saveButton.disabled = true;
+  resetLookup();
+}
+
+function updateLookupAvailability() {
+  lookupButton.disabled = !setCode.value.trim() || !cardNumber.value.trim();
+}
+
+function resetLookup() {
+  lookupState.textContent = 'NOT CHECKED';
+  lookupState.className = 'state';
+  lookupResult.hidden = true;
+  lookupImage.hidden = true;
+  lookupImage.removeAttribute('src');
+  lookupName.textContent = '';
+  lookupIdentity.textContent = '';
+  lookupSource.textContent = '';
+  lookupMessage.textContent = "Uses this project's local catalog first. Online lookup is only a fallback. Nothing is added to inventory.";
+  updateLookupAvailability();
+}
+
+function blockForVersion(detail) {
+  versionReady = false;
+  photoInput.disabled = true;
+  startCameraButton.disabled = true;
+  captureFrameButton.disabled = true;
+  scanButton.disabled = true;
+  saveButton.disabled = true;
+  stopMediaTracks();
+  state.textContent = 'RESTART NEEDED';
+  state.className = 'state bad';
+  instruction.textContent = detail;
+  message.textContent = 'Close the scanner command window, run run_scanner.bat again, then refresh this page.';
+}
+
+async function verifyVersion() {
+  try {
+    const response = await fetch('/health', {cache: 'no-store'});
+    const health = await response.json();
+    if (!response.ok || !health.ok || health.iteration !== UI_ITERATION) {
+      const found = health.iteration ? `Iteration ${health.iteration}` : 'an older server';
+      blockForVersion(`This Iteration ${UI_ITERATION} page is connected to ${found}.`);
+      return;
+    }
+    if (!health.primary_ocr_available) {
+      blockForVersion('RapidOCR is not installed, so reliable scanning is unavailable.');
+      message.textContent = 'Run the project dependency installation, restart the scanner, then refresh this page.';
+      return;
+    }
+    versionReady = true;
+    photoInput.disabled = false;
+    startCameraButton.disabled = !navigator.mediaDevices?.getUserMedia;
+    if (startCameraButton.disabled) {
+      message.textContent = 'This browser does not provide camera access. Photo upload is still available.';
+    }
+  } catch {
+    blockForVersion(`Iteration ${UI_ITERATION} cannot reach the local scanner.`);
+  }
+}
+
+function fitImage() {
+  if (!image) return;
+  const maxWidth = Math.max(300, stage.clientWidth - 2);
+  const maxHeight = Math.max(340, window.innerHeight - 285);
+  const scale = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight, 1);
+  canvas.width = Math.round(image.naturalWidth * scale);
+  canvas.height = Math.round(image.naturalHeight * scale);
+  canvas.style.display = 'block';
+  if (selectionNormalized) {
+    selection = [
+      selectionNormalized[0] * canvas.width,
+      selectionNormalized[1] * canvas.height,
+      selectionNormalized[2] * canvas.width,
+      selectionNormalized[3] * canvas.height,
+    ];
+  }
+  draw();
+}
+
+function sizeCameraFrame() {
+  if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
+  const maxWidth = Math.max(300, stage.clientWidth - 2);
+  const maxHeight = Math.max(340, window.innerHeight - 285);
+  const scale = Math.min(maxWidth / cameraVideo.videoWidth, maxHeight / cameraVideo.videoHeight, 1);
+  cameraFrame.style.width = `${Math.round(cameraVideo.videoWidth * scale)}px`;
+  cameraFrame.style.height = `${Math.round(cameraVideo.videoHeight * scale)}px`;
+}
+
+function draw() {
+  if (!image) return;
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  if (selection) {
+    const [x1, y1, x2, y2] = selection;
+    ctx.fillStyle = 'rgba(0, 0, 0, .32)';
+    ctx.fillRect(0, 0, canvas.width, y1);
+    ctx.fillRect(0, y2, canvas.width, canvas.height - y2);
+    ctx.fillRect(0, y1, x1, y2 - y1);
+    ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1);
+    ctx.strokeStyle = '#32d7d4';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  }
+}
+
+function pointerPosition(event) {
+  const box = canvas.getBoundingClientRect();
+  return [
+    Math.max(0, Math.min(canvas.width, (event.clientX - box.left) * canvas.width / box.width)),
+    Math.max(0, Math.min(canvas.height, (event.clientY - box.top) * canvas.height / box.height)),
+  ];
+}
+
+function timestampName() {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '_');
+  return `webcam_${stamp}.png`;
+}
+
+function fixedIdentifierSelection(frameWidth, frameHeight) {
+  const cardHeight = frameHeight * CARD_GUIDE.height;
+  const cardWidth = Math.min(cardHeight * CARD_GUIDE.aspect, frameWidth * CARD_GUIDE.maxWidth);
+  const cardLeft = (frameWidth - cardWidth) / 2;
+  const cardTop = frameHeight * CARD_GUIDE.top;
+  return [
+    (cardLeft + cardWidth * IDENTIFIER_GUIDE.left) / frameWidth,
+    (cardTop + cardHeight * IDENTIFIER_GUIDE.top) / frameHeight,
+    (cardLeft + cardWidth * (IDENTIFIER_GUIDE.left + IDENTIFIER_GUIDE.width)) / frameWidth,
+    (cardTop + cardHeight * (IDENTIFIER_GUIDE.top + IDENTIFIER_GUIDE.height)) / frameHeight,
+  ];
+}
+
+function loadImageSource(source, name, useLockedSelection = false) {
+  const loaded = new Image();
+  loaded.onload = () => {
+    image = loaded;
+    imageName = name;
+    selectionNormalized = useLockedSelection && lockedSelectionNormalized
+      ? [...lockedSelectionNormalized]
+      : null;
+    selection = null;
+    resetOcrResult();
+    stage.classList.remove('empty');
+    placeholder.style.display = 'none';
+    cameraFrame.hidden = true;
+    fitImage();
+    if (selectionNormalized) {
+      state.textContent = 'FRAME CAPTURED';
+      instruction.textContent = 'Reusing the saved text selection and reading this card automatically...';
+      scanButton.disabled = false;
+      void scanSelection();
+    } else {
+      state.textContent = 'SELECT AREA';
+      instruction.textContent = 'Drag a tight box around only the letters and numbers. This can be reused for later cards.';
+      scanButton.disabled = true;
+    }
+  };
+  loaded.onerror = () => {
+    state.textContent = 'IMAGE ERROR';
+    state.className = 'state bad';
+    message.textContent = 'The captured image could not be opened.';
+  };
+  loaded.src = source;
+}
+
+async function refreshCameraList() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  const current = cameraSelect.value;
+  const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
+  cameraSelect.replaceChildren(new Option('Default camera', ''));
+  devices.forEach((device, index) => {
+    cameraSelect.add(new Option(device.label || `Camera ${index + 1}`, device.deviceId));
+  });
+  if ([...cameraSelect.options].some(option => option.value === current)) {
+    cameraSelect.value = current;
+  }
+  cameraSelect.disabled = devices.length < 2;
+}
+
+function stopMediaTracks() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+  }
+  mediaStream = null;
+  cameraVideo.pause();
+  cameraVideo.srcObject = null;
+  captureFrameButton.disabled = true;
+  nextCardButton.disabled = true;
+  stopCameraButton.disabled = true;
+  cameraSelect.disabled = true;
+  if (versionReady) startCameraButton.disabled = !navigator.mediaDevices?.getUserMedia;
+}
+
+function showCameraError(error) {
+  stopMediaTracks();
+  cameraFrame.hidden = true;
+  canvas.style.display = image ? 'block' : 'none';
+  if (!image) {
+    stage.classList.add('empty');
+    placeholder.style.display = 'block';
+  }
+  state.textContent = 'CAMERA ERROR';
+  state.className = 'state bad';
+  instruction.textContent = 'The camera could not be started.';
+  message.textContent = `${error.message || error}. Close other camera apps, then try Start camera again.`;
+}
+
+async function startCamera() {
+  if (!versionReady || !navigator.mediaDevices?.getUserMedia) return;
+  stopMediaTracks();
+  resetOcrResult();
+  state.textContent = 'STARTING CAMERA...';
+  state.className = 'state';
+  instruction.textContent = 'Allow camera access if the browser asks.';
+  const selectedDevice = cameraSelect.value;
+  const videoConstraints = {
+    width: {ideal: 3840},
+    height: {ideal: 2160},
+    frameRate: {ideal: 30, max: 30},
+  };
+  if (selectedDevice) videoConstraints.deviceId = {exact: selectedDevice};
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({video: videoConstraints, audio: false});
+    const track = mediaStream.getVideoTracks()[0];
+    track.addEventListener('ended', () => {
+      if (mediaStream) showCameraError(new Error('The camera stream ended.'));
+    }, {once: true});
+    cameraVideo.srcObject = mediaStream;
+    await cameraVideo.play();
+    await refreshCameraList();
+    image = null;
+    selection = null;
+    selectionNormalized = null;
+    capturedFromCamera = true;
+    canvas.style.display = 'none';
+    cameraFrame.hidden = false;
+    placeholder.style.display = 'none';
+    stage.classList.remove('empty');
+    sizeCameraFrame();
+    startCameraButton.disabled = true;
+    captureFrameButton.disabled = false;
+    stopCameraButton.disabled = false;
+    state.textContent = 'CAMERA LIVE';
+    state.className = 'state good';
+    const settings = track.getSettings();
+    instruction.textContent = 'Slide a card into the taped position, align it with the guide, then capture one frame.';
+    message.textContent = `Camera active${settings.width ? ` at ${settings.width}x${settings.height}` : ''}. It will be released when you press Stop camera or close this page.`;
+  } catch (error) {
+    showCameraError(error);
+  }
+}
+
+function captureFrame() {
+  if (!mediaStream || !cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
+  const frame = document.createElement('canvas');
+  frame.width = cameraVideo.videoWidth;
+  frame.height = cameraVideo.videoHeight;
+  frame.getContext('2d').drawImage(cameraVideo, 0, 0, frame.width, frame.height);
+  cameraVideo.pause();
+  captureFrameButton.disabled = true;
+  nextCardButton.disabled = false;
+  if (reuseSelection.checked && !lockedSelectionNormalized) {
+    lockedSelectionNormalized = fixedIdentifierSelection(frame.width, frame.height);
+    clearSelectionButton.disabled = false;
+  }
+  loadImageSource(frame.toDataURL('image/png'), timestampName(), reuseSelection.checked);
+}
+
+async function showNextCard() {
+  if (!mediaStream) return;
+  image = null;
+  selection = null;
+  selectionNormalized = null;
+  resetOcrResult();
+  canvas.style.display = 'none';
+  cameraFrame.hidden = false;
+  sizeCameraFrame();
+  try {
+    await cameraVideo.play();
+    captureFrameButton.disabled = false;
+    nextCardButton.disabled = true;
+    state.textContent = 'CAMERA LIVE';
+    state.className = 'state good';
+    instruction.textContent = lockedSelectionNormalized
+      ? 'Slide in the next card. Only the fixed bottom-left identifier box will be read.'
+      : 'Slide in the next card. Capture it, then select its text area.';
+    message.textContent = 'The camera remains open only for this scanning session.';
+  } catch (error) {
+    showCameraError(error);
+  }
+}
+
+function stopCamera() {
+  const wasShowingCamera = !cameraFrame.hidden;
+  stopMediaTracks();
+  cameraFrame.hidden = true;
+  if (!image || wasShowingCamera) {
+    image = null;
+    canvas.style.display = 'none';
+    stage.classList.add('empty');
+    placeholder.style.display = 'block';
+    resetOcrResult();
+  }
+  state.textContent = 'CAMERA STOPPED';
+  state.className = 'state';
+  instruction.textContent = 'The camera has been released. Start it again or choose a photo.';
+  message.textContent = 'No application should still be holding the camera.';
+}
+
+photoInput.addEventListener('change', () => {
+  if (!versionReady) return;
+  const file = photoInput.files[0];
+  if (!file) return;
+  stopMediaTracks();
+  capturedFromCamera = false;
+  const url = URL.createObjectURL(file);
+  loadImageSource(url, file.name, false);
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+});
+
+canvas.addEventListener('pointerdown', event => {
+  if (scanInProgress) return;
+  start = pointerPosition(event);
+  selection = [start[0], start[1], start[0], start[1]];
+  canvas.setPointerCapture(event.pointerId);
+  draw();
+});
+canvas.addEventListener('pointermove', event => {
+  if (!start || scanInProgress) return;
+  const end = pointerPosition(event);
+  selection = [Math.min(start[0], end[0]), Math.min(start[1], end[1]), Math.max(start[0], end[0]), Math.max(start[1], end[1])];
+  draw();
+});
+canvas.addEventListener('pointerup', () => {
+  if (scanInProgress) return;
+  start = null;
+  const valid = selection && selection[2] - selection[0] > 10 && selection[3] - selection[1] > 5;
+  scanButton.disabled = !valid;
+  if (valid) {
+    selectionNormalized = [
+      selection[0] / canvas.width,
+      selection[1] / canvas.height,
+      selection[2] / canvas.width,
+      selection[3] / canvas.height,
+    ];
+    if (reuseSelection.checked) {
+      lockedSelectionNormalized = [...selectionNormalized];
+      clearSelectionButton.disabled = false;
+    }
+    instruction.textContent = 'Selection complete. Reading it automatically...';
+    void scanSelection();
+  }
+});
+
+async function scanSelection() {
+  if (!versionReady || !image || !selection || scanInProgress) return;
+  scanInProgress = true;
+  scanId = '';
+  saveButton.disabled = true;
+  const [x1, y1, x2, y2] = selection;
+  const scaleX = image.naturalWidth / canvas.width;
+  const scaleY = image.naturalHeight / canvas.height;
+  const crop = document.createElement('canvas');
+  crop.width = Math.round((x2 - x1) * scaleX);
+  crop.height = Math.round((y2 - y1) * scaleY);
+  crop.getContext('2d').drawImage(image, x1 * scaleX, y1 * scaleY, crop.width, crop.height, 0, 0, crop.width, crop.height);
+  scanButton.disabled = true;
+  state.textContent = 'READING...';
+  state.className = 'state';
+  message.textContent = 'Reading only the letters and numbers in the selected image area...';
+  try {
+    const response = await fetch('/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        image: crop.toDataURL('image/png'),
+        image_name: imageName,
+        iteration: UI_ITERATION,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Scan failed');
+    if (result.iteration !== UI_ITERATION) {
+      blockForVersion(`This page is Iteration ${UI_ITERATION}, but the server returned Iteration ${result.iteration || 'unknown'}.`);
+      return;
+    }
+    scanId = result.scan_id || '';
+    rawOcr = result.raw_ocr || '';
+    literalOcr.textContent = rawOcr || 'No text detected';
+    ocrEngine.textContent = result.ocr_engine ? `Reader: ${result.ocr_engine}` : '';
+    regulationMark.value = result.regulation_mark || '';
+    setCode.value = result.set_code || '';
+    cardNumber.value = result.card_number || '';
+    setTotal.value = result.set_total || '';
+    resetLookup();
+    readerName.textContent = result.ocr_engine || 'No reader result';
+    state.textContent = rawOcr ? 'TEXT READ' : 'NO TEXT';
+    state.className = `state ${rawOcr ? 'good' : 'bad'}`;
+    message.textContent = rawOcr
+      ? `Literal OCR: "${rawOcr}". Correct the fields, then save.`
+      : 'No text was detected. Correct the fields anyway and save this no-read example.';
+    saveButton.disabled = !scanId;
+  } catch (error) {
+    state.textContent = 'SCAN ERROR';
+    state.className = 'state bad';
+    message.textContent = error.message;
+  } finally {
+    scanInProgress = false;
+    scanButton.disabled = !versionReady || !selection;
+    if (versionReady) {
+      instruction.textContent = capturedFromCamera
+        ? 'Correct and save this reading, then press Next card.'
+        : 'Drag a new box to scan another area, or use Rescan Selection.';
+    }
+  }
+}
+
+scanButton.addEventListener('click', () => void scanSelection());
+startCameraButton.addEventListener('click', () => void startCamera());
+captureFrameButton.addEventListener('click', captureFrame);
+nextCardButton.addEventListener('click', () => void showNextCard());
+stopCameraButton.addEventListener('click', stopCamera);
+cameraSelect.addEventListener('change', () => {
+  if (mediaStream) void startCamera();
+});
+reuseSelection.addEventListener('change', () => {
+  if (!reuseSelection.checked) {
+    lockedSelectionNormalized = null;
+    clearSelectionButton.disabled = true;
+  } else if (selectionNormalized) {
+    lockedSelectionNormalized = [...selectionNormalized];
+    clearSelectionButton.disabled = false;
+  }
+});
+clearSelectionButton.addEventListener('click', () => {
+  lockedSelectionNormalized = null;
+  clearSelectionButton.disabled = true;
+  instruction.textContent = 'Saved text selection cleared. The next captured frame will need a new selection.';
+});
+
+for (const field of [setCode, cardNumber, setTotal]) {
+  field.addEventListener('input', resetLookup);
+}
+
+lookupButton.addEventListener('click', async () => {
+  lookupButton.disabled = true;
+  lookupState.textContent = 'CHECKING';
+  lookupState.className = 'state';
+  lookupResult.hidden = true;
+  lookupMessage.textContent = 'Checking the local catalog, then the online fallback if needed...';
+  try {
+    const response = await fetch('/lookup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        set_code: setCode.value,
+        card_number: cardNumber.value,
+        set_total: setTotal.value,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Lookup failed');
+    const card = result.card || {};
+    if (!card.card_name) {
+      lookupState.textContent = 'NO MATCH';
+      lookupState.className = 'state bad';
+      lookupMessage.textContent = 'No exact card was found. Check the set code and card number; nothing was added.';
+      return;
+    }
+    lookupState.textContent = card.status === 'accepted' ? 'EXACT MATCH' : 'REVIEW';
+    lookupState.className = `state ${card.status === 'accepted' ? 'good' : 'bad'}`;
+    lookupName.textContent = card.card_name;
+    lookupIdentity.textContent = `${card.set_name || card.set_code} — ${card.set_code} ${card.card_number}${card.printed_total ? `/${card.printed_total}` : ''}`;
+    lookupSource.textContent = `Source: ${card.source || 'catalog'}`;
+    lookupResult.hidden = false;
+    if (card.image_url) {
+      lookupImage.src = card.image_url;
+      lookupImage.alt = `${card.card_name} card image`;
+      lookupImage.hidden = false;
+    }
+    lookupMessage.textContent = card.review_reasons?.length
+      ? `Review required: ${card.review_reasons.join('; ')}. Nothing was added.`
+      : 'Exact identity found. This is a preview only; nothing was added to inventory.';
+  } catch (error) {
+    lookupState.textContent = 'LOOKUP ERROR';
+    lookupState.className = 'state bad';
+    lookupMessage.textContent = `${error.message}. Your OCR result is still safe and can be saved.`;
+  } finally {
+    updateLookupAvailability();
+  }
+});
+
+saveButton.addEventListener('click', async () => {
+  const payload = {
+    iteration: UI_ITERATION,
+    scan_id: scanId,
+    corrected_letters: [regulationMark.value, setCode.value].filter(Boolean).join(' '),
+    corrected_numbers: [cardNumber.value, setTotal.value].filter(Boolean).join(' / '),
+  };
+  saveButton.disabled = true;
+  try {
+    const response = await fetch('/save', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Save failed');
+    state.textContent = 'SAVED';
+    state.className = 'state good';
+    scanId = '';
+    message.textContent = capturedFromCamera
+      ? 'Saved this labeled example. Press Next card when the slot is ready.'
+      : 'Saved this labeled example to ocr_reads_it5.csv.';
+  } catch (error) {
+    state.textContent = 'SAVE ERROR';
+    state.className = 'state bad';
+    message.textContent = error.message;
+    saveButton.disabled = false;
+  }
+});
+
+window.addEventListener('resize', () => {
+  fitImage();
+  sizeCameraFrame();
+});
+window.addEventListener('pagehide', stopMediaTracks);
+window.addEventListener('beforeunload', stopMediaTracks);
+void verifyVersion();

@@ -1,0 +1,43 @@
+{
+  "SSP": {
+    "name": "Surging Sparks",
+    "tcgdex_id": "sv08",
+    "printed_total": 191
+  },
+  "ASC": {
+    "name": "Ascended Heroes",
+    "tcgdex_id": "me02.5",
+    "printed_total": 217
+  },
+  "MEG": {
+    "name": "Mega Evolution",
+    "tcgdex_id": "me01",
+    "printed_total": 132
+  },
+  "MEP": {
+    "name": "MEP Black Star Promos",
+    "tcgdex_id": "mep",
+    "printed_total": 0,
+    "promo": true
+  },
+  "PRE": {
+    "name": "Prismatic Evolutions",
+    "tcgdex_id": "sv08.5",
+    "printed_total": 131
+  },
+  "PAL": {
+    "name": "Paldea Evolved",
+    "tcgdex_id": "sv02",
+    "printed_total": 193
+  },
+  "DRI": {
+    "name": "Destined Rivals",
+    "tcgdex_id": "sv10",
+    "printed_total": 182
+  },
+  "POR": {
+    "name": "Perfect Order",
+    "tcgdex_id": "me03",
+    "printed_total": 88
+  }
+}

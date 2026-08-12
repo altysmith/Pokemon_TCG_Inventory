@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+card_scans.csv
+*.csv
+benchmark_crops/
+.env
+scanner_data.sqlite3
+scanner_data.sqlite3-shm
+scanner_data.sqlite3-wal

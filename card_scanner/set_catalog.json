@@ -1,0 +1,19 @@
+{
+  "codes": [
+    "AOR", "AQ", "AR", "ASC", "ASR", "B2", "BCR", "BKP", "BKT", "BLK",
+    "BLW", "BP", "BRS", "BS", "BST", "BUS", "CEC", "CEL", "CES", "CG",
+    "CIN", "CL", "CPA", "CRE", "CRI", "CRZ", "DAA", "DCR", "DET", "DEX",
+    "DF", "DP", "DR", "DRI", "DRM", "DRV", "DRX", "DS", "DX", "EM",
+    "EPO", "EVO", "EVS", "EX", "FCO", "FFI", "FLF", "FLI", "FO", "FST",
+    "FUT20", "G1", "G2", "GE", "GEN", "GRI", "HIF", "HL", "HP", "HS",
+    "JTG", "JU", "KSS", "LA", "LC", "LM", "LOR", "LOT", "LTR", "MA",
+    "MD", "MEG", "MEP", "MEW", "MT", "N1", "N2", "N3", "N4", "NVI",
+    "NXD", "OBF", "PAF", "PAL", "PAR", "PBL", "PFL", "PGO", "PHF", "PK",
+    "PL", "PLB", "PLF", "PLS", "POR", "PR", "PR-BLW", "PR-DPP", "PR-HS",
+    "PR-NP", "PR-SM", "PR-SV", "PR-SW", "PR-XY", "PRC", "PRE", "RCL", "RG",
+    "ROS", "RR", "RS", "SCR", "SF", "SFA", "SHF", "SIT", "SK", "SLG",
+    "SS", "SSH", "SSP", "STS", "SUM", "SV", "SVE", "SVI", "SW", "TEF",
+    "TEU", "TM", "TR", "TRR", "TWM", "UD", "UF", "UL", "UNB", "UNM",
+    "UPR", "VIV", "WHT", "XY"
+  ]
+}
