@@ -5,7 +5,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from app import extract_footer_fields, extract_literal_groups, save_benchmark_label
+from app import (
+    extract_footer_fields,
+    extract_footer_fields_from_readings,
+    extract_literal_groups,
+    save_benchmark_label,
+)
+from card_scanner.ocr import LiteralReading
 
 
 class AppTests(unittest.TestCase):
@@ -36,6 +42,17 @@ class AppTests(unittest.TestCase):
             extract_footer_fields("MEGEN 086/132"),
             ("", "MEG", "086", "132"),
         )
+
+    def test_alternate_reading_recovers_set_code_without_rewriting_literal(self) -> None:
+        fields = extract_footer_fields_from_readings(
+            "PELD113/094",
+            (
+                LiteralReading("PELD113/094", 0.922, "enlarged_color"),
+                LiteralReading("O PFLa 113/094", 0.846, "enlarged_gray"),
+            ),
+        )
+
+        self.assertEqual(fields, ("", "PFL", "113", "094"))
 
     def test_attached_regulation_mark_and_language_noise_are_separated(self) -> None:
         self.assertEqual(
@@ -102,6 +119,7 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="lookup_card"', html)
         self.assertIn("ITERATION 6", html)
         self.assertIn("INSTANT LOCAL CATALOG MATCH", html)
+        self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
         self.assertIn("const UI_ITERATION = 6", javascript)

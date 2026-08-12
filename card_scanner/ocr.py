@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 from .catalog import known_set_codes
 from .parser import (
@@ -63,9 +63,16 @@ def _rapidocr_engine():
 
 
 def warm_up_ocr() -> None:
-    """Load RapidOCR models before the browser offers its first capture."""
+    """Load models and run one inference before offering the first capture."""
+    import numpy as np
+
+    sample = Image.new("RGB", (900, 160), "white")
+    font_path = Path(r"C:\Windows\Fonts\arial.ttf")
+    font = ImageFont.truetype(str(font_path), 64) if font_path.is_file() else None
+    ImageDraw.Draw(sample).text((35, 35), "PFL 113/094", fill="black", font=font)
+    engine = _rapidocr_engine()
     with _RAPID_OCR_LOCK:
-        _rapidocr_engine()
+        engine(np.asarray(sample))
 
 
 def _run_rapidocr(image: Image.Image) -> tuple[LiteralReading, ...]:

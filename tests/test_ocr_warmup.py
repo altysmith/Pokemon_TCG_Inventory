@@ -10,6 +10,7 @@ class OcrWarmupTests(unittest.TestCase):
             warm_up_ocr()
 
         engine.assert_called_once_with()
+        engine.return_value.assert_called_once()
 
 
 if __name__ == "__main__":

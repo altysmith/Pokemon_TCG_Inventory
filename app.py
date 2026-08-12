@@ -135,6 +135,46 @@ def extract_footer_fields(text: str) -> tuple[str, str, str, str]:
     return regulation_mark, set_code, card_number, set_total
 
 
+def extract_footer_fields_from_readings(
+    literal_text: str, readings: tuple,
+) -> tuple[str, str, str, str]:
+    """Use preserved OCR alternatives for fields without changing literal OCR."""
+    candidates = [(literal_text, 1.0)]
+    candidates.extend(
+        (str(reading.text), float(reading.confidence))
+        for reading in readings
+        if str(reading.text).strip() and str(reading.text) != literal_text
+    )
+    parsed = [(extract_footer_fields(text), confidence) for text, confidence in candidates]
+
+    def select(position: int) -> str:
+        support: dict[str, tuple[int, float, int]] = {}
+        for order, (fields, confidence) in enumerate(parsed):
+            value = fields[position]
+            if not value:
+                continue
+            count, best_confidence, first_order = support.get(
+                value, (0, 0.0, order)
+            )
+            support[value] = (
+                count + 1,
+                max(best_confidence, confidence),
+                min(first_order, order),
+            )
+        if not support:
+            return ""
+        return max(
+            support,
+            key=lambda value: (
+                support[value][0],
+                support[value][1],
+                -support[value][2],
+            ),
+        )
+
+    return tuple(select(position) for position in range(4))
+
+
 def extract_literal_groups(text: str) -> tuple[str, str]:
     """Separate the footer groups without catalog correction or zero removal.
 
@@ -340,8 +380,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
         with Image.open(io.BytesIO(raw)) as opened:
             crop = opened.convert("RGB")
         result = scan_crop(crop, derive_card_candidates=False)
-        regulation_mark, set_code, card_number, set_total = extract_footer_fields(
-            result.raw_text
+        regulation_mark, set_code, card_number, set_total = (
+            extract_footer_fields_from_readings(
+                result.raw_text, result.literal_readings
+            )
         )
         letters = " ".join(
             value for value in (regulation_mark, set_code) if value
