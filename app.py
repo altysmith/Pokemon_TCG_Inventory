@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 from PIL import Image
 
-from card_scanner.ocr import scan_crop
+from card_scanner.ocr import scan_crop, warm_up_ocr
 from card_scanner.catalog import known_set_codes
 from card_api.catalog import find_exact_card
 from card_api.config import DATABASE_PATH as CARD_CATALOG_PATH
@@ -403,6 +403,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
+    print("Preparing the OCR reader for the first card...")
+    warm_up_ocr()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
     url = f"http://127.0.0.1:{server.server_port}/"
     print(f"Card scanner is running at {url}")

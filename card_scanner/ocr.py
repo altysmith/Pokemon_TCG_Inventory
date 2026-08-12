@@ -62,6 +62,12 @@ def _rapidocr_engine():
     return RapidOCR()
 
 
+def warm_up_ocr() -> None:
+    """Load RapidOCR models before the browser offers its first capture."""
+    with _RAPID_OCR_LOCK:
+        _rapidocr_engine()
+
+
 def _run_rapidocr(image: Image.Image) -> tuple[LiteralReading, ...]:
     """Read scene text without a card-code whitelist or catalog hints."""
     import numpy as np

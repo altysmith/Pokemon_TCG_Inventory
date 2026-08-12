@@ -331,7 +331,7 @@ function captureFrame() {
 }
 
 async function showNextCard() {
-  if (!mediaStream) return;
+  if (!mediaStream || scanInProgress) return;
   image = null;
   selection = null;
   selectionNormalized = null;
@@ -421,6 +421,7 @@ async function scanSelection() {
   scanInProgress = true;
   scanId = '';
   saveButton.disabled = true;
+  nextCardButton.disabled = true;
   const [x1, y1, x2, y2] = selection;
   const scaleX = image.naturalWidth / canvas.width;
   const scaleY = image.naturalHeight / canvas.height;
@@ -431,7 +432,12 @@ async function scanSelection() {
   scanButton.disabled = true;
   state.textContent = 'READING...';
   state.className = 'state';
-  message.textContent = 'Reading only the letters and numbers in the selected image area...';
+  let readingSeconds = 0;
+  message.textContent = 'Reading only the letters and numbers in the selected image area. The first card may take 10–20 seconds...';
+  const readingTimer = window.setInterval(() => {
+    readingSeconds += 1;
+    message.textContent = `Still reading the selected identifier (${readingSeconds}s). Please wait before moving to the next card...`;
+  }, 1000);
   try {
     const response = await fetch('/scan', {
       method: 'POST',
@@ -472,8 +478,10 @@ async function scanSelection() {
     state.className = 'state bad';
     message.textContent = error.message;
   } finally {
+    window.clearInterval(readingTimer);
     scanInProgress = false;
     scanButton.disabled = !versionReady || !selection;
+    nextCardButton.disabled = !mediaStream;
     if (versionReady) {
       instruction.textContent = capturedFromCamera
         ? 'Correct and save this reading, then press Next card.'
