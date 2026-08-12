@@ -289,7 +289,17 @@ def build_evidence(
     return tuple(code_candidates), tuple(number_candidates)
 
 
-def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrResult:
+def _has_complete_identifier(text: str) -> bool:
+    codes = extract_code_observations(text, known_set_codes())
+    numbers = extract_number_observations(text)
+    return bool(codes and numbers)
+
+
+def scan_crop(
+    image: Image.Image,
+    derive_card_candidates: bool = True,
+    stop_on_complete_identifier: bool = False,
+) -> OcrResult:
     """Read literal text first, then derive optional card interpretations."""
     observations: list[TextObservation] = []
     literal_readings: list[LiteralReading] = []
@@ -313,6 +323,12 @@ def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrRes
                 low_quality=combined.confidence < 0.65,
             )
             observations.append(observation)
+            if (
+                stop_on_complete_identifier
+                and combined.confidence >= 0.82
+                and _has_complete_identifier(combined.text)
+            ):
+                break
     except (ImportError, OSError, RuntimeError, ValueError):
         pass
 

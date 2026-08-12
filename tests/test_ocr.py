@@ -112,6 +112,46 @@ class OcrTests(unittest.TestCase):
         build_evidence.assert_not_called()
         variants.assert_not_called()
 
+    @patch(
+        "card_scanner.ocr._run_rapidocr",
+        side_effect=[
+            (LiteralReading("O PFL 113/094", 0.91),),
+            (LiteralReading("unused", 0.99),),
+        ],
+    )
+    def test_fast_mode_stops_after_complete_high_confidence_identifier(
+        self, run_rapidocr
+    ) -> None:
+        result = scan_crop(
+            Image.new("RGB", (100, 20), "white"),
+            derive_card_candidates=False,
+            stop_on_complete_identifier=True,
+        )
+
+        self.assertEqual(result.raw_text, "O PFL 113/094")
+        self.assertEqual(run_rapidocr.call_count, 1)
+        self.assertEqual(len(result.literal_readings), 1)
+
+    @patch(
+        "card_scanner.ocr._run_rapidocr",
+        side_effect=[
+            (LiteralReading("PELD113/094", 0.92),),
+            (LiteralReading("PELE 113/094", 0.88),),
+            (LiteralReading("O PFLa 113/094", 0.84),),
+        ],
+    )
+    def test_fast_mode_keeps_fallbacks_when_set_code_is_missing(
+        self, run_rapidocr
+    ) -> None:
+        result = scan_crop(
+            Image.new("RGB", (100, 20), "white"),
+            derive_card_candidates=False,
+            stop_on_complete_identifier=True,
+        )
+
+        self.assertEqual(run_rapidocr.call_count, 3)
+        self.assertEqual(len(result.literal_readings), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

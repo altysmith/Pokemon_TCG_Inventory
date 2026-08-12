@@ -63,7 +63,7 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 5 — Labeled OCR benchmark:** Saves the exact selected crop, raw OCR, confidence, all RapidOCR treatment readings, original detected groups, and user-corrected groups. It supports still-image upload and a live webcam session with a fixed card guide and reusable text selection. The browser checks that it is connected to the matching server before allowing scans.
 - **Iteration 6 — Instant local catalog match (current):** Preserves the Iteration 5 OCR behavior and evidence, then automatically checks a complete detected set code and card number against the local Malie catalog. The card image and name are a human-confirmation preview only; nothing is added to inventory, no internet fallback is used, and a conflicting printed total requires review.
 
-The launcher preloads RapidOCR before opening the scanner. A scan can still take several seconds because it evaluates three image treatments; the page displays elapsed time and disables **Next card** until the current reading is complete.
+The launcher preloads RapidOCR before opening the scanner. The operational reader stops after the first high-confidence treatment that contains a complete set code and card number. Difficult crops automatically continue through the remaining treatments. The page displays elapsed time and disables **Next card** until the current reading is complete.
 
 Future material changes should advance the iteration number and add one short entry here.
 

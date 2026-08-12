@@ -379,7 +379,11 @@ class ScannerHandler(BaseHTTPRequestHandler):
         raw = base64.b64decode(encoded, validate=True)
         with Image.open(io.BytesIO(raw)) as opened:
             crop = opened.convert("RGB")
-        result = scan_crop(crop, derive_card_candidates=False)
+        result = scan_crop(
+            crop,
+            derive_card_candidates=False,
+            stop_on_complete_identifier=True,
+        )
         regulation_mark, set_code, card_number, set_total = (
             extract_footer_fields_from_readings(
                 result.raw_text, result.literal_readings

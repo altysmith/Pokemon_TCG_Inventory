@@ -435,7 +435,7 @@ async function scanSelection() {
   state.textContent = 'READING...';
   state.className = 'state';
   let readingSeconds = 0;
-  message.textContent = 'Reading only the letters and numbers in the selected image area. The first card may take 10–20 seconds...';
+  message.textContent = 'Reading the card identifier. Clear cards use one quick pass; difficult cards automatically get additional treatments...';
   const readingTimer = window.setInterval(() => {
     readingSeconds += 1;
     message.textContent = `Still reading the selected identifier (${readingSeconds}s). Please wait before moving to the next card...`;
