@@ -24,24 +24,23 @@ from PIL import Image
 
 from card_scanner.ocr import scan_crop
 from card_scanner.catalog import known_set_codes
-from card_scanner.local_data import ScannerData
-from card_scanner.lookup import CardInfo, lookup_card
+from card_api.catalog import find_exact_card
+from card_api.config import DATABASE_PATH as CARD_CATALOG_PATH
+from card_scanner.lookup import CardInfo
 
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it5.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it6.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_5",
+        ROOT / "benchmark_crops" / "iteration_6",
     )
 )
-DATA_PATH = Path(os.environ.get("SCANNER_DATA_PATH", ROOT / "scanner_data.sqlite3"))
-SCANNER_DATA = ScannerData(DATA_PATH)
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 5
-ITERATION_NAME = "Labeled OCR benchmark"
+ITERATION = 6
+ITERATION_NAME = "Instant local catalog match"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -206,29 +205,51 @@ def save_benchmark_label(data: dict) -> dict:
 
 
 def lookup_confirmed_fields(data: dict) -> CardInfo:
-    """Resolve corrected fields locally first, then cache a successful API result."""
+    """Resolve corrected fields against the canonical local catalog only."""
     code = str(data.get("set_code", "")).strip().upper()
     number = str(data.get("card_number", "")).strip()
     total = str(data.get("set_total", "")).strip()
     if not code or not number:
         raise ValueError("Set code and card number are required for lookup.")
-    local = SCANNER_DATA.find_card(code, number)
-    if local.card_name:
-        if total and local.printed_total and total != local.printed_total:
-            return replace(
-                local,
-                status="review",
-                review_reasons=("printed total conflicts with local catalog",),
-            )
-        return local
-    result = lookup_card(code, number, total)
-    if result.card_name:
-        SCANNER_DATA.cache_card(result)
-    return result
+    result = find_exact_card(code, number, database_path=CARD_CATALOG_PATH)
+    if result.status == "catalog_unavailable":
+        raise ValueError(
+            "Local card catalog is unavailable. Run update_card_database.bat first."
+        )
+    if result.status == "ambiguous":
+        return CardInfo(
+            set_code=code,
+            card_number=number,
+            status="review",
+            review_reasons=(
+                f"set code and number matched {result.match_count} local cards",
+            ),
+        )
+    if result.card is None:
+        return CardInfo(set_code=code, card_number=number, status="no_match")
+    card = result.card
+    info = CardInfo(
+        set_code=card.set_code,
+        set_name=card.set_name,
+        card_name=card.card_name,
+        card_number=card.card_number,
+        set_id=card.set_id,
+        source="local Malie TCGL catalog",
+        printed_total=card.printed_total,
+        image_url=card.image_url,
+        status="accepted",
+    )
+    if total and card.printed_total and total.lstrip("0") != card.printed_total.lstrip("0"):
+        return replace(
+            info,
+            status="review",
+            review_reasons=("printed total conflicts with local catalog",),
+        )
+    return info
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-5"
+    server_version = "TinyTextReader/iteration-6"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -259,6 +280,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     "primary_ocr": "RapidOCR",
                     "primary_ocr_available": importlib.util.find_spec("rapidocr")
                     is not None,
+                    "local_catalog_available": CARD_CATALOG_PATH.is_file(),
                 }
             )
             return

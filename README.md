@@ -1,8 +1,8 @@
 # Tiny Card Text Scanner
 
-**Current build: Iteration 5 — Labeled OCR benchmark**
+**Current build: Iteration 6 — Instant local catalog match**
 
-This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. The live reader does not parse or identify cards and does not contact an API. Images stay on this computer.
+This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. After reading, complete set-and-number fields are checked against the local catalog. Images stay on this computer, and scanning uses no internet API.
 
 ## Run it
 
@@ -12,7 +12,7 @@ RapidOCR, ONNX Runtime, Tesseract, and the required Python runtime are installed
 
 ## Local card database and API
 
-This repository now contains two isolated components: the working Iteration 5 scanner and a new `card_api` catalog service. Keeping them in one repository makes their eventual connection straightforward, while the separate code paths and database files protect the working scanner from catalog changes.
+This repository contains two isolated components: the webcam scanner and the `card_api` catalog service. They share exact catalog queries while retaining separate code paths and data responsibilities.
 
 The catalog uses [Malie.io's formatted TCGL exports](https://malie.io/static/index.html) as its primary source. Its pipeline is:
 
@@ -52,7 +52,7 @@ Initial endpoints are:
 - `GET /sets`
 - `GET /sets/{id}/cards`
 
-For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?set_code=ASC&number=162` returns Team Rocket's Kangaskhan ex from Ascended Heroes. A future scanner integration will send its reviewed set code and card number to this local endpoint. No OCR behavior is changed in this database iteration.
+For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?set_code=ASC&number=162` returns Team Rocket's Kangaskhan ex from Ascended Heroes. Iteration 6 now uses this same local catalog for its match preview without changing the OCR reader itself.
 
 ## Iteration history
 
@@ -60,7 +60,8 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 2 — Conservative card matching:** Preserved multiple OCR candidates and required review for conflicts, but still focused too heavily on interpreting imperfect readings.
 - **Iteration 3 — OCR-only RapidOCR reader:** Replaced Tesseract as the primary reader, removed API/catalog work from the live scan, preserved literal text and leading zeroes, and separated detected letters from detected numbers.
 - **Iteration 4 — Automatic OCR on selection:** Releasing a valid drag selection starts OCR immediately. The Rescan Selection button remains available for repeating the same crop.
-- **Iteration 5 — Labeled OCR benchmark (current):** Saves the exact selected crop, raw OCR, confidence, all RapidOCR treatment readings, original detected groups, and user-corrected groups. It supports still-image upload and a live webcam session with a fixed card guide and reusable text selection. The browser checks that it is connected to the Iteration 5 server before allowing scans.
+- **Iteration 5 — Labeled OCR benchmark:** Saves the exact selected crop, raw OCR, confidence, all RapidOCR treatment readings, original detected groups, and user-corrected groups. It supports still-image upload and a live webcam session with a fixed card guide and reusable text selection. The browser checks that it is connected to the matching server before allowing scans.
+- **Iteration 6 — Instant local catalog match (current):** Preserves the Iteration 5 OCR behavior and evidence, then automatically checks a complete detected set code and card number against the local Malie catalog. The card image and name are a human-confirmation preview only; nothing is added to inventory, no internet fallback is used, and a conflicting printed total requires review.
 
 Future material changes should advance the iteration number and add one short entry here.
 
@@ -83,9 +84,9 @@ Future material changes should advance the iteration number and add one short en
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-Rows from both workflows are stored in `ocr_reads_it5.csv`. Webcam filenames begin with `webcam_`; every exact OCR crop is stored under `benchmark_crops/iteration_5`.
+New rows from both workflows are stored in `ocr_reads_it6.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_6`. The completed Iteration 5 files remain untouched as the OCR baseline.
 
-The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_5`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
+The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_6`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 
@@ -93,7 +94,7 @@ RapidOCR is the required primary reader for the webcam workflow. The scanner hea
 
 ### Card lookup preview
 
-After OCR, correct the set code and card number, then click **Find this card**. This project checks its own `scanner_data.sqlite3` cache first and uses TCGdex followed by the Pokemon TCG API only when the card is not cached. Exact matches show the card name, set, number, and image for review. A conflicting printed total is marked **Review**. This preview never adds a card to inventory, and it has no connection to the older TKD Card Inventory application.
+When OCR reads both a set code and card number, the scanner immediately checks `data/card_catalog.sqlite3` and shows the exact local match. Correct either field and click **Find this card** to check again. There is no internet fallback. Exact matches show the card name, set, number, and image for comparison with the physical card; a conflicting printed total is marked **Review**. This preview never adds a card to inventory.
 
 The 26 saved webcam crops were re-run offline after installing RapidOCR and adding joined-language cleanup. Exact set-code reads improved from 1/26 to 21/26, card-number reads from 3/26 to 25/26, and set-total reads from 4/25 to 23/25. Regulation marks remained unreliable at 1/20, so that field stays editable and must not be used for automatic card identity or sorting.
 
@@ -109,7 +110,7 @@ For the first benchmark, scan 15–25 representative images: clear, blurry, refl
 
 ## Card lookup
 
-Card lookup is deliberately disconnected from the live reader. The existing lookup module remains available for a future separate processing step, but scanning an image never invokes it.
+Card lookup is connected only after literal OCR finishes. A complete detected set code and card number trigger one exact local-catalog query; the OCR result and all benchmark evidence remain unchanged. A displayed match is not proof that OCR was correct, so compare its name and image with the physical card. Missing matches do not guess, and printed-total conflicts require review.
 
 A card database API can identify or validate a card only after the printed characters have been read; it cannot make pixels clearer or improve OCR. If the labeled Iteration 5 benchmark shows RapidOCR is not accurate enough, the same saved crops can be tested against a dedicated cloud OCR service as a separate, controlled comparison. That would require credentials and would upload those selected crops to the provider.
 
@@ -119,4 +120,4 @@ The intermittent Windows Camera `MediaCaptureFailedEvent` error `0xC00D36D5` has
 
 ## Intended next steps
 
-After collecting more labeled examples, a future version can add automatic card-edge/footer detection, calibrated confidence, and continuous sorting/output integration. The current version deliberately captures one webcam frame per card instead of running OCR continuously on video.
+The next safe step is a separate collection database and a user-confirmed **Add to collection** action. Automatic card-edge/footer detection, calibrated confidence, and continuous sorting/output integration can follow later. The current version deliberately captures one webcam frame per card instead of running OCR continuously on video.

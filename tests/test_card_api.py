@@ -3,10 +3,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+import app as scanner_app
 from card_api.api import create_app
+from card_api.catalog import find_exact_card
 from card_api.importer import import_downloaded
 from card_api.malie import download_updates, inspect_updates
 
@@ -235,6 +238,27 @@ class ImportAndApiTests(unittest.TestCase):
         set_id = sets.json()["items"][0]["id"]
         set_cards = self.client.get(f"/sets/{set_id}/cards")
         self.assertEqual(set_cards.json()["total"], 1)
+
+    def test_shared_exact_lookup_normalizes_leading_zeroes(self):
+        result = find_exact_card("ssp", "75", database_path=self.database_path)
+
+        self.assertEqual(result.status, "exact")
+        self.assertEqual(result.card.card_name, "Smoochum")
+        self.assertEqual(result.card.card_number, "075")
+
+    def test_scanner_lookup_uses_local_catalog_and_reviews_total_conflict(self):
+        with patch.object(scanner_app, "CARD_CATALOG_PATH", self.database_path):
+            exact = scanner_app.lookup_confirmed_fields(
+                {"set_code": "SSP", "card_number": "075", "set_total": "191"}
+            )
+            conflict = scanner_app.lookup_confirmed_fields(
+                {"set_code": "SSP", "card_number": "075", "set_total": "999"}
+            )
+
+        self.assertEqual((exact.status, exact.card_name), ("accepted", "Smoochum"))
+        self.assertEqual(exact.source, "local Malie TCGL catalog")
+        self.assertEqual(conflict.status, "review")
+        self.assertIn("printed total conflicts", conflict.review_reasons[0])
 
     def test_unknown_card_is_404_not_a_guess(self):
         response = self.client.get("/cards/not-a-real-card")

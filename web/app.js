@@ -32,7 +32,7 @@ const lookupName = document.querySelector('#lookup_name');
 const lookupIdentity = document.querySelector('#lookup_identity');
 const lookupSource = document.querySelector('#lookup_source');
 const lookupMessage = document.querySelector('#lookup_message');
-const UI_ITERATION = 5;
+const UI_ITERATION = 6;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -76,7 +76,7 @@ function resetLookup() {
   lookupName.textContent = '';
   lookupIdentity.textContent = '';
   lookupSource.textContent = '';
-  lookupMessage.textContent = "Uses this project's local catalog first. Online lookup is only a fallback. Nothing is added to inventory.";
+  lookupMessage.textContent = 'Uses the local Malie catalog only. Nothing is added to inventory.';
   updateLookupAvailability();
 }
 
@@ -106,6 +106,11 @@ async function verifyVersion() {
     if (!health.primary_ocr_available) {
       blockForVersion('RapidOCR is not installed, so reliable scanning is unavailable.');
       message.textContent = 'Run the project dependency installation, restart the scanner, then refresh this page.';
+      return;
+    }
+    if (!health.local_catalog_available) {
+      blockForVersion('The local card database has not been built yet.');
+      message.textContent = 'Double-click update_card_database.bat, then restart the scanner.';
       return;
     }
     versionReady = true;
@@ -459,6 +464,9 @@ async function scanSelection() {
       ? `Literal OCR: "${rawOcr}". Correct the fields, then save.`
       : 'No text was detected. Correct the fields anyway and save this no-read example.';
     saveButton.disabled = !scanId;
+    if (setCode.value.trim() && cardNumber.value.trim()) {
+      await lookupCurrentCard();
+    }
   } catch (error) {
     state.textContent = 'SCAN ERROR';
     state.className = 'state bad';
@@ -501,12 +509,12 @@ for (const field of [setCode, cardNumber, setTotal]) {
   field.addEventListener('input', resetLookup);
 }
 
-lookupButton.addEventListener('click', async () => {
+async function lookupCurrentCard() {
   lookupButton.disabled = true;
   lookupState.textContent = 'CHECKING';
   lookupState.className = 'state';
   lookupResult.hidden = true;
-  lookupMessage.textContent = 'Checking the local catalog, then the online fallback if needed...';
+  lookupMessage.textContent = 'Checking the local Malie catalog...';
   try {
     const response = await fetch('/lookup', {
       method: 'POST',
@@ -523,7 +531,7 @@ lookupButton.addEventListener('click', async () => {
     if (!card.card_name) {
       lookupState.textContent = 'NO MATCH';
       lookupState.className = 'state bad';
-      lookupMessage.textContent = 'No exact card was found. Check the set code and card number; nothing was added.';
+      lookupMessage.textContent = 'No exact local card was found. Check the set code and card number; nothing was added.';
       return;
     }
     lookupState.textContent = card.status === 'accepted' ? 'EXACT MATCH' : 'REVIEW';
@@ -539,7 +547,7 @@ lookupButton.addEventListener('click', async () => {
     }
     lookupMessage.textContent = card.review_reasons?.length
       ? `Review required: ${card.review_reasons.join('; ')}. Nothing was added.`
-      : 'Exact identity found. This is a preview only; nothing was added to inventory.';
+      : 'Exact set-and-number match. Compare the name and image to the physical card. Nothing was added.';
   } catch (error) {
     lookupState.textContent = 'LOOKUP ERROR';
     lookupState.className = 'state bad';
@@ -547,7 +555,9 @@ lookupButton.addEventListener('click', async () => {
   } finally {
     updateLookupAvailability();
   }
-});
+}
+
+lookupButton.addEventListener('click', () => void lookupCurrentCard());
 
 saveButton.addEventListener('click', async () => {
   const payload = {
