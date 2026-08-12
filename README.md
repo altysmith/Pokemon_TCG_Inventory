@@ -10,6 +10,50 @@ Double-click **`run_scanner.bat`**. It starts the private local scanner and open
 
 RapidOCR, ONNX Runtime, Tesseract, and the required Python runtime are installed on this machine. `requirements.txt` is included for installing the project on another computer.
 
+## Local card database and API
+
+This repository now contains two isolated components: the working Iteration 5 scanner and a new `card_api` catalog service. Keeping them in one repository makes their eventual connection straightforward, while the separate code paths and database files protect the working scanner from catalog changes.
+
+The catalog uses [Malie.io's formatted TCGL exports](https://malie.io/static/index.html) as its primary source. Its pipeline is:
+
+```text
+Malie index and set exports
+    -> immutable data/raw/malie JSON files plus SHA-256 manifest
+    -> validation and normalization
+    -> data/card_catalog.sqlite3
+    -> private FastAPI service on 127.0.0.1:8770
+```
+
+The downloaded raw files and generated database intentionally stay local and are ignored by Git. Every imported card retains its source URL, source record ID, raw-record position, source-file hash, download time, and import time, so the catalog can be audited and rebuilt. Malie's alternate-art/finish records become variants of one canonical set-and-number card instead of duplicate cards.
+
+The canonical catalog contains no user quantities or collection records. A future collection database will reference the stable canonical card ID, keeping personal inventory separate from rebuildable reference data.
+
+### Update and run
+
+- Double-click `check_card_updates.bat` to compare the local manifest with Malie's current English export index without changing local data.
+- Double-click `update_card_database.bat` to preserve new/changed raw exports and rebuild the affected catalog data.
+- Double-click `run_card_api.bat`, then open `http://127.0.0.1:8770/docs` for the interactive local API documentation.
+
+Equivalent command-line operations are:
+
+```powershell
+python -m card_api update
+python -m card_api update --download
+python -m card_api import
+python -m card_api sync
+python -m card_api serve
+```
+
+Initial endpoints are:
+
+- `GET /cards` with optional `set_code`, `number`, `name`, and pagination filters
+- `GET /cards/search?q=...`
+- `GET /cards/{id}` with text, attacks, images, variants, and provenance
+- `GET /sets`
+- `GET /sets/{id}/cards`
+
+For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?set_code=ASC&number=162` returns Team Rocket's Kangaskhan ex from Ascended Heroes. A future scanner integration will send its reviewed set code and card number to this local endpoint. No OCR behavior is changed in this database iteration.
+
 ## Iteration history
 
 - **Iteration 1 — Tesseract proof of concept:** Read selected card-footer images and immediately attempted card lookup.

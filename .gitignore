@@ -8,3 +8,7 @@ benchmark_crops/
 scanner_data.sqlite3
 scanner_data.sqlite3-shm
 scanner_data.sqlite3-wal
+data/raw/
+data/*.sqlite3
+data/*.sqlite3-shm
+data/*.sqlite3-wal
