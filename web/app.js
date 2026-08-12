@@ -48,6 +48,7 @@ let scanId = '';
 let versionReady = false;
 let mediaStream = null;
 let capturedFromCamera = false;
+let lastLookupStatus = 'not_checked';
 
 function resetOcrResult() {
   rawOcr = '';
@@ -68,6 +69,7 @@ function updateLookupAvailability() {
 }
 
 function resetLookup() {
+  lastLookupStatus = 'not_checked';
   lookupState.textContent = 'NOT CHECKED';
   lookupState.className = 'state';
   lookupResult.hidden = true;
@@ -483,9 +485,17 @@ async function scanSelection() {
     scanButton.disabled = !versionReady || !selection;
     nextCardButton.disabled = !mediaStream;
     if (versionReady) {
-      instruction.textContent = capturedFromCamera
-        ? 'Correct and save this reading, then press Next card.'
-        : 'Drag a new box to scan another area, or use Rescan Selection.';
+      if (lastLookupStatus === 'accepted') {
+        instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
+      } else if (lastLookupStatus === 'no_match') {
+        instruction.textContent = 'No exact match was found. Correct the editable fields, then press Find this card.';
+      } else if (lastLookupStatus === 'review') {
+        instruction.textContent = 'Review the displayed card and correct a field only if the identity or printed total is wrong.';
+      } else {
+        instruction.textContent = capturedFromCamera
+          ? 'Correct and save this reading, then press Next card.'
+          : 'Drag a new box to scan another area, or use Rescan Selection.';
+      }
     }
   }
 }
@@ -537,11 +547,16 @@ async function lookupCurrentCard() {
     if (!response.ok || !result.ok) throw new Error(result.error || 'Lookup failed');
     const card = result.card || {};
     if (!card.card_name) {
-      lookupState.textContent = 'NO MATCH';
+      lastLookupStatus = card.status === 'review' ? 'review' : 'no_match';
+      lookupState.textContent = lastLookupStatus === 'review' ? 'REVIEW' : 'NO MATCH';
       lookupState.className = 'state bad';
       lookupMessage.textContent = 'No exact local card was found. Check the set code and card number; nothing was added.';
+      instruction.textContent = lastLookupStatus === 'review'
+        ? 'Review the entered identifiers; the local catalog did not produce one unique card.'
+        : 'No exact match was found. Correct the editable fields, then press Find this card.';
       return;
     }
+    lastLookupStatus = card.status === 'accepted' ? 'accepted' : 'review';
     lookupState.textContent = card.status === 'accepted' ? 'EXACT MATCH' : 'REVIEW';
     lookupState.className = `state ${card.status === 'accepted' ? 'good' : 'bad'}`;
     lookupName.textContent = card.card_name;
@@ -556,6 +571,12 @@ async function lookupCurrentCard() {
     lookupMessage.textContent = card.review_reasons?.length
       ? `Review required: ${card.review_reasons.join('; ')}. Nothing was added.`
       : 'Exact set-and-number match. Compare the name and image to the physical card. Nothing was added.';
+    if (lastLookupStatus === 'accepted') {
+      instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
+      message.textContent = 'The database has the canonical card information. Leave the editable boxes alone unless the displayed card is wrong.';
+    } else {
+      instruction.textContent = 'Review the displayed card and correct a field only if the identity or printed total is wrong.';
+    }
   } catch (error) {
     lookupState.textContent = 'LOOKUP ERROR';
     lookupState.className = 'state bad';

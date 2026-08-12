@@ -125,6 +125,8 @@ class AppTests(unittest.TestCase):
         self.assertIn("const UI_ITERATION = 6", javascript)
         self.assertIn("if (!mediaStream || scanInProgress) return", javascript)
         self.assertIn("nextCardButton.disabled = true", javascript)
+        self.assertIn("Exact visual match found. No corrections are needed", javascript)
+        self.assertIn("lastLookupStatus === 'no_match'", javascript)
         self.assertIn("Preparing the OCR reader", Path(app.__file__).read_text(encoding="utf-8"))
         self.assertIn("nothing was added", javascript.lower())
         self.assertIn("ONLY OCR AREA", html)
