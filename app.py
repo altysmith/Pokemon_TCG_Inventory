@@ -33,17 +33,17 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it14.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it15.csv"))
 SCAN_PERFORMANCE_PATH = Path(
     os.environ.get(
         "SCAN_PERFORMANCE_CSV",
-        ROOT / "scan_performance_it14.csv",
+        ROOT / "scan_performance_it15.csv",
     )
 )
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_14",
+        ROOT / "benchmark_crops" / "iteration_15",
     )
 )
 INVENTORY_PATH = Path(
@@ -53,8 +53,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 14
-ITERATION_NAME = "Timed scan diagnostics"
+ITERATION = 15
+ITERATION_NAME = "Dark set badge recovery"
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -111,10 +111,9 @@ SCAN_PERFORMANCE_LOCK = threading.Lock()
 def extract_footer_fields(text: str) -> tuple[str, str, str, str]:
     """Read regulation, set, card number, and total by printed position.
 
-    This deliberately uses no known-set list. A one-letter token immediately
-    before the first multi-letter token is the regulation mark; the
-    multi-letter token is the literal set-code read. The exact ``en`` language
-    marker is ignored.
+    Exact known codes are preferred. The untouched OCR string remains separate,
+    and any catalog-validated correction happens downstream. The exact ``en``
+    language marker is ignored.
     """
     letter_tokens = [
         token.upper()
@@ -222,23 +221,69 @@ def extract_footer_fields_from_readings(
 def exact_catalog_fields(text: str) -> tuple[str, str, str, str] | None:
     """Return fields only when the literal reading identifies one local card."""
     fields = extract_footer_fields(text)
-    _regulation_mark, set_code, card_number, set_total = fields
+    regulation_mark, set_code, card_number, set_total = fields
     if not set_code or not card_number:
-        return None
-    result = find_exact_card(
-        set_code,
-        card_number,
-        database_path=CARD_CATALOG_PATH,
-    )
-    if result.status != "exact" or result.card is None:
-        return None
-    if (
-        set_total
-        and result.card.printed_total
-        and set_total.lstrip("0") != result.card.printed_total.lstrip("0")
-    ):
-        return None
-    return fields
+        if not card_number:
+            return None
+    else:
+        result = find_exact_card(
+            set_code,
+            card_number,
+            database_path=CARD_CATALOG_PATH,
+        )
+        if result.status == "exact" and result.card is not None and not (
+            set_total
+            and result.card.printed_total
+            and set_total.lstrip("0") != result.card.printed_total.lstrip("0")
+        ):
+            return fields
+
+    # Tiny white-on-dark badges commonly turn one set-code letter into another.
+    # Keep the OCR literal untouched and try every one-letter interpretation,
+    # accepting a repair only when code + number + printed total identify one card.
+    tokens = [token.upper() for token in LETTER_RE.findall(text)]
+    known_codes = {code for code in known_set_codes() if len(code) == 3}
+    repaired_fields: set[tuple[str, str, str, str]] = set()
+    for token in tokens:
+        for offset in range(max(1, len(token) - 2)):
+            window = token[offset : offset + 3]
+            if len(window) != 3:
+                continue
+            for repaired_code in known_codes:
+                if sum(a != b for a, b in zip(window, repaired_code)) != 1:
+                    continue
+                repaired = find_exact_card(
+                    repaired_code,
+                    card_number,
+                    database_path=CARD_CATALOG_PATH,
+                )
+                if repaired.status != "exact" or repaired.card is None:
+                    continue
+                if (
+                    set_total
+                    and repaired.card.printed_total
+                    and set_total.lstrip("0")
+                    != repaired.card.printed_total.lstrip("0")
+                ):
+                    continue
+                repaired_fields.add(
+                    (regulation_mark, repaired_code, card_number, set_total)
+                )
+    return next(iter(repaired_fields)) if len(repaired_fields) == 1 else None
+
+
+def exact_catalog_fields_from_readings(literal_text: str, readings: tuple) -> (
+    tuple[str, str, str, str] | None
+):
+    """Accept one unique exact catalog identity across all retained OCR passes."""
+    texts = {literal_text}
+    texts.update(str(reading.text) for reading in readings if str(reading.text).strip())
+    matches = {
+        fields
+        for text in texts
+        if (fields := exact_catalog_fields(text)) is not None
+    }
+    return next(iter(matches)) if len(matches) == 1 else None
 
 
 def extract_literal_groups(text: str) -> tuple[str, str]:
@@ -543,7 +588,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-14"
+    server_version = "TinyTextReader/iteration-15"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -697,6 +742,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
             time_budget_seconds=OCR_TIME_BUDGET_SECONDS,
         )
         ocr_elapsed_seconds = perf_counter() - ocr_started
+        accepted_fields = accepted_fields or exact_catalog_fields_from_readings(
+            result.raw_text,
+            result.literal_readings,
+        )
         regulation_mark, set_code, card_number, set_total = (
             accepted_fields
             or extract_footer_fields_from_readings(

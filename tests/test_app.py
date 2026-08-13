@@ -23,10 +23,10 @@ from inventory import InventoryDatabase
 class AppTests(unittest.TestCase):
     def test_automatic_scan_performance_is_logged_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "scan_performance_it14.csv"
+            path = Path(temp_dir) / "scan_performance_it15.csv"
             record = {
                 "scanned_at": "2026-08-13T15:00:00-04:00",
-                "iteration": 14,
+                "iteration": 15,
                 "scan_id": "scan-timing-1",
                 "ocr_engine": "RapidOCR",
                 "ocr_elapsed_seconds": "4.250",
@@ -227,6 +227,40 @@ class AppTests(unittest.TestCase):
             ("", "MEG", "086", "132"),
         )
 
+    def test_literal_dark_badge_read_is_not_rewritten_by_field_parser(self) -> None:
+        self.assertEqual(
+            extract_footer_fields("☐ BUKm 031/086"),
+            ("", "", "031", "086"),
+        )
+
+    def test_catalog_validated_repair_handles_dark_badges(self) -> None:
+        self.assertEqual(
+            app.exact_catalog_fields("☐ BUKm 031/086"),
+            ("", "BLK", "031", "086"),
+        )
+        self.assertEqual(
+            app.exact_catalog_fields("WIT 034/086"),
+            ("", "WHT", "034", "086"),
+        )
+
+    def test_low_confidence_alternate_can_supply_unique_exact_dark_badge(self) -> None:
+        self.assertEqual(
+            app.exact_catalog_fields_from_readings(
+                "BU031/086",
+                (
+                    LiteralReading("BU031/086", 0.949, "original"),
+                    LiteralReading("☐ BUKm 031/086", 0.772, "enlarged_gray"),
+                ),
+            ),
+            ("", "BLK", "031", "086"),
+        )
+
+    def test_missing_set_code_is_not_guessed_from_shared_number_and_total(self) -> None:
+        self.assertEqual(
+            extract_footer_fields("034/086"),
+            ("", "", "034", "086"),
+        )
+
     def test_alternate_reading_recovers_set_code_without_rewriting_literal(self) -> None:
         fields = extract_footer_fields_from_readings(
             "PELD113/094",
@@ -249,7 +283,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 14,
+                "iteration": 15,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -265,7 +299,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 14,
+                        "iteration": 15,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -307,12 +341,12 @@ class AppTests(unittest.TestCase):
             html.index('id="add_inventory"'),
             html.index('id="regulation_mark"'),
         )
-        self.assertIn("ITERATION 14", html)
-        self.assertIn("TIMED SCAN DIAGNOSTICS", html)
+        self.assertIn("ITERATION 15", html)
+        self.assertIn("DARK SET BADGE RECOVERY", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 14", javascript)
+        self.assertIn("const UI_ITERATION = 15", javascript)
         self.assertIn("fetch('/scan/timing'", javascript)
         self.assertIn("10s LIMIT REACHED", javascript)
         self.assertIn('id="theme_toggle"', html)
