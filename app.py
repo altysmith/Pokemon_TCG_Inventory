@@ -18,6 +18,7 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from time import perf_counter
 from urllib.parse import urlparse
 
 from PIL import Image
@@ -173,6 +174,28 @@ def extract_footer_fields_from_readings(
         )
 
     return tuple(select(position) for position in range(4))
+
+
+def exact_catalog_fields(text: str) -> tuple[str, str, str, str] | None:
+    """Return fields only when the literal reading identifies one local card."""
+    fields = extract_footer_fields(text)
+    _regulation_mark, set_code, card_number, set_total = fields
+    if not set_code or not card_number:
+        return None
+    result = find_exact_card(
+        set_code,
+        card_number,
+        database_path=CARD_CATALOG_PATH,
+    )
+    if result.status != "exact" or result.card is None:
+        return None
+    if (
+        set_total
+        and result.card.printed_total
+        and set_total.lstrip("0") != result.card.printed_total.lstrip("0")
+    ):
+        return None
+    return fields
 
 
 def extract_literal_groups(text: str) -> tuple[str, str]:
@@ -379,14 +402,25 @@ class ScannerHandler(BaseHTTPRequestHandler):
         raw = base64.b64decode(encoded, validate=True)
         with Image.open(io.BytesIO(raw)) as opened:
             crop = opened.convert("RGB")
+        accepted_fields: tuple[str, str, str, str] | None = None
+
+        def accept_exact_identifier(text: str) -> bool:
+            nonlocal accepted_fields
+            accepted_fields = exact_catalog_fields(text)
+            return accepted_fields is not None
+
+        ocr_started = perf_counter()
         result = scan_crop(
             crop,
             derive_card_candidates=False,
-            stop_on_complete_identifier=True,
+            early_stop_validator=accept_exact_identifier,
         )
+        ocr_elapsed_seconds = perf_counter() - ocr_started
         regulation_mark, set_code, card_number, set_total = (
-            extract_footer_fields_from_readings(
-                result.raw_text, result.literal_readings
+            accepted_fields
+            or extract_footer_fields_from_readings(
+                result.raw_text,
+                result.literal_readings,
             )
         )
         letters = " ".join(
@@ -438,6 +472,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 "ocr_engine": result.ocr_engine,
                 "ocr_evidence": result.evidence_text,
                 "primary_confidence": result.primary_confidence,
+                "ocr_elapsed_seconds": round(ocr_elapsed_seconds, 3),
                 "variant_readings": variant_readings,
                 "complete": bool(result.raw_text),
             }

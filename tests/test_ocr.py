@@ -72,6 +72,7 @@ class OcrTests(unittest.TestCase):
             (LiteralReading("ZXQ 987/654", 0.91),),
             (LiteralReading("ZXQ 987/654", 0.95),),
             (LiteralReading("ZXQ 987/654", 0.82),),
+            (LiteralReading("ZXQ 987/654", 0.84),),
         ],
     )
     def test_primary_reader_returns_literal_unknown_text(
@@ -86,11 +87,16 @@ class OcrTests(unittest.TestCase):
         self.assertEqual(result.primary_confidence, 0.95)
         self.assertEqual(
             [reading.variant for reading in result.literal_readings],
-            ["original", "enlarged_color", "enlarged_gray"],
+            [
+                "original",
+                "enlarged_color",
+                "enlarged_gray",
+                "enlarged_gray_sharp",
+            ],
         )
         self.assertEqual(
             [reading.confidence for reading in result.literal_readings],
-            [0.91, 0.95, 0.82],
+            [0.91, 0.95, 0.82, 0.84],
         )
 
     @patch("card_scanner.ocr.build_evidence")
@@ -125,7 +131,7 @@ class OcrTests(unittest.TestCase):
         result = scan_crop(
             Image.new("RGB", (100, 20), "white"),
             derive_card_candidates=False,
-            stop_on_complete_identifier=True,
+            early_stop_validator=lambda text: text == "O PFL 113/094",
         )
 
         self.assertEqual(result.raw_text, "O PFL 113/094")
@@ -138,6 +144,7 @@ class OcrTests(unittest.TestCase):
             (LiteralReading("PELD113/094", 0.92),),
             (LiteralReading("PELE 113/094", 0.88),),
             (LiteralReading("O PFLa 113/094", 0.84),),
+            (LiteralReading("O PFLa 113/094", 0.83),),
         ],
     )
     def test_fast_mode_keeps_fallbacks_when_set_code_is_missing(
@@ -146,11 +153,11 @@ class OcrTests(unittest.TestCase):
         result = scan_crop(
             Image.new("RGB", (100, 20), "white"),
             derive_card_candidates=False,
-            stop_on_complete_identifier=True,
+            early_stop_validator=lambda _text: False,
         )
 
-        self.assertEqual(run_rapidocr.call_count, 3)
-        self.assertEqual(len(result.literal_readings), 3)
+        self.assertEqual(run_rapidocr.call_count, 4)
+        self.assertEqual(len(result.literal_readings), 4)
 
 
 if __name__ == "__main__":

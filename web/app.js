@@ -10,6 +10,7 @@ const state = document.querySelector('#state');
 const message = document.querySelector('#message');
 const literalOcr = document.querySelector('#literal_ocr');
 const ocrEngine = document.querySelector('#ocr_engine');
+const scanTiming = document.querySelector('#scan_timing');
 const regulationMark = document.querySelector('#regulation_mark');
 const setCode = document.querySelector('#set_code');
 const cardNumber = document.querySelector('#card_number');
@@ -55,6 +56,7 @@ function resetOcrResult() {
   scanId = '';
   literalOcr.textContent = 'Waiting for scan';
   ocrEngine.textContent = '';
+  scanTiming.textContent = 'SCAN TIME: NOT RUN YET';
   regulationMark.value = '';
   setCode.value = '';
   cardNumber.value = '';
@@ -434,12 +436,15 @@ async function scanSelection() {
   scanButton.disabled = true;
   state.textContent = 'READING...';
   state.className = 'state';
+  const scanStartedAt = performance.now();
   let readingSeconds = 0;
+  scanTiming.textContent = 'SCAN TIME: 0.0s (RUNNING)';
   message.textContent = 'Reading the card identifier. Clear cards use one quick pass; difficult cards automatically get additional treatments...';
   const readingTimer = window.setInterval(() => {
-    readingSeconds += 1;
+    readingSeconds = Math.floor((performance.now() - scanStartedAt) / 1000);
+    scanTiming.textContent = `SCAN TIME: ${((performance.now() - scanStartedAt) / 1000).toFixed(1)}s (RUNNING)`;
     message.textContent = `Still reading the selected identifier (${readingSeconds}s). Please wait before moving to the next card...`;
-  }, 1000);
+  }, 100);
   try {
     const response = await fetch('/scan', {
       method: 'POST',
@@ -452,6 +457,11 @@ async function scanSelection() {
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Scan failed');
+    const totalScanSeconds = (performance.now() - scanStartedAt) / 1000;
+    const ocrSeconds = Number(result.ocr_elapsed_seconds);
+    scanTiming.textContent = Number.isFinite(ocrSeconds)
+      ? `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL / ${ocrSeconds.toFixed(2)}s OCR`
+      : `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL`;
     if (result.iteration !== UI_ITERATION) {
       blockForVersion(`This page is Iteration ${UI_ITERATION}, but the server returned Iteration ${result.iteration || 'unknown'}.`);
       return;
@@ -476,6 +486,7 @@ async function scanSelection() {
       await lookupCurrentCard();
     }
   } catch (error) {
+    scanTiming.textContent = `SCAN TIME: ${((performance.now() - scanStartedAt) / 1000).toFixed(2)}s / ERROR`;
     state.textContent = 'SCAN ERROR';
     state.className = 'state bad';
     message.textContent = error.message;

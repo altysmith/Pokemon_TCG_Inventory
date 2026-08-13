@@ -9,7 +9,7 @@ import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
@@ -100,10 +100,24 @@ def _rapidocr_variants(image: Image.Image) -> tuple[tuple[str, Image.Image], ...
         Image.Resampling.LANCZOS,
     )
     gray = ImageOps.autocontrast(ImageOps.grayscale(large), cutoff=1).convert("RGB")
+    sharp_width = min(2400, max(1600, image.width * 6))
+    sharp_scale = sharp_width / max(1, image.width)
+    sharp_gray = ImageOps.autocontrast(
+        ImageOps.grayscale(
+            image.resize(
+                (sharp_width, max(100, round(image.height * sharp_scale))),
+                Image.Resampling.LANCZOS,
+            )
+        ),
+        cutoff=1,
+    ).filter(
+        ImageFilter.UnsharpMask(radius=2, percent=250, threshold=1)
+    ).convert("RGB")
     return (
         ("original", image.convert("RGB")),
         ("enlarged_color", large),
         ("enlarged_gray", gray),
+        ("enlarged_gray_sharp", sharp_gray),
     )
 
 
@@ -289,16 +303,10 @@ def build_evidence(
     return tuple(code_candidates), tuple(number_candidates)
 
 
-def _has_complete_identifier(text: str) -> bool:
-    codes = extract_code_observations(text, known_set_codes())
-    numbers = extract_number_observations(text)
-    return bool(codes and numbers)
-
-
 def scan_crop(
     image: Image.Image,
     derive_card_candidates: bool = True,
-    stop_on_complete_identifier: bool = False,
+    early_stop_validator: Callable[[str], bool] | None = None,
 ) -> OcrResult:
     """Read literal text first, then derive optional card interpretations."""
     observations: list[TextObservation] = []
@@ -324,9 +332,9 @@ def scan_crop(
             )
             observations.append(observation)
             if (
-                stop_on_complete_identifier
+                early_stop_validator is not None
                 and combined.confidence >= 0.82
-                and _has_complete_identifier(combined.text)
+                and early_stop_validator(combined.text)
             ):
                 break
     except (ImportError, OSError, RuntimeError, ValueError):

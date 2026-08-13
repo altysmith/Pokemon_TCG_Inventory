@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import app
 from app import (
+    exact_catalog_fields,
     extract_footer_fields,
     extract_footer_fields_from_readings,
     extract_literal_groups,
@@ -15,6 +16,29 @@ from card_scanner.ocr import LiteralReading
 
 
 class AppTests(unittest.TestCase):
+    @patch("app.find_exact_card")
+    def test_fast_path_requires_an_exact_catalog_match(self, find_card) -> None:
+        find_card.return_value = type(
+            "Result",
+            (),
+            {"status": "no_match", "card": None},
+        )()
+        self.assertIsNone(exact_catalog_fields("PLM 113/094"))
+
+        find_card.return_value = type(
+            "Result",
+            (),
+            {
+                "status": "exact",
+                "card": type("Card", (), {"printed_total": "094"})(),
+            },
+        )()
+        self.assertEqual(
+            exact_catalog_fields("O PFLM 113/094"),
+            ("", "PFL", "113", "094"),
+        )
+        self.assertIsNone(exact_catalog_fields("O PFLM 113/999"))
+
     def test_literal_groups_preserve_unknown_letters_and_leading_zeroes(self) -> None:
         self.assertEqual(
             extract_literal_groups("ZXQ EN 001/999"),
@@ -117,6 +141,7 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="stop_camera"', html)
         self.assertIn('id="reuse_selection"', html)
         self.assertIn('id="lookup_card"', html)
+        self.assertIn('id="scan_timing"', html)
         self.assertIn("ITERATION 6", html)
         self.assertIn("INSTANT LOCAL CATALOG MATCH", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
