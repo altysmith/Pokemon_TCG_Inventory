@@ -19,7 +19,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from time import perf_counter
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from PIL import Image
 
@@ -33,11 +33,11 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it9.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it10.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_9",
+        ROOT / "benchmark_crops" / "iteration_10",
     )
 )
 INVENTORY_PATH = Path(
@@ -47,8 +47,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 9
-ITERATION_NAME = "Quick inventory intake"
+ITERATION = 10
+ITERATION_NAME = "Visual inventory views"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -325,6 +325,82 @@ def inventory_database() -> InventoryDatabase:
     return database
 
 
+INVENTORY_SORTS = {"name", "set_number", "category", "subtype", "element"}
+
+
+def inventory_snapshot(sort_by: str = "name") -> dict:
+    """Join user quantities to rebuildable catalog details for read-only display."""
+    selected_sort = sort_by if sort_by in INVENTORY_SORTS else "name"
+    holdings = inventory_database().holdings()
+    if not holdings:
+        return {
+            "items": [],
+            "unique_cards": 0,
+            "total_copies": 0,
+            "sort": selected_sort,
+        }
+    if not CARD_CATALOG_PATH.is_file():
+        raise ValueError("Local card catalog is unavailable.")
+    quantities = {holding.card_id: holding.quantity for holding in holdings}
+    placeholders = ",".join("?" for _ in quantities)
+    from card_api.database import CatalogDatabase
+
+    with CatalogDatabase(CARD_CATALOG_PATH).connect() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT c.id, c.name, c.card_type, COALESCE(c.card_subtype, '') AS card_subtype,
+                   c.number, c.number_numeric, COALESCE(c.printed_total, '') AS printed_total,
+                   COALESCE(c.primary_image_url, '') AS image_url,
+                   s.name AS set_name, s.code AS set_code
+            FROM cards c JOIN sets s ON s.id = c.set_id
+            WHERE c.id IN ({placeholders})
+            """,
+            list(quantities),
+        ).fetchall()
+        items = [dict(row) for row in rows]
+        type_rows = connection.execute(
+            f"SELECT card_id, type FROM card_types WHERE card_id IN ({placeholders}) "
+            "ORDER BY card_id, position",
+            list(quantities),
+        ).fetchall()
+    types_by_card = {card_id: [] for card_id in quantities}
+    for row in type_rows:
+        types_by_card[row["card_id"]].append(row["type"])
+    for item in items:
+        item["quantity"] = quantities[item["id"]]
+        item["types"] = types_by_card[item["id"]]
+        item["display_subtype"] = (
+            f"{item['card_subtype'].title()} Energy"
+            if item["card_type"] == "ENERGY" and item["card_subtype"]
+            else item["card_subtype"].title()
+        )
+
+    def key(item: dict) -> tuple:
+        name = item["name"].casefold()
+        if selected_sort == "set_number":
+            return (
+                item["set_name"].casefold(),
+                item["number_numeric"] if item["number_numeric"] is not None else 10**9,
+                item["number"],
+                name,
+            )
+        if selected_sort == "category":
+            return (item["card_type"], item["card_subtype"], name)
+        if selected_sort == "subtype":
+            return (item["display_subtype"] or item["card_type"], name)
+        if selected_sort == "element":
+            return ((item["types"] or ["UNTYPED"])[0], name)
+        return (name, item["set_name"].casefold(), item["number"])
+
+    items.sort(key=key)
+    return {
+        "items": items,
+        "unique_cards": len(items),
+        "total_copies": sum(item["quantity"] for item in items),
+        "sort": selected_sort,
+    }
+
+
 def add_inventory_card(data: dict) -> tuple[CardInfo, InventoryChange]:
     """Add only a freshly revalidated, unique canonical card match."""
     info = lookup_confirmed_fields(data)
@@ -355,7 +431,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-9"
+    server_version = "TinyTextReader/iteration-10"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -376,7 +452,8 @@ class ScannerHandler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        route = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        route = parsed.path
         if route == "/health":
             self._json(
                 {
@@ -391,7 +468,20 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 }
             )
             return
-        files = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css"}
+        if route == "/inventory/cards":
+            sort_by = parse_qs(parsed.query).get("sort", ["name"])[0]
+            try:
+                self._json({"ok": True, **inventory_snapshot(sort_by)})
+            except (ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        files = {
+            "/": "index.html",
+            "/inventory": "inventory.html",
+            "/app.js": "app.js",
+            "/inventory.js": "inventory.js",
+            "/style.css": "style.css",
+        }
         filename = files.get(route)
         if not filename:
             self.send_error(HTTPStatus.NOT_FOUND)

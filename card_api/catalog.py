@@ -16,6 +16,9 @@ class CatalogCard:
     set_code: str
     set_name: str
     card_name: str
+    card_type: str
+    card_subtype: str
+    types: tuple[str, ...]
     card_number: str
     printed_total: str
     regulation_mark: str
@@ -51,6 +54,8 @@ def find_exact_card(
             """
             SELECT c.id, c.set_id, s.code AS set_code, s.name AS set_name,
                    c.name AS card_name, c.number AS card_number,
+                   COALESCE(c.card_type, '') AS card_type,
+                   COALESCE(c.card_subtype, '') AS card_subtype,
                    COALESCE(c.printed_total, '') AS printed_total,
                    COALESCE(c.regulation_mark, '') AS regulation_mark,
                    c.hp, COALESCE(c.rarity, '') AS rarity,
@@ -67,6 +72,17 @@ def find_exact_card(
             """,
             (number, code),
         ).fetchall()
+        matched_types = (
+            tuple(
+                item["type"]
+                for item in connection.execute(
+                    "SELECT type FROM card_types WHERE card_id = ? ORDER BY position",
+                    (rows[0]["id"],),
+                ).fetchall()
+            )
+            if len(rows) == 1
+            else ()
+        )
 
     if not rows:
         return ExactCardResult("no_match")
@@ -81,6 +97,9 @@ def find_exact_card(
             set_code=code,
             set_name=row["set_name"],
             card_name=row["card_name"],
+            card_type=row["card_type"],
+            card_subtype=row["card_subtype"],
+            types=matched_types,
             card_number=row["card_number"],
             printed_total=row["printed_total"],
             regulation_mark=row["regulation_mark"],

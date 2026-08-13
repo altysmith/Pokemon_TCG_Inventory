@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS cards (
     language TEXT NOT NULL,
     name TEXT NOT NULL,
     card_type TEXT,
+    card_subtype TEXT,
     number TEXT NOT NULL,
     number_numeric INTEGER,
     printed_total TEXT,
@@ -77,6 +78,14 @@ CREATE TABLE IF NOT EXISTS cards (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(set_id, language, number)
+);
+
+CREATE TABLE IF NOT EXISTS card_types (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    PRIMARY KEY(card_id, position),
+    UNIQUE(card_id, type)
 );
 
 CREATE TABLE IF NOT EXISTS card_sources (
@@ -153,6 +162,7 @@ CREATE INDEX IF NOT EXISTS idx_sets_code ON sets(code);
 CREATE INDEX IF NOT EXISTS idx_set_codes_code ON set_codes(code);
 CREATE INDEX IF NOT EXISTS idx_cards_set_number ON cards(set_id, number_numeric, number);
 CREATE INDEX IF NOT EXISTS idx_cards_name ON cards(name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_card_types_type ON card_types(type, card_id);
 CREATE INDEX IF NOT EXISTS idx_validation_file ON validation_issues(source_file_id);
 """
 
@@ -167,6 +177,16 @@ class CatalogDatabase:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(cards)").fetchall()
+            }
+            if "card_subtype" not in columns:
+                connection.execute("ALTER TABLE cards ADD COLUMN card_subtype TEXT")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cards_type "
+                "ON cards(card_type, card_subtype)"
+            )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

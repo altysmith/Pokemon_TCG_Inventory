@@ -1,6 +1,6 @@
 # Tiny Card Text Scanner
 
-**Current build: Iteration 9 — Quick inventory intake**
+**Current build: Iteration 10 — Visual inventory views**
 
 This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. After reading, complete set-and-number fields are checked against the local catalog. Images stay on this computer, and scanning uses no internet API.
 
@@ -64,7 +64,8 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 6 — Instant local catalog match:** Preserved the Iteration 5 OCR behavior and evidence, then automatically checked a complete detected set code and card number against the local Malie catalog. No internet fallback was used, and a conflicting printed total required review.
 - **Iteration 7 — Confirmed local inventory:** Added a separate permanent SQLite inventory, exact-match-only additions, visible quantity, and an auditable undo. Catalog rebuilds cannot overwrite personal quantities.
 - **Iteration 8 — Batch inventory quantities:** Added a numeric quantity input from 1 to 99. One button press records the entire batch as one history event, and Undo removes that whole batch.
-- **Iteration 9 — Quick inventory intake (current):** Moves the exact card match, image, current quantity, batch input, Add, and Undo directly below the OCR result so routine inventory intake does not require scrolling past correction controls.
+- **Iteration 9 — Quick inventory intake:** Moves the exact card match, image, current quantity, batch input, Add, and Undo directly below the OCR result so routine inventory intake does not require scrolling past correction controls.
+- **Iteration 10 — Visual inventory views (current):** Preserves Malie card category, Trainer/Energy subtype, and elemental types in the canonical catalog. Adds a read-only collection page with card images and alternate views by name, set/collector number, card category, subtype, or elemental type.
 
 The launcher preloads RapidOCR before opening the scanner. The operational reader stops after the first high-confidence treatment only when its set code, card number, and any printed total resolve to one exact local card. Non-matches automatically continue through the remaining treatments. The page keeps both total scan time and server OCR time visible after every scan and disables **Next card** until the current reading is complete.
 
@@ -89,9 +90,9 @@ Future material changes should advance the iteration number and add one short en
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-New rows from both workflows are stored in `ocr_reads_it9.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_9`. Earlier iteration files remain untouched as OCR evidence.
+New rows from both workflows are stored in `ocr_reads_it10.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_10`. Earlier iteration files remain untouched as OCR evidence.
 
-The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_9`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
+The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_10`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 
@@ -106,6 +107,8 @@ When OCR reads both a set code and card number, the scanner immediately checks `
 Inventory is never changed merely because OCR found a card. **Add copies to collection** is enabled only for one exact, conflict-free local catalog match. Choose a whole-number quantity from 1 to 99; pressing the button makes the server validate both the card and quantity again before recording the canonical card ID. No-match, ambiguous, review, and invalid-quantity requests are rejected by the server even if a browser request is sent manually.
 
 The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuildable Malie catalog. Each batch records one immutable history event with the optional originating scan ID. **Undo last batch** removes that entire batch but retains a compensating history event, so mistakes remain auditable. Back up the `user_data` folder whenever you back up the collection; Git intentionally ignores this personal database.
+
+Click **View collection** at the top of the scanner to open the read-only visual inventory. The same holdings can be displayed alphabetically, by set and collector number, by broad card category, by Item/Supporter/Tool/Stadium or Energy subtype, or by Pokemon elemental type. These choices only change display order and grouping; they never edit quantities.
 
 The 26 saved webcam crops were re-run offline after installing RapidOCR and adding joined-language cleanup. Exact set-code reads improved from 1/26 to 21/26, card-number reads from 3/26 to 25/26, and set-total reads from 4/25 to 23/25. Regulation marks remained unreliable at 1/20, so that field stays editable and must not be used for automatic card identity or sorting.
 

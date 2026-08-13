@@ -36,6 +36,22 @@ def validate_card(card: object) -> list[ValidationIssue]:
         issues.append(ValidationIssue("error", "name", "Card name is missing."))
     if not isinstance(card.get("card_type"), str) or not card["card_type"].strip():
         issues.append(ValidationIssue("error", "card_type", "Card type is missing."))
+    card_type = card.get("card_type")
+    subtype = card.get("subtype")
+    if card_type in {"TRAINER", "ENERGY"} and (
+        not isinstance(subtype, str) or not subtype.strip()
+    ):
+        issues.append(
+            ValidationIssue("warning", "subtype", f"{card_type.title()} subtype is missing.")
+        )
+    types = card.get("types")
+    if types is not None and (
+        not isinstance(types, list)
+        or any(not isinstance(value, str) or not value.strip() for value in types)
+    ):
+        issues.append(ValidationIssue("error", "types", "Card types must be a list of names."))
+    if card_type == "POKEMON" and not types:
+        issues.append(ValidationIssue("warning", "types", "Pokemon card has no elemental type."))
 
     collector = card.get("collector_number")
     if not isinstance(collector, dict):

@@ -22,6 +22,7 @@ def sample_cards():
         {
             "name": "Smoochum",
             "card_type": "POKEMON",
+            "types": ["PSYCHIC"],
             "lang": "en-US",
             "foil": {"type": "FLAT_SILVER", "mask": "REVERSE"},
             "regulation_mark": "H",
@@ -54,6 +55,7 @@ def sample_cards():
         {
             "name": "Smoochum",
             "card_type": "POKEMON",
+            "types": ["PSYCHIC"],
             "lang": "en-US",
             "regulation_mark": "H",
             "collector_number": {
@@ -222,6 +224,11 @@ class ImportAndApiTests(unittest.TestCase):
         found = cards.json()["items"][0]
         self.assertEqual(found["name"], "Smoochum")
         self.assertEqual(found["regulation_mark"], "H")
+        self.assertEqual(found["types"], ["PSYCHIC"])
+        self.assertEqual(found["card_subtype"], None)
+
+        type_filter = self.client.get("/cards", params={"pokemon_type": "psychic"})
+        self.assertEqual(type_filter.json()["total"], 1)
 
         detail = self.client.get(f"/cards/{found['id']}")
         self.assertEqual(detail.status_code, 200)

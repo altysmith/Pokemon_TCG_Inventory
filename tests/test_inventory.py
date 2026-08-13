@@ -27,6 +27,10 @@ class InventoryDatabaseTests(unittest.TestCase):
         self.assertEqual((first.quantity, second.quantity), (1, 9))
         self.assertEqual(second.quantity_delta, 8)
         self.assertEqual(self.database.quantity("malie:sv5:123"), 9)
+        self.assertEqual(
+            [(item.card_id, item.quantity) for item in self.database.holdings()],
+            [("malie:sv5:123", 9)],
+        )
 
         undone = self.database.undo_add(second.event_id)
 

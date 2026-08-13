@@ -33,6 +33,9 @@ def create_app(database_path: Path | str = DATABASE_PATH) -> FastAPI:
         set_code: str | None = None,
         number: str | None = None,
         name: str | None = None,
+        card_type: str | None = None,
+        subtype: str | None = None,
+        pokemon_type: str | None = None,
         language: str = "en-US",
         limit: int = Query(50, ge=1, le=500),
         offset: int = Query(0, ge=0),
@@ -50,6 +53,18 @@ def create_app(database_path: Path | str = DATABASE_PATH) -> FastAPI:
         if name:
             filters.append("c.name LIKE ? COLLATE NOCASE")
             parameters.append(f"%{name.strip()}%")
+        if card_type:
+            filters.append("c.card_type = ? COLLATE NOCASE")
+            parameters.append(card_type.strip())
+        if subtype:
+            filters.append("c.card_subtype = ? COLLATE NOCASE")
+            parameters.append(subtype.strip())
+        if pokemon_type:
+            filters.append(
+                "EXISTS (SELECT 1 FROM card_types ct "
+                "WHERE ct.card_id = c.id AND ct.type = ? COLLATE NOCASE)"
+            )
+            parameters.append(pokemon_type.strip())
         return _card_page(database, filters, parameters, limit, offset)
 
     @app.get("/cards/search")
@@ -77,6 +92,13 @@ def create_app(database_path: Path | str = DATABASE_PATH) -> FastAPI:
             if row is None:
                 raise HTTPException(status_code=404, detail="Card not found")
             result = dict(row)
+            result["types"] = [
+                item["type"]
+                for item in connection.execute(
+                    "SELECT type FROM card_types WHERE card_id = ? ORDER BY position",
+                    (card_id,),
+                ).fetchall()
+            ]
             text_rows = connection.execute(
                 """
                 SELECT position, kind, name, text, cost_json,
@@ -199,7 +221,7 @@ def create_app(database_path: Path | str = DATABASE_PATH) -> FastAPI:
 
 
 _CARD_SELECT = """
-SELECT c.id, c.name, c.card_type, c.number, c.number_numeric,
+SELECT c.id, c.name, c.card_type, c.card_subtype, c.number, c.number_numeric,
        c.printed_total, c.hp, c.regulation_mark, c.rarity, c.stage,
        c.language, c.primary_image_url, c.validation_status,
        s.id AS set_id, s.name AS set_name, s.code AS set_code
@@ -226,4 +248,17 @@ def _card_page(
             + " ORDER BY s.name COLLATE NOCASE, c.number_numeric, c.number LIMIT ? OFFSET ?",
             [*parameters, limit, offset],
         ).fetchall()
-    return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
+        items = [dict(row) for row in rows]
+        if items:
+            placeholders = ",".join("?" for _ in items)
+            type_rows = connection.execute(
+                f"SELECT card_id, type FROM card_types "
+                f"WHERE card_id IN ({placeholders}) ORDER BY card_id, position",
+                [item["id"] for item in items],
+            ).fetchall()
+            types_by_card: dict[str, list[str]] = {item["id"]: [] for item in items}
+            for row in type_rows:
+                types_by_card[row["card_id"]].append(row["type"])
+            for item in items:
+                item["types"] = types_by_card[item["id"]]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}

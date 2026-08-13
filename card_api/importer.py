@@ -355,10 +355,10 @@ def _insert_card(
     connection.execute(
         """
         INSERT INTO cards(
-            id, set_id, language, name, card_type, number, number_numeric,
+            id, set_id, language, name, card_type, card_subtype, number, number_numeric,
             printed_total, hp, regulation_mark, rarity, stage,
             primary_image_url, validation_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             card_id,
@@ -366,6 +366,7 @@ def _insert_card(
             locale,
             card["name"].strip(),
             card.get("card_type"),
+            card.get("subtype"),
             number,
             collector.get("numeric"),
             collector.get("denominator"),
@@ -377,6 +378,11 @@ def _insert_card(
             "warning" if has_warnings else "valid",
         ),
     )
+    for position, card_type in enumerate(card.get("types") or []):
+        connection.execute(
+            "INSERT INTO card_types(card_id, position, type) VALUES (?, ?, ?)",
+            (card_id, position, card_type),
+        )
     _insert_source_variant(
         connection,
         source_id=source_id,

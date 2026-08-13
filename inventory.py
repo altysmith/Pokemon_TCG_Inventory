@@ -43,6 +43,12 @@ class InventoryChange:
     quantity_delta: int
 
 
+@dataclass(frozen=True)
+class InventoryHolding:
+    card_id: str
+    quantity: int
+
+
 class InventoryDatabase:
     """Own the mutable collection database and its auditable event history."""
 
@@ -122,6 +128,20 @@ class InventoryDatabase:
                 (value,),
             ).fetchone()
         return int(row["quantity"]) if row else 0
+
+    def holdings(self) -> tuple[InventoryHolding, ...]:
+        """Return current quantities without exposing a writable SQL connection."""
+        if not self.path.is_file():
+            return ()
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT card_id, quantity FROM inventory_holdings "
+                "WHERE quantity > 0 ORDER BY card_id"
+            ).fetchall()
+        return tuple(
+            InventoryHolding(str(row["card_id"]), int(row["quantity"]))
+            for row in rows
+        )
 
     def add_cards(
         self,

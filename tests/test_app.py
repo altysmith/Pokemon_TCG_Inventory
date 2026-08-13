@@ -139,7 +139,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 9,
+                "iteration": 10,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -155,7 +155,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 9,
+                        "iteration": 10,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -197,12 +197,13 @@ class AppTests(unittest.TestCase):
             html.index('id="add_inventory"'),
             html.index('id="regulation_mark"'),
         )
-        self.assertIn("ITERATION 9", html)
-        self.assertIn("QUICK INVENTORY INTAKE", html)
+        self.assertIn("ITERATION 10", html)
+        self.assertIn("VISUAL INVENTORY VIEWS", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 9", javascript)
+        self.assertIn("const UI_ITERATION = 10", javascript)
+        self.assertIn('href="/inventory"', html)
         self.assertIn("fetch('/inventory/add'", javascript)
         self.assertIn("fetch('/inventory/undo'", javascript)
         self.assertIn("lastLookupStatus !== 'accepted'", javascript)
