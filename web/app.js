@@ -34,10 +34,11 @@ const lookupIdentity = document.querySelector('#lookup_identity');
 const lookupSource = document.querySelector('#lookup_source');
 const lookupMessage = document.querySelector('#lookup_message');
 const inventoryQuantity = document.querySelector('#inventory_quantity');
+const inventoryAddQuantity = document.querySelector('#inventory_add_quantity');
 const addInventoryButton = document.querySelector('#add_inventory');
 const undoInventoryButton = document.querySelector('#undo_inventory');
 const inventoryMessage = document.querySelector('#inventory_message');
-const UI_ITERATION = 7;
+const UI_ITERATION = 8;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -93,6 +94,7 @@ function resetLookup() {
 function resetInventoryControls() {
   currentInventoryEventId = 0;
   inventoryQuantity.textContent = '-';
+  inventoryAddQuantity.value = '1';
   addInventoryButton.disabled = true;
   undoInventoryButton.disabled = true;
   inventoryMessage.textContent = 'Available only after one exact, conflict-free catalog match.';
@@ -599,7 +601,7 @@ async function lookupCurrentCard() {
     if (lastLookupStatus === 'accepted') {
       inventoryQuantity.textContent = String(result.inventory_quantity ?? 0);
       addInventoryButton.disabled = false;
-      inventoryMessage.textContent = 'Exact match confirmed. Press Add one to collection to increase this quantity.';
+      inventoryMessage.textContent = 'Exact match confirmed. Choose how many copies to add.';
       instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
       message.textContent = 'The database has the canonical card information. Leave the editable boxes alone unless the displayed card is wrong.';
     } else {
@@ -618,9 +620,14 @@ lookupButton.addEventListener('click', () => void lookupCurrentCard());
 
 addInventoryButton.addEventListener('click', async () => {
   if (lastLookupStatus !== 'accepted') return;
+  const quantityToAdd = Number(inventoryAddQuantity.value);
+  if (!Number.isInteger(quantityToAdd) || quantityToAdd < 1 || quantityToAdd > 99) {
+    inventoryMessage.textContent = 'Enter a whole-number quantity from 1 to 99.';
+    return;
+  }
   addInventoryButton.disabled = true;
   undoInventoryButton.disabled = true;
-  inventoryMessage.textContent = 'Rechecking the exact match and adding one copy...';
+  inventoryMessage.textContent = `Rechecking the exact match and adding ${quantityToAdd} ${quantityToAdd === 1 ? 'copy' : 'copies'}...`;
   try {
     const response = await fetch('/inventory/add', {
       method: 'POST',
@@ -630,14 +637,17 @@ addInventoryButton.addEventListener('click', async () => {
         card_number: cardNumber.value,
         set_total: setTotal.value,
         scan_id: scanId,
+        quantity: quantityToAdd,
       }),
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Inventory addition failed');
     currentInventoryEventId = Number(result.inventory?.event_id || 0);
     inventoryQuantity.textContent = String(result.inventory?.quantity ?? 0);
+    inventoryAddQuantity.value = '1';
     undoInventoryButton.disabled = !currentInventoryEventId;
-    inventoryMessage.textContent = `Added one ${result.card?.card_name || 'card'}. The inventory history was saved locally.`;
+    const added = Number(result.inventory?.quantity_delta || quantityToAdd);
+    inventoryMessage.textContent = `Added ${added} ${added === 1 ? 'copy' : 'copies'} of ${result.card?.card_name || 'this card'}. The batch was saved locally.`;
   } catch (error) {
     inventoryMessage.textContent = error.message;
   } finally {
@@ -649,7 +659,7 @@ undoInventoryButton.addEventListener('click', async () => {
   if (!currentInventoryEventId) return;
   undoInventoryButton.disabled = true;
   addInventoryButton.disabled = true;
-  inventoryMessage.textContent = 'Undoing the last addition...';
+  inventoryMessage.textContent = 'Undoing the last batch...';
   try {
     const response = await fetch('/inventory/undo', {
       method: 'POST',
@@ -659,8 +669,9 @@ undoInventoryButton.addEventListener('click', async () => {
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Inventory undo failed');
     inventoryQuantity.textContent = String(result.inventory?.quantity ?? 0);
+    const undone = Math.abs(Number(result.inventory?.quantity_delta || 0));
     currentInventoryEventId = 0;
-    inventoryMessage.textContent = 'The last addition was undone. The history remains recorded.';
+    inventoryMessage.textContent = `The last batch${undone ? ` of ${undone}` : ''} was undone. The history remains recorded.`;
   } catch (error) {
     inventoryMessage.textContent = error.message;
   } finally {

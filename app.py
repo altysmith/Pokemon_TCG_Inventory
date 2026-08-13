@@ -33,11 +33,11 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it7.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it8.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_7",
+        ROOT / "benchmark_crops" / "iteration_8",
     )
 )
 INVENTORY_PATH = Path(
@@ -47,8 +47,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 7
-ITERATION_NAME = "Confirmed local inventory"
+ITERATION = 8
+ITERATION_NAME = "Batch inventory quantities"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -332,8 +332,15 @@ def add_inventory_card(data: dict) -> tuple[CardInfo, InventoryChange]:
         raise ValueError(
             "Inventory additions require one exact local catalog match with no conflicts."
         )
-    change = inventory_database().add_card(
+    quantity_text = str(data.get("quantity", 1)).strip()
+    if not quantity_text.isdigit():
+        raise ValueError("Inventory quantity must be a whole number.")
+    quantity = int(quantity_text)
+    if quantity < 1 or quantity > 99:
+        raise ValueError("Inventory quantity must be between 1 and 99.")
+    change = inventory_database().add_cards(
         info.card_id,
+        quantity,
         scan_id=str(data.get("scan_id", "")),
     )
     return info, change
@@ -348,7 +355,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-7"
+    server_version = "TinyTextReader/iteration-8"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")

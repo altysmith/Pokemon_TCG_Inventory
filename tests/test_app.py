@@ -34,11 +34,12 @@ class AppTests(unittest.TestCase):
                         "card_number": "123",
                         "set_total": "162",
                         "scan_id": "scan-1",
+                        "quantity": 8,
                     }
                 )
 
         self.assertEqual(info.card_id, "malie:sv5:123")
-        self.assertEqual(change.quantity, 1)
+        self.assertEqual((change.quantity, change.quantity_delta), (8, 8))
 
     @patch("app.lookup_confirmed_fields")
     def test_inventory_rejects_review_or_no_match(self, lookup) -> None:
@@ -46,6 +47,24 @@ class AppTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "exact local catalog match"):
             add_inventory_card({"set_code": "TEF", "card_number": "123"})
+
+    @patch("app.lookup_confirmed_fields")
+    def test_inventory_rejects_invalid_batch_quantity(self, lookup) -> None:
+        lookup.return_value = CardInfo(
+            card_id="malie:sv5:123",
+            status="accepted",
+        )
+
+        for invalid in (0, 100, 1.5, "eight"):
+            with self.subTest(quantity=invalid):
+                with self.assertRaisesRegex(ValueError, "quantity"):
+                    add_inventory_card(
+                        {
+                            "set_code": "TEF",
+                            "card_number": "123",
+                            "quantity": invalid,
+                        }
+                    )
 
     @patch("app.find_exact_card")
     def test_fast_path_requires_an_exact_catalog_match(self, find_card) -> None:
@@ -120,7 +139,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 7,
+                "iteration": 8,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -136,7 +155,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 7,
+                        "iteration": 8,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -173,12 +192,13 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="reuse_selection"', html)
         self.assertIn('id="lookup_card"', html)
         self.assertIn('id="scan_timing"', html)
-        self.assertIn("ITERATION 7", html)
-        self.assertIn("CONFIRMED LOCAL INVENTORY", html)
+        self.assertIn('id="inventory_add_quantity"', html)
+        self.assertIn("ITERATION 8", html)
+        self.assertIn("BATCH INVENTORY QUANTITIES", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 7", javascript)
+        self.assertIn("const UI_ITERATION = 8", javascript)
         self.assertIn("fetch('/inventory/add'", javascript)
         self.assertIn("fetch('/inventory/undo'", javascript)
         self.assertIn("lastLookupStatus !== 'accepted'", javascript)

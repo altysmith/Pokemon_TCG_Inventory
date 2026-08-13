@@ -273,12 +273,14 @@ class ImportAndApiTests(unittest.TestCase):
                     "card_number": "075",
                     "set_total": "191",
                     "scan_id": "scan-1",
+                    "quantity": 8,
                 }
             )
             undone = scanner_app.undo_inventory_add({"event_id": added.event_id})
 
         self.assertEqual(info.card_id, "malie-tcgl:en-US:sv8:075")
-        self.assertEqual((added.quantity, undone.quantity), (1, 0))
+        self.assertEqual((added.quantity, added.quantity_delta), (8, 8))
+        self.assertEqual((undone.quantity, undone.quantity_delta), (0, -8))
 
     def test_unknown_card_is_404_not_a_guess(self):
         response = self.client.get("/cards/not-a-real-card")
