@@ -38,7 +38,7 @@ const inventoryAddQuantity = document.querySelector('#inventory_add_quantity');
 const addInventoryButton = document.querySelector('#add_inventory');
 const undoInventoryButton = document.querySelector('#undo_inventory');
 const inventoryMessage = document.querySelector('#inventory_message');
-const UI_ITERATION = 13;
+const UI_ITERATION = 14;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -476,14 +476,27 @@ async function scanSelection() {
     if (!response.ok || !result.ok) throw new Error(result.error || 'Scan failed');
     const totalScanSeconds = (performance.now() - scanStartedAt) / 1000;
     const ocrSeconds = Number(result.ocr_elapsed_seconds);
+    const treatmentCount = Array.isArray(result.treatments_attempted) ? result.treatments_attempted.length : 0;
+    const timeoutLabel = result.ocr_timed_out ? ' / 10s LIMIT REACHED' : '';
     scanTiming.textContent = Number.isFinite(ocrSeconds)
-      ? `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL / ${ocrSeconds.toFixed(2)}s OCR`
+      ? `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL / ${ocrSeconds.toFixed(2)}s OCR / ${treatmentCount} TREATMENTS${timeoutLabel}`
       : `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL`;
     if (result.iteration !== UI_ITERATION) {
       blockForVersion(`This page is Iteration ${UI_ITERATION}, but the server returned Iteration ${result.iteration || 'unknown'}.`);
       return;
     }
     scanId = result.scan_id || '';
+    if (scanId) {
+      try {
+        await fetch('/scan/timing', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({scan_id: scanId, client_total_seconds: totalScanSeconds}),
+        });
+      } catch (_timingError) {
+        // Timing diagnostics must never discard an otherwise usable scan.
+      }
+    }
     rawOcr = result.raw_ocr || '';
     literalOcr.textContent = rawOcr || 'No text detected';
     ocrEngine.textContent = result.ocr_engine ? `Reader: ${result.ocr_engine}` : '';
@@ -495,7 +508,9 @@ async function scanSelection() {
     readerName.textContent = result.ocr_engine || 'No reader result';
     state.textContent = rawOcr ? 'TEXT READ' : 'NO TEXT';
     state.className = `state ${rawOcr ? 'good' : 'bad'}`;
-    message.textContent = rawOcr
+    message.textContent = result.ocr_timed_out
+      ? 'The 10-second OCR limit was reached. Use any readable fields, or capture the card again.'
+      : rawOcr
       ? `Literal OCR: "${rawOcr}". Correct the fields, then save.`
       : 'No text was detected. Correct the fields anyway and save this no-read example.';
     saveButton.disabled = !scanId;

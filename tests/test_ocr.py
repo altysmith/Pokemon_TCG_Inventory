@@ -7,6 +7,18 @@ from card_scanner.ocr import LiteralReading, TextObservation, build_evidence, sc
 
 
 class OcrTests(unittest.TestCase):
+    @patch("card_scanner.ocr._run_rapidocr")
+    def test_zero_time_budget_stops_before_any_treatment(self, run_rapidocr) -> None:
+        result = scan_crop(
+            Image.new("RGB", (100, 20), "white"),
+            derive_card_candidates=False,
+            time_budget_seconds=0,
+        )
+
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.treatments_attempted, ())
+        run_rapidocr.assert_not_called()
+
     def test_correlated_passes_do_not_inflate_repetition_score(self) -> None:
         same_source, _ = build_evidence(
             (
@@ -137,6 +149,7 @@ class OcrTests(unittest.TestCase):
         self.assertEqual(result.raw_text, "O PFL 113/094")
         self.assertEqual(run_rapidocr.call_count, 1)
         self.assertEqual(len(result.literal_readings), 1)
+        self.assertEqual(result.treatments_attempted, ("rapidocr:original",))
 
     @patch(
         "card_scanner.ocr._run_rapidocr",

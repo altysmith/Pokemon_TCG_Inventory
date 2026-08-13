@@ -33,11 +33,17 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it13.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it14.csv"))
+SCAN_PERFORMANCE_PATH = Path(
+    os.environ.get(
+        "SCAN_PERFORMANCE_CSV",
+        ROOT / "scan_performance_it14.csv",
+    )
+)
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_13",
+        ROOT / "benchmark_crops" / "iteration_14",
     )
 )
 INVENTORY_PATH = Path(
@@ -47,8 +53,9 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 13
-ITERATION_NAME = "Light and dark themes"
+ITERATION = 14
+ITERATION_NAME = "Timed scan diagnostics"
+OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -61,6 +68,12 @@ CSV_COLUMNS = [
     "ocr_engine",
     "literal_text",
     "primary_confidence",
+    "client_total_seconds",
+    "server_elapsed_seconds",
+    "ocr_elapsed_seconds",
+    "ocr_time_budget_seconds",
+    "ocr_timed_out",
+    "treatments_attempted_json",
     "detected_letters",
     "detected_numbers",
     "corrected_letters",
@@ -68,8 +81,31 @@ CSV_COLUMNS = [
     "was_corrected",
     "variant_readings_json",
 ]
+SCAN_PERFORMANCE_COLUMNS = [
+    "scanned_at",
+    "iteration",
+    "scan_id",
+    "image_name",
+    "crop_path",
+    "ocr_engine",
+    "literal_text",
+    "primary_confidence",
+    "client_total_seconds",
+    "server_elapsed_seconds",
+    "ocr_elapsed_seconds",
+    "ocr_time_budget_seconds",
+    "ocr_timed_out",
+    "treatments_attempted_json",
+    "variant_count",
+    "regulation_mark",
+    "set_code",
+    "card_number",
+    "set_total",
+    "exact_catalog_identifier",
+]
 SCAN_RECORDS: dict[str, dict] = {}
 SCAN_RECORDS_LOCK = threading.Lock()
+SCAN_PERFORMANCE_LOCK = threading.Lock()
 
 
 def extract_footer_fields(text: str) -> tuple[str, str, str, str]:
@@ -235,6 +271,58 @@ def _append_csv(row: dict) -> None:
         if needs_header:
             writer.writeheader()
         writer.writerow({column: row.get(column, "") for column in CSV_COLUMNS})
+
+
+def _append_scan_performance(row: dict) -> None:
+    """Append one automatically recorded scan timing with a stable schema."""
+    SCAN_PERFORMANCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with SCAN_PERFORMANCE_LOCK:
+        needs_header = (
+            not SCAN_PERFORMANCE_PATH.exists()
+            or SCAN_PERFORMANCE_PATH.stat().st_size == 0
+        )
+        if not needs_header:
+            with SCAN_PERFORMANCE_PATH.open(
+                "r", newline="", encoding="utf-8-sig"
+            ) as source:
+                existing_header = next(csv.reader(source), [])
+            if existing_header != SCAN_PERFORMANCE_COLUMNS:
+                raise ValueError(
+                    f"{SCAN_PERFORMANCE_PATH.name} has an incompatible header; "
+                    "move or rename it before recording new scan timings."
+                )
+        with SCAN_PERFORMANCE_PATH.open(
+            "a", newline="", encoding="utf-8-sig"
+        ) as output:
+            writer = csv.DictWriter(output, fieldnames=SCAN_PERFORMANCE_COLUMNS)
+            if needs_header:
+                writer.writeheader()
+            writer.writerow(
+                {column: row.get(column, "") for column in SCAN_PERFORMANCE_COLUMNS}
+            )
+
+
+def save_scan_performance(data: dict) -> dict:
+    """Join browser total time to the retained server-side scan and log it once."""
+    scan_id = str(data.get("scan_id", "")).strip()
+    if not scan_id:
+        raise ValueError("A scan ID is required to record performance.")
+    try:
+        client_total = float(data.get("client_total_seconds"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Client scan time must be a number.") from exc
+    if client_total < 0 or client_total > 600:
+        raise ValueError("Client scan time is outside the supported range.")
+    with SCAN_RECORDS_LOCK:
+        record = SCAN_RECORDS.get(scan_id)
+        if record is None:
+            raise ValueError("This scan is no longer active.")
+        if record.get("performance_logged") == "yes":
+            return record
+        record["client_total_seconds"] = f"{client_total:.3f}"
+        _append_scan_performance(record)
+        record["performance_logged"] = "yes"
+        return dict(record)
 
 
 def save_benchmark_label(data: dict) -> dict:
@@ -455,7 +543,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-13"
+    server_version = "TinyTextReader/iteration-14"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -556,6 +644,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
             elif self.path == "/inventory/undo":
                 change = undo_inventory_add(data)
                 self._json({"ok": True, "inventory": asdict(change)})
+            elif self.path == "/scan/timing":
+                row = save_scan_performance(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "path": str(SCAN_PERFORMANCE_PATH),
+                        "scan_id": row["scan_id"],
+                    }
+                )
             elif self.path == "/save":
                 row = save_benchmark_label(data)
                 self._json(
@@ -573,6 +670,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def _scan(self, data: dict) -> None:
+        server_started = perf_counter()
         if int(data.get("iteration", 0)) != ITERATION:
             raise ValueError(
                 f"Browser/server iteration mismatch. Expected Iteration {ITERATION}; "
@@ -596,6 +694,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             crop,
             derive_card_candidates=False,
             early_stop_validator=accept_exact_identifier,
+            time_budget_seconds=OCR_TIME_BUDGET_SECONDS,
         )
         ocr_elapsed_seconds = perf_counter() - ocr_started
         regulation_mark, set_code, card_number, set_total = (
@@ -613,6 +712,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
         CROP_DIR.mkdir(parents=True, exist_ok=True)
         crop_path = CROP_DIR / f"{scan_id}.png"
         crop.save(crop_path, format="PNG")
+        server_elapsed_seconds = perf_counter() - server_started
         variant_readings = [
             {
                 "variant": reading.variant,
@@ -630,6 +730,22 @@ class ScannerHandler(BaseHTTPRequestHandler):
             "ocr_engine": result.ocr_engine,
             "literal_text": result.raw_text,
             "primary_confidence": f"{result.primary_confidence:.6f}",
+            "client_total_seconds": "",
+            "server_elapsed_seconds": f"{server_elapsed_seconds:.3f}",
+            "ocr_elapsed_seconds": f"{ocr_elapsed_seconds:.3f}",
+            "ocr_time_budget_seconds": f"{OCR_TIME_BUDGET_SECONDS:.1f}",
+            "ocr_timed_out": "yes" if result.timed_out else "no",
+            "treatments_attempted_json": json.dumps(
+                result.treatments_attempted,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "variant_count": len(result.literal_readings),
+            "regulation_mark": regulation_mark,
+            "set_code": set_code,
+            "card_number": card_number,
+            "set_total": set_total,
+            "exact_catalog_identifier": "yes" if accepted_fields else "no",
             "detected_letters": letters,
             "detected_numbers": numbers,
             "variant_readings_json": json.dumps(
@@ -655,6 +771,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 "ocr_evidence": result.evidence_text,
                 "primary_confidence": result.primary_confidence,
                 "ocr_elapsed_seconds": round(ocr_elapsed_seconds, 3),
+                "server_elapsed_seconds": round(server_elapsed_seconds, 3),
+                "ocr_time_budget_seconds": OCR_TIME_BUDGET_SECONDS,
+                "ocr_timed_out": result.timed_out,
+                "treatments_attempted": result.treatments_attempted,
                 "variant_readings": variant_readings,
                 "complete": bool(result.raw_text),
             }
