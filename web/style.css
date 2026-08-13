@@ -103,6 +103,7 @@ input:focus { border-color: var(--ink); }
 .collection-card-body strong { padding-right: 28px; font-size: 15px; line-height: 1.2; }
 .collection-card-body span { margin-top: 7px; font-weight: 750; }
 .collection-card-body small { margin-top: 6px; color: #716f69; }
+.collection-card-body .collection-card-regulation { color: var(--ink); font-weight: 750; }
 .collection-card-quantity { position: absolute; top: 8px; right: 8px; min-width: 30px; padding: 3px 5px; background: var(--accent); color: white; text-align: center; }
 
 @media (max-width: 850px) {

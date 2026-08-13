@@ -33,11 +33,11 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it11.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it12.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_11",
+        ROOT / "benchmark_crops" / "iteration_12",
     )
 )
 INVENTORY_PATH = Path(
@@ -47,8 +47,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 11
-ITERATION_NAME = "Complete type view"
+ITERATION = 12
+ITERATION_NAME = "Inventory regulation marks"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -389,6 +389,7 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
             f"""
             SELECT c.id, c.name, c.card_type, COALESCE(c.card_subtype, '') AS card_subtype,
                    c.number, c.number_numeric, COALESCE(c.printed_total, '') AS printed_total,
+                   COALESCE(c.regulation_mark, '') AS regulation_mark,
                    COALESCE(c.primary_image_url, '') AS image_url,
                    s.name AS set_name, s.code AS set_code
             FROM cards c JOIN sets s ON s.id = c.set_id
@@ -454,7 +455,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-11"
+    server_version = "TinyTextReader/iteration-12"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")

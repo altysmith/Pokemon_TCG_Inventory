@@ -35,7 +35,10 @@ function cardElement(card) {
   const classifications = document.createElement('small');
   const details = [titleCase(card.card_type), card.display_subtype, ...card.types.map(titleCase)].filter(Boolean);
   classifications.textContent = details.join(' / ');
-  body.append(name, identity, classifications);
+  const regulation = document.createElement('small');
+  regulation.className = 'collection-card-regulation';
+  regulation.textContent = card.regulation_mark ? `Regulation mark ${card.regulation_mark}` : 'No regulation mark';
+  body.append(name, identity, classifications, regulation);
 
   const quantity = document.createElement('b');
   quantity.className = 'collection-card-quantity';

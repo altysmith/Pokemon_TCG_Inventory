@@ -15,9 +15,46 @@ from app import (
 )
 from card_scanner.ocr import LiteralReading
 from card_scanner.lookup import CardInfo
+from card_api.database import CatalogDatabase
+from inventory import InventoryDatabase
 
 
 class AppTests(unittest.TestCase):
+    def test_inventory_snapshot_attaches_catalog_regulation_mark(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES (?, ?, ?, ?)",
+                    ("set-1", "Test Set", "TST", "en-US"),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO cards(
+                        id, set_id, language, name, card_type, number,
+                        number_numeric, regulation_mark
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("card-1", "set-1", "en-US", "Budew", "POKEMON", "004", 4, "H"),
+                )
+                connection.execute(
+                    "INSERT INTO card_types(card_id, position, type) VALUES (?, ?, ?)",
+                    ("card-1", 0, "GRASS"),
+                )
+            InventoryDatabase(inventory_path).add_card("card-1")
+
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+            ):
+                snapshot = app.inventory_snapshot()
+
+        self.assertEqual(snapshot["items"][0]["regulation_mark"], "H")
+
     def test_element_view_keeps_other_card_categories_after_pokemon(self) -> None:
         items = [
             {
@@ -172,7 +209,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 11,
+                "iteration": 12,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -188,7 +225,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 11,
+                        "iteration": 12,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -230,12 +267,12 @@ class AppTests(unittest.TestCase):
             html.index('id="add_inventory"'),
             html.index('id="regulation_mark"'),
         )
-        self.assertIn("ITERATION 11", html)
-        self.assertIn("COMPLETE TYPE VIEW", html)
+        self.assertIn("ITERATION 12", html)
+        self.assertIn("INVENTORY REGULATION MARKS", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 11", javascript)
+        self.assertIn("const UI_ITERATION = 12", javascript)
         self.assertIn('href="/inventory"', html)
         self.assertIn("fetch('/inventory/add'", javascript)
         self.assertIn("fetch('/inventory/undo'", javascript)
