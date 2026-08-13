@@ -18,6 +18,39 @@ from card_scanner.lookup import CardInfo
 
 
 class AppTests(unittest.TestCase):
+    def test_element_view_keeps_other_card_categories_after_pokemon(self) -> None:
+        items = [
+            {
+                "name": "Professor's Research",
+                "card_type": "TRAINER",
+                "card_subtype": "SUPPORTER",
+                "display_subtype": "Supporter",
+                "types": [],
+            },
+            {
+                "name": "Budew",
+                "card_type": "POKEMON",
+                "card_subtype": "",
+                "display_subtype": "",
+                "types": ["GRASS"],
+            },
+            {
+                "name": "Nest Ball",
+                "card_type": "TRAINER",
+                "card_subtype": "ITEM",
+                "display_subtype": "Item",
+                "types": [],
+            },
+        ]
+        for item in items:
+            item["element_group"] = app._inventory_element_group(item)
+        items.sort(key=lambda item: app._inventory_sort_key(item, "element"))
+
+        self.assertEqual(
+            [(item["name"], item["element_group"]) for item in items],
+            [("Budew", "Grass"), ("Nest Ball", "Item"), ("Professor's Research", "Supporter")],
+        )
+
     @patch("app.lookup_confirmed_fields")
     def test_inventory_add_revalidates_an_exact_match(self, lookup) -> None:
         lookup.return_value = CardInfo(
@@ -139,7 +172,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 10,
+                "iteration": 11,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -155,7 +188,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 10,
+                        "iteration": 11,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -197,12 +230,12 @@ class AppTests(unittest.TestCase):
             html.index('id="add_inventory"'),
             html.index('id="regulation_mark"'),
         )
-        self.assertIn("ITERATION 10", html)
-        self.assertIn("VISUAL INVENTORY VIEWS", html)
+        self.assertIn("ITERATION 11", html)
+        self.assertIn("COMPLETE TYPE VIEW", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 10", javascript)
+        self.assertIn("const UI_ITERATION = 11", javascript)
         self.assertIn('href="/inventory"', html)
         self.assertIn("fetch('/inventory/add'", javascript)
         self.assertIn("fetch('/inventory/undo'", javascript)

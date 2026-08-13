@@ -33,11 +33,11 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it10.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it11.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_10",
+        ROOT / "benchmark_crops" / "iteration_11",
     )
 )
 INVENTORY_PATH = Path(
@@ -47,8 +47,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 10
-ITERATION_NAME = "Visual inventory views"
+ITERATION = 11
+ITERATION_NAME = "Complete type view"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -326,6 +326,45 @@ def inventory_database() -> InventoryDatabase:
 
 
 INVENTORY_SORTS = {"name", "set_number", "category", "subtype", "element"}
+NON_POKEMON_TYPE_ORDER = {
+    "Item": 0,
+    "Supporter": 1,
+    "Tool": 2,
+    "Stadium": 3,
+    "Basic Energy": 4,
+    "Special Energy": 5,
+}
+
+
+def _inventory_element_group(item: dict) -> str:
+    if item["card_type"] == "POKEMON" and item["types"]:
+        return item["types"][0].title()
+    return item["display_subtype"] or item["card_type"].title()
+
+
+def _inventory_sort_key(item: dict, selected_sort: str) -> tuple:
+    name = item["name"].casefold()
+    if selected_sort == "set_number":
+        return (
+            item["set_name"].casefold(),
+            item["number_numeric"] if item["number_numeric"] is not None else 10**9,
+            item["number"],
+            name,
+        )
+    if selected_sort == "category":
+        return (item["card_type"], item["card_subtype"], name)
+    if selected_sort == "subtype":
+        return (item["display_subtype"] or item["card_type"], name)
+    if selected_sort == "element":
+        if item["card_type"] == "POKEMON":
+            return (0, item["element_group"], name)
+        return (
+            1,
+            NON_POKEMON_TYPE_ORDER.get(item["element_group"], 99),
+            item["element_group"],
+            name,
+        )
+    return (name, item["set_name"].casefold(), item["number"])
 
 
 def inventory_snapshot(sort_by: str = "name") -> dict:
@@ -374,25 +413,9 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
             if item["card_type"] == "ENERGY" and item["card_subtype"]
             else item["card_subtype"].title()
         )
+        item["element_group"] = _inventory_element_group(item)
 
-    def key(item: dict) -> tuple:
-        name = item["name"].casefold()
-        if selected_sort == "set_number":
-            return (
-                item["set_name"].casefold(),
-                item["number_numeric"] if item["number_numeric"] is not None else 10**9,
-                item["number"],
-                name,
-            )
-        if selected_sort == "category":
-            return (item["card_type"], item["card_subtype"], name)
-        if selected_sort == "subtype":
-            return (item["display_subtype"] or item["card_type"], name)
-        if selected_sort == "element":
-            return ((item["types"] or ["UNTYPED"])[0], name)
-        return (name, item["set_name"].casefold(), item["number"])
-
-    items.sort(key=key)
+    items.sort(key=lambda item: _inventory_sort_key(item, selected_sort))
     return {
         "items": items,
         "unique_cards": len(items),
@@ -431,7 +454,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-10"
+    server_version = "TinyTextReader/iteration-11"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")

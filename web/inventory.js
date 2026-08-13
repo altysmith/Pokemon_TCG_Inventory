@@ -12,7 +12,7 @@ function groupLabel(card, sort) {
   if (sort === 'set_number') return `${card.set_name} (${card.set_code})`;
   if (sort === 'category') return titleCase(card.card_type);
   if (sort === 'subtype') return card.display_subtype || titleCase(card.card_type);
-  if (sort === 'element') return card.types.length ? titleCase(card.types[0]) : 'Other cards';
+  if (sort === 'element') return card.element_group;
   return card.name.slice(0, 1).toUpperCase() || '#';
 }
 
