@@ -33,7 +33,11 @@ const lookupName = document.querySelector('#lookup_name');
 const lookupIdentity = document.querySelector('#lookup_identity');
 const lookupSource = document.querySelector('#lookup_source');
 const lookupMessage = document.querySelector('#lookup_message');
-const UI_ITERATION = 6;
+const inventoryQuantity = document.querySelector('#inventory_quantity');
+const addInventoryButton = document.querySelector('#add_inventory');
+const undoInventoryButton = document.querySelector('#undo_inventory');
+const inventoryMessage = document.querySelector('#inventory_message');
+const UI_ITERATION = 7;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -50,6 +54,7 @@ let versionReady = false;
 let mediaStream = null;
 let capturedFromCamera = false;
 let lastLookupStatus = 'not_checked';
+let currentInventoryEventId = 0;
 
 function resetOcrResult() {
   rawOcr = '';
@@ -81,7 +86,16 @@ function resetLookup() {
   lookupIdentity.textContent = '';
   lookupSource.textContent = '';
   lookupMessage.textContent = 'Uses the local Malie catalog only. Nothing is added to inventory.';
+  resetInventoryControls();
   updateLookupAvailability();
+}
+
+function resetInventoryControls() {
+  currentInventoryEventId = 0;
+  inventoryQuantity.textContent = '-';
+  addInventoryButton.disabled = true;
+  undoInventoryButton.disabled = true;
+  inventoryMessage.textContent = 'Available only after one exact, conflict-free catalog match.';
 }
 
 function blockForVersion(detail) {
@@ -583,6 +597,9 @@ async function lookupCurrentCard() {
       ? `Review required: ${card.review_reasons.join('; ')}. Nothing was added.`
       : 'Exact set-and-number match. Compare the name and image to the physical card. Nothing was added.';
     if (lastLookupStatus === 'accepted') {
+      inventoryQuantity.textContent = String(result.inventory_quantity ?? 0);
+      addInventoryButton.disabled = false;
+      inventoryMessage.textContent = 'Exact match confirmed. Press Add one to collection to increase this quantity.';
       instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
       message.textContent = 'The database has the canonical card information. Leave the editable boxes alone unless the displayed card is wrong.';
     } else {
@@ -598,6 +615,58 @@ async function lookupCurrentCard() {
 }
 
 lookupButton.addEventListener('click', () => void lookupCurrentCard());
+
+addInventoryButton.addEventListener('click', async () => {
+  if (lastLookupStatus !== 'accepted') return;
+  addInventoryButton.disabled = true;
+  undoInventoryButton.disabled = true;
+  inventoryMessage.textContent = 'Rechecking the exact match and adding one copy...';
+  try {
+    const response = await fetch('/inventory/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        set_code: setCode.value,
+        card_number: cardNumber.value,
+        set_total: setTotal.value,
+        scan_id: scanId,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Inventory addition failed');
+    currentInventoryEventId = Number(result.inventory?.event_id || 0);
+    inventoryQuantity.textContent = String(result.inventory?.quantity ?? 0);
+    undoInventoryButton.disabled = !currentInventoryEventId;
+    inventoryMessage.textContent = `Added one ${result.card?.card_name || 'card'}. The inventory history was saved locally.`;
+  } catch (error) {
+    inventoryMessage.textContent = error.message;
+  } finally {
+    addInventoryButton.disabled = lastLookupStatus !== 'accepted';
+  }
+});
+
+undoInventoryButton.addEventListener('click', async () => {
+  if (!currentInventoryEventId) return;
+  undoInventoryButton.disabled = true;
+  addInventoryButton.disabled = true;
+  inventoryMessage.textContent = 'Undoing the last addition...';
+  try {
+    const response = await fetch('/inventory/undo', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({event_id: currentInventoryEventId}),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Inventory undo failed');
+    inventoryQuantity.textContent = String(result.inventory?.quantity ?? 0);
+    currentInventoryEventId = 0;
+    inventoryMessage.textContent = 'The last addition was undone. The history remains recorded.';
+  } catch (error) {
+    inventoryMessage.textContent = error.message;
+  } finally {
+    addInventoryButton.disabled = lastLookupStatus !== 'accepted';
+  }
+});
 
 saveButton.addEventListener('click', async () => {
   const payload = {
@@ -616,7 +685,7 @@ saveButton.addEventListener('click', async () => {
     scanId = '';
     message.textContent = capturedFromCamera
       ? 'Saved this labeled example. Press Next card when the slot is ready.'
-      : 'Saved this labeled example to ocr_reads_it5.csv.';
+      : 'Saved this labeled example to the current iteration CSV.';
   } catch (error) {
     state.textContent = 'SAVE ERROR';
     state.className = 'state bad';

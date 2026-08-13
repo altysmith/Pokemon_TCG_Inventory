@@ -1,6 +1,6 @@
 # Tiny Card Text Scanner
 
-**Current build: Iteration 6 — Instant local catalog match**
+**Current build: Iteration 7 — Confirmed local inventory**
 
 This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. After reading, complete set-and-number fields are checked against the local catalog. Images stay on this computer, and scanning uses no internet API.
 
@@ -26,7 +26,7 @@ Malie index and set exports
 
 The downloaded raw files and generated database intentionally stay local and are ignored by Git. Every imported card retains its source URL, source record ID, raw-record position, source-file hash, download time, and import time, so the catalog can be audited and rebuilt. Malie's alternate-art/finish records become variants of one canonical set-and-number card instead of duplicate cards.
 
-The canonical catalog contains no user quantities or collection records. A future collection database will reference the stable canonical card ID, keeping personal inventory separate from rebuildable reference data.
+The canonical catalog contains no user quantities or collection records. Personal quantities are stored separately in `user_data/inventory.sqlite3` and reference stable canonical card IDs, keeping permanent inventory separate from rebuildable reference data.
 
 ### Update and run
 
@@ -52,7 +52,7 @@ Initial endpoints are:
 - `GET /sets`
 - `GET /sets/{id}/cards`
 
-For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?set_code=ASC&number=162` returns Team Rocket's Kangaskhan ex from Ascended Heroes. Iteration 6 now uses this same local catalog for its match preview without changing the OCR reader itself.
+For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?set_code=ASC&number=162` returns Team Rocket's Kangaskhan ex from Ascended Heroes. The scanner uses this same local catalog for its match preview without changing the literal OCR evidence.
 
 ## Iteration history
 
@@ -61,7 +61,8 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 3 — OCR-only RapidOCR reader:** Replaced Tesseract as the primary reader, removed API/catalog work from the live scan, preserved literal text and leading zeroes, and separated detected letters from detected numbers.
 - **Iteration 4 — Automatic OCR on selection:** Releasing a valid drag selection starts OCR immediately. The Rescan Selection button remains available for repeating the same crop.
 - **Iteration 5 — Labeled OCR benchmark:** Saves the exact selected crop, raw OCR, confidence, all RapidOCR treatment readings, original detected groups, and user-corrected groups. It supports still-image upload and a live webcam session with a fixed card guide and reusable text selection. The browser checks that it is connected to the matching server before allowing scans.
-- **Iteration 6 — Instant local catalog match (current):** Preserves the Iteration 5 OCR behavior and evidence, then automatically checks a complete detected set code and card number against the local Malie catalog. The card image and name are a human-confirmation preview only; nothing is added to inventory, no internet fallback is used, and a conflicting printed total requires review.
+- **Iteration 6 — Instant local catalog match:** Preserved the Iteration 5 OCR behavior and evidence, then automatically checked a complete detected set code and card number against the local Malie catalog. No internet fallback was used, and a conflicting printed total required review.
+- **Iteration 7 — Confirmed local inventory (current):** Adds a separate permanent SQLite inventory, an exact-match-only **Add one to collection** action, visible quantity, and an auditable undo. Catalog rebuilds cannot overwrite personal quantities.
 
 The launcher preloads RapidOCR before opening the scanner. The operational reader stops after the first high-confidence treatment only when its set code, card number, and any printed total resolve to one exact local card. Non-matches automatically continue through the remaining treatments. The page keeps both total scan time and server OCR time visible after every scan and disables **Next card** until the current reading is complete.
 
@@ -86,9 +87,9 @@ Future material changes should advance the iteration number and add one short en
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-New rows from both workflows are stored in `ocr_reads_it6.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_6`. The completed Iteration 5 files remain untouched as the OCR baseline.
+New rows from both workflows are stored in `ocr_reads_it7.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_7`. Earlier iteration files remain untouched as OCR evidence.
 
-The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_6`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
+The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_7`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 
@@ -96,7 +97,13 @@ RapidOCR is the required primary reader for the webcam workflow. The scanner hea
 
 ### Card lookup preview
 
-When OCR reads both a set code and card number, the scanner immediately checks `data/card_catalog.sqlite3` and shows the exact local match. Correct either field and click **Find this card** to check again. There is no internet fallback. Exact matches show the card name, set, number, and image for comparison with the physical card; a conflicting printed total is marked **Review**. This preview never adds a card to inventory.
+When OCR reads both a set code and card number, the scanner immediately checks `data/card_catalog.sqlite3` and shows the exact local match. Correct either field and click **Find this card** to check again. There is no internet fallback. Exact matches show the card name, set, number, image, and current inventory quantity; a conflicting printed total is marked **Review**.
+
+### Local inventory
+
+Inventory is never changed merely because OCR found a card. **Add one to collection** is enabled only for one exact, conflict-free local catalog match. Pressing it makes the server validate the fields again before recording the canonical card ID. No-match, ambiguous, and review results are rejected by the server even if a browser request is sent manually.
+
+The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuildable Malie catalog. Each addition records an immutable history event with the optional originating scan ID. **Undo last addition** reduces the quantity but retains a compensating history event, so mistakes remain auditable. Back up the `user_data` folder whenever you back up the collection; Git intentionally ignores this personal database.
 
 The 26 saved webcam crops were re-run offline after installing RapidOCR and adding joined-language cleanup. Exact set-code reads improved from 1/26 to 21/26, card-number reads from 3/26 to 25/26, and set-total reads from 4/25 to 23/25. Regulation marks remained unreliable at 1/20, so that field stays editable and must not be used for automatic card identity or sorting.
 
@@ -122,4 +129,4 @@ The intermittent Windows Camera `MediaCaptureFailedEvent` error `0xC00D36D5` has
 
 ## Intended next steps
 
-The next safe step is a separate collection database and a user-confirmed **Add to collection** action. Automatic card-edge/footer detection, calibrated confidence, and continuous sorting/output integration can follow later. The current version deliberately captures one webcam frame per card instead of running OCR continuously on video.
+A later visual inventory can join quantities from `user_data/inventory.sqlite3` to names and images in the canonical catalog without changing stored holdings. Condition, finish, language, notes, and broader inventory browsing can be added as separate inventory features. Automatic card-edge/footer detection, calibrated confidence, and continuous sorting/output integration can also continue independently. The current version deliberately captures one webcam frame per card instead of running OCR continuously on video.

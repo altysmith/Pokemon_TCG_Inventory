@@ -13,7 +13,7 @@
           <p class="eyebrow">POKÉMON CARD INTAKE</p>
           <h1>Read the tiny line.<br>Keep the useful data.</h1>
         </div>
-        <div class="iteration"><span>ITERATION 6</span><strong>INSTANT LOCAL CATALOG MATCH</strong></div>
+        <div class="iteration"><span>ITERATION 7</span><strong>CONFIRMED LOCAL INVENTORY</strong></div>
       </header>
 
       <section class="workspace">
@@ -78,6 +78,12 @@
               </div>
             </div>
             <p id="lookup_message" class="message">Uses the local Malie catalog only. Nothing is added to inventory.</p>
+            <div class="inventory-panel">
+              <div class="inventory-count"><span>IN COLLECTION</span><strong id="inventory_quantity">—</strong></div>
+              <button id="add_inventory" class="button inventory-add" disabled>Add one to collection</button>
+              <button id="undo_inventory" class="text-button inventory-undo" disabled>Undo last addition</button>
+              <p id="inventory_message" class="message">Available only after one exact, conflict-free catalog match.</p>
+            </div>
           </section>
         </aside>
       </section>

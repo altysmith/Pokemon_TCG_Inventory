@@ -256,9 +256,29 @@ class ImportAndApiTests(unittest.TestCase):
             )
 
         self.assertEqual((exact.status, exact.card_name), ("accepted", "Smoochum"))
+        self.assertEqual(exact.card_id, "malie-tcgl:en-US:sv8:075")
         self.assertEqual(exact.source, "local Malie TCGL catalog")
         self.assertEqual(conflict.status, "review")
         self.assertIn("printed total conflicts", conflict.review_reasons[0])
+
+    def test_scanner_inventory_add_and_undo_use_canonical_card_id(self):
+        inventory_path = Path(self.temp.name) / "user_data" / "inventory.sqlite3"
+        with (
+            patch.object(scanner_app, "CARD_CATALOG_PATH", self.database_path),
+            patch.object(scanner_app, "INVENTORY_PATH", inventory_path),
+        ):
+            info, added = scanner_app.add_inventory_card(
+                {
+                    "set_code": "SSP",
+                    "card_number": "075",
+                    "set_total": "191",
+                    "scan_id": "scan-1",
+                }
+            )
+            undone = scanner_app.undo_inventory_add({"event_id": added.event_id})
+
+        self.assertEqual(info.card_id, "malie-tcgl:en-US:sv8:075")
+        self.assertEqual((added.quantity, undone.quantity), (1, 0))
 
     def test_unknown_card_is_404_not_a_guess(self):
         response = self.client.get("/cards/not-a-real-card")

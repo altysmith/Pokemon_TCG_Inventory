@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import app
 from app import (
+    add_inventory_card,
     exact_catalog_fields,
     extract_footer_fields,
     extract_footer_fields_from_readings,
@@ -13,9 +14,39 @@ from app import (
     save_benchmark_label,
 )
 from card_scanner.ocr import LiteralReading
+from card_scanner.lookup import CardInfo
 
 
 class AppTests(unittest.TestCase):
+    @patch("app.lookup_confirmed_fields")
+    def test_inventory_add_revalidates_an_exact_match(self, lookup) -> None:
+        lookup.return_value = CardInfo(
+            card_id="malie:sv5:123",
+            card_name="Raging Bolt ex",
+            status="accepted",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "inventory.sqlite3"
+            with patch.object(app, "INVENTORY_PATH", path):
+                info, change = add_inventory_card(
+                    {
+                        "set_code": "TEF",
+                        "card_number": "123",
+                        "set_total": "162",
+                        "scan_id": "scan-1",
+                    }
+                )
+
+        self.assertEqual(info.card_id, "malie:sv5:123")
+        self.assertEqual(change.quantity, 1)
+
+    @patch("app.lookup_confirmed_fields")
+    def test_inventory_rejects_review_or_no_match(self, lookup) -> None:
+        lookup.return_value = CardInfo(status="review")
+
+        with self.assertRaisesRegex(ValueError, "exact local catalog match"):
+            add_inventory_card({"set_code": "TEF", "card_number": "123"})
+
     @patch("app.find_exact_card")
     def test_fast_path_requires_an_exact_catalog_match(self, find_card) -> None:
         find_card.return_value = type(
@@ -89,7 +120,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 6,
+                "iteration": 7,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -105,7 +136,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 6,
+                        "iteration": 7,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -142,12 +173,15 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="reuse_selection"', html)
         self.assertIn('id="lookup_card"', html)
         self.assertIn('id="scan_timing"', html)
-        self.assertIn("ITERATION 6", html)
-        self.assertIn("INSTANT LOCAL CATALOG MATCH", html)
+        self.assertIn("ITERATION 7", html)
+        self.assertIn("CONFIRMED LOCAL INVENTORY", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 6", javascript)
+        self.assertIn("const UI_ITERATION = 7", javascript)
+        self.assertIn("fetch('/inventory/add'", javascript)
+        self.assertIn("fetch('/inventory/undo'", javascript)
+        self.assertIn("lastLookupStatus !== 'accepted'", javascript)
         self.assertIn("if (!mediaStream || scanInProgress) return", javascript)
         self.assertIn("nextCardButton.disabled = true", javascript)
         self.assertIn("Exact visual match found. No corrections are needed", javascript)

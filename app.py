@@ -28,20 +28,27 @@ from card_scanner.catalog import known_set_codes
 from card_api.catalog import find_exact_card
 from card_api.config import DATABASE_PATH as CARD_CATALOG_PATH
 from card_scanner.lookup import CardInfo
+from inventory import InventoryChange, InventoryDatabase
 
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it6.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it7.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_6",
+        ROOT / "benchmark_crops" / "iteration_7",
+    )
+)
+INVENTORY_PATH = Path(
+    os.environ.get(
+        "INVENTORY_DATABASE_PATH",
+        ROOT / "user_data" / "inventory.sqlite3",
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 6
-ITERATION_NAME = "Instant local catalog match"
+ITERATION = 7
+ITERATION_NAME = "Confirmed local inventory"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -221,7 +228,7 @@ def _append_csv(row: dict) -> None:
         if existing_header != CSV_COLUMNS:
             raise ValueError(
                 f"{CSV_PATH.name} has an incompatible header; move or rename it "
-                "before saving Iteration 5 results."
+                "before saving new scan results."
             )
     with CSV_PATH.open("a", newline="", encoding="utf-8-sig") as output:
         writer = csv.DictWriter(output, fieldnames=CSV_COLUMNS)
@@ -292,6 +299,7 @@ def lookup_confirmed_fields(data: dict) -> CardInfo:
         return CardInfo(set_code=code, card_number=number, status="no_match")
     card = result.card
     info = CardInfo(
+        card_id=card.id,
         set_code=card.set_code,
         set_name=card.set_name,
         card_name=card.card_name,
@@ -311,8 +319,36 @@ def lookup_confirmed_fields(data: dict) -> CardInfo:
     return info
 
 
+def inventory_database() -> InventoryDatabase:
+    database = InventoryDatabase(INVENTORY_PATH)
+    database.initialize()
+    return database
+
+
+def add_inventory_card(data: dict) -> tuple[CardInfo, InventoryChange]:
+    """Add only a freshly revalidated, unique canonical card match."""
+    info = lookup_confirmed_fields(data)
+    if info.status != "accepted" or not info.card_id:
+        raise ValueError(
+            "Inventory additions require one exact local catalog match with no conflicts."
+        )
+    change = inventory_database().add_card(
+        info.card_id,
+        scan_id=str(data.get("scan_id", "")),
+    )
+    return info, change
+
+
+def undo_inventory_add(data: dict) -> InventoryChange:
+    try:
+        event_id = int(data.get("event_id", 0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("A valid inventory event is required for undo.") from exc
+    return inventory_database().undo_add(event_id)
+
+
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-6"
+    server_version = "TinyTextReader/iteration-7"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -344,6 +380,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     "primary_ocr_available": importlib.util.find_spec("rapidocr")
                     is not None,
                     "local_catalog_available": CARD_CATALOG_PATH.is_file(),
+                    "inventory_available": INVENTORY_PATH.is_file(),
                 }
             )
             return
@@ -373,7 +410,30 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._scan(data)
             elif self.path == "/lookup":
                 info = lookup_confirmed_fields(data)
-                self._json({"ok": True, "card": asdict(info)})
+                quantity = (
+                    inventory_database().quantity(info.card_id)
+                    if info.status == "accepted" and info.card_id
+                    else 0
+                )
+                self._json(
+                    {
+                        "ok": True,
+                        "card": asdict(info),
+                        "inventory_quantity": quantity,
+                    }
+                )
+            elif self.path == "/inventory/add":
+                info, change = add_inventory_card(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "card": asdict(info),
+                        "inventory": asdict(change),
+                    }
+                )
+            elif self.path == "/inventory/undo":
+                change = undo_inventory_add(data)
+                self._json({"ok": True, "inventory": asdict(change)})
             elif self.path == "/save":
                 row = save_benchmark_label(data)
                 self._json(
@@ -486,6 +546,7 @@ def main() -> None:
     args = parser.parse_args()
     print("Preparing the OCR reader for the first card...")
     warm_up_ocr()
+    inventory_database()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
     url = f"http://127.0.0.1:{server.server_port}/"
     print(f"Card scanner is running at {url}")
