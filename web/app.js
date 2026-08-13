@@ -38,7 +38,7 @@ const inventoryAddQuantity = document.querySelector('#inventory_add_quantity');
 const addInventoryButton = document.querySelector('#add_inventory');
 const undoInventoryButton = document.querySelector('#undo_inventory');
 const inventoryMessage = document.querySelector('#inventory_message');
-const UI_ITERATION = 8;
+const UI_ITERATION = 9;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -86,7 +86,8 @@ function resetLookup() {
   lookupName.textContent = '';
   lookupIdentity.textContent = '';
   lookupSource.textContent = '';
-  lookupMessage.textContent = 'Uses the local Malie catalog only. Nothing is added to inventory.';
+  lookupButton.hidden = false;
+  lookupMessage.textContent = 'Uses the local Malie catalog only. Nothing is added automatically.';
   resetInventoryControls();
   updateLookupAvailability();
 }
@@ -599,12 +600,14 @@ async function lookupCurrentCard() {
       ? `Review required: ${card.review_reasons.join('; ')}. Nothing was added.`
       : 'Exact set-and-number match. Compare the name and image to the physical card. Nothing was added.';
     if (lastLookupStatus === 'accepted') {
+      lookupButton.hidden = true;
       inventoryQuantity.textContent = String(result.inventory_quantity ?? 0);
       addInventoryButton.disabled = false;
       inventoryMessage.textContent = 'Exact match confirmed. Choose how many copies to add.';
       instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
       message.textContent = 'The database has the canonical card information. Leave the editable boxes alone unless the displayed card is wrong.';
     } else {
+      lookupButton.hidden = false;
       instruction.textContent = 'Review the displayed card and correct a field only if the identity or printed total is wrong.';
     }
   } catch (error) {

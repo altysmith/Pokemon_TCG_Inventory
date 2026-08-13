@@ -13,7 +13,7 @@
           <p class="eyebrow">POKÉMON CARD INTAKE</p>
           <h1>Read the tiny line.<br>Keep the useful data.</h1>
         </div>
-        <div class="iteration"><span>ITERATION 8</span><strong>BATCH INVENTORY QUANTITIES</strong></div>
+        <div class="iteration"><span>ITERATION 9</span><strong>QUICK INVENTORY INTAKE</strong></div>
       </header>
 
       <section class="workspace">
@@ -56,16 +56,6 @@
             <small id="ocr_engine"></small>
             <small id="scan_timing" class="scan-timing">SCAN TIME: NOT RUN YET</small>
           </div>
-          <p class="editable-note">EDITABLE CORRECTIONS — click any box to type what the card actually says.</p>
-          <div class="footer-fields">
-            <label>Regulation mark<input id="regulation_mark" autocomplete="off" maxlength="1" placeholder="Type mark"></label>
-            <label>Set code<input id="set_code" autocomplete="off" placeholder="Type code"></label>
-            <label>Card number<input id="card_number" autocomplete="off" inputmode="numeric" placeholder="075"></label>
-            <label>Set total<input id="set_total" autocomplete="off" inputmode="numeric" placeholder="191"></label>
-          </div>
-          <div class="source">READER <span id="reader_name">—</span></div>
-          <button id="save" class="button save" disabled>3&nbsp; Save OCR reading</button>
-          <p id="message" class="message">The saved row keeps both the original OCR result and your corrections. Matching uses only the local catalog.</p>
           <section class="card-lookup" aria-labelledby="lookup_heading">
             <div class="aside-title"><span id="lookup_heading">CARD LOOKUP</span><span id="lookup_state" class="state">NOT CHECKED</span></div>
             <button id="lookup_card" class="button lookup" disabled>Find this card</button>
@@ -77,17 +67,29 @@
                 <small id="lookup_source"></small>
               </div>
             </div>
-            <p id="lookup_message" class="message">Uses the local Malie catalog only. Nothing is added to inventory.</p>
             <div class="inventory-panel">
-              <div class="inventory-count"><span>IN COLLECTION</span><strong id="inventory_quantity">—</strong></div>
-              <label class="inventory-quantity-label">COPIES TO ADD
-                <input id="inventory_add_quantity" type="number" inputmode="numeric" min="1" max="99" step="1" value="1">
-              </label>
+              <div class="inventory-entry-row">
+                <div class="inventory-count"><span>IN COLLECTION</span><strong id="inventory_quantity">—</strong></div>
+                <label class="inventory-quantity-label">COPIES TO ADD
+                  <input id="inventory_add_quantity" type="number" inputmode="numeric" min="1" max="99" step="1" value="1">
+                </label>
+              </div>
               <button id="add_inventory" class="button inventory-add" disabled>Add copies to collection</button>
               <button id="undo_inventory" class="text-button inventory-undo" disabled>Undo last batch</button>
               <p id="inventory_message" class="message">Available only after one exact, conflict-free catalog match.</p>
             </div>
+            <p id="lookup_message" class="message">Uses the local Malie catalog only. Nothing is added automatically.</p>
           </section>
+          <p class="editable-note">EDITABLE CORRECTIONS — click any box to type what the card actually says.</p>
+          <div class="footer-fields">
+            <label>Regulation mark<input id="regulation_mark" autocomplete="off" maxlength="1" placeholder="Type mark"></label>
+            <label>Set code<input id="set_code" autocomplete="off" placeholder="Type code"></label>
+            <label>Card number<input id="card_number" autocomplete="off" inputmode="numeric" placeholder="075"></label>
+            <label>Set total<input id="set_total" autocomplete="off" inputmode="numeric" placeholder="191"></label>
+          </div>
+          <div class="source">READER <span id="reader_name">—</span></div>
+          <button id="save" class="button save" disabled>3&nbsp; Save OCR reading</button>
+          <p id="message" class="message">The saved row keeps both the original OCR result and your corrections. Matching uses only the local catalog.</p>
         </aside>
       </section>
     </main>

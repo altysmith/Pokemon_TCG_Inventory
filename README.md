@@ -1,6 +1,6 @@
 # Tiny Card Text Scanner
 
-**Current build: Iteration 8 — Batch inventory quantities**
+**Current build: Iteration 9 — Quick inventory intake**
 
 This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. After reading, complete set-and-number fields are checked against the local catalog. Images stay on this computer, and scanning uses no internet API.
 
@@ -63,7 +63,8 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 5 — Labeled OCR benchmark:** Saves the exact selected crop, raw OCR, confidence, all RapidOCR treatment readings, original detected groups, and user-corrected groups. It supports still-image upload and a live webcam session with a fixed card guide and reusable text selection. The browser checks that it is connected to the matching server before allowing scans.
 - **Iteration 6 — Instant local catalog match:** Preserved the Iteration 5 OCR behavior and evidence, then automatically checked a complete detected set code and card number against the local Malie catalog. No internet fallback was used, and a conflicting printed total required review.
 - **Iteration 7 — Confirmed local inventory:** Added a separate permanent SQLite inventory, exact-match-only additions, visible quantity, and an auditable undo. Catalog rebuilds cannot overwrite personal quantities.
-- **Iteration 8 — Batch inventory quantities (current):** Adds a numeric quantity input from 1 to 99. One button press records the entire batch as one history event, and Undo removes that whole batch.
+- **Iteration 8 — Batch inventory quantities:** Added a numeric quantity input from 1 to 99. One button press records the entire batch as one history event, and Undo removes that whole batch.
+- **Iteration 9 — Quick inventory intake (current):** Moves the exact card match, image, current quantity, batch input, Add, and Undo directly below the OCR result so routine inventory intake does not require scrolling past correction controls.
 
 The launcher preloads RapidOCR before opening the scanner. The operational reader stops after the first high-confidence treatment only when its set code, card number, and any printed total resolve to one exact local card. Non-matches automatically continue through the remaining treatments. The page keeps both total scan time and server OCR time visible after every scan and disables **Next card** until the current reading is complete.
 
@@ -88,9 +89,9 @@ Future material changes should advance the iteration number and add one short en
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-New rows from both workflows are stored in `ocr_reads_it8.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_8`. Earlier iteration files remain untouched as OCR evidence.
+New rows from both workflows are stored in `ocr_reads_it9.csv`. Webcam filenames begin with `webcam_`; every new exact OCR crop is stored under `benchmark_crops/iteration_9`. Earlier iteration files remain untouched as OCR evidence.
 
-The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_8`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
+The scanner displays the literal OCR result first. It then separates the letters and digit groups into editable fields without correcting them against a known card list. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_9`, while the CSV keeps both the untouched OCR result and your corrected labels. This makes wrong reads, partial reads, and blank reads measurable instead of hiding them.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 
