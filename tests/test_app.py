@@ -209,7 +209,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 12,
+                "iteration": 13,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -225,7 +225,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 12,
+                        "iteration": 13,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -267,12 +267,22 @@ class AppTests(unittest.TestCase):
             html.index('id="add_inventory"'),
             html.index('id="regulation_mark"'),
         )
-        self.assertIn("ITERATION 12", html)
-        self.assertIn("INVENTORY REGULATION MARKS", html)
+        self.assertIn("ITERATION 13", html)
+        self.assertIn("LIGHT AND DARK THEMES", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 12", javascript)
+        self.assertIn("const UI_ITERATION = 13", javascript)
+        self.assertIn('id="theme_toggle"', html)
+        self.assertIn('src="/theme.js"', html)
+        theme_javascript = (app.WEB_ROOT / "theme.js").read_text(encoding="utf-8")
+        inventory_html = (app.WEB_ROOT / "inventory.html").read_text(encoding="utf-8")
+        stylesheet = (app.WEB_ROOT / "style.css").read_text(encoding="utf-8")
+        self.assertIn('id="theme_toggle"', inventory_html)
+        self.assertIn('src="/theme.js"', inventory_html)
+        self.assertIn("prefers-color-scheme: dark", theme_javascript)
+        self.assertIn("localStorage.setItem", theme_javascript)
+        self.assertIn(':root[data-theme="dark"]', stylesheet)
         self.assertIn('href="/inventory"', html)
         self.assertIn("fetch('/inventory/add'", javascript)
         self.assertIn("fetch('/inventory/undo'", javascript)

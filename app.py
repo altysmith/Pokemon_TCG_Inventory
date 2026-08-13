@@ -33,11 +33,11 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it12.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it13.csv"))
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_12",
+        ROOT / "benchmark_crops" / "iteration_13",
     )
 )
 INVENTORY_PATH = Path(
@@ -47,8 +47,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 12
-ITERATION_NAME = "Inventory regulation marks"
+ITERATION = 13
+ITERATION_NAME = "Light and dark themes"
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
@@ -455,7 +455,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-12"
+    server_version = "TinyTextReader/iteration-13"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -504,6 +504,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             "/inventory": "inventory.html",
             "/app.js": "app.js",
             "/inventory.js": "inventory.js",
+            "/theme.js": "theme.js",
             "/style.css": "style.css",
         }
         filename = files.get(route)
