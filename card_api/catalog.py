@@ -109,3 +109,86 @@ def find_exact_card(
         ),
         match_count=1,
     )
+
+
+def find_unique_card_by_partial_code(
+    partial_code: str,
+    card_number: str,
+    printed_total: str,
+    *,
+    database_path: Path | str = DATABASE_PATH,
+) -> ExactCardResult:
+    """Match one card only when a retained set-code prefix and both numbers agree."""
+    prefix = partial_code.strip().upper()
+    number = card_number.strip()
+    total = printed_total.strip()
+    if (
+        not prefix
+        or len(prefix) > 2
+        or not prefix.isalpha()
+        or not number.isdigit()
+        or not total.isdigit()
+    ):
+        return ExactCardResult("invalid_input")
+
+    database = CatalogDatabase(database_path)
+    if not database.path.is_file():
+        return ExactCardResult("catalog_unavailable")
+    with database.connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT c.id, c.set_id, s.code AS set_code, s.name AS set_name,
+                   c.name AS card_name, c.number AS card_number,
+                   COALESCE(c.card_type, '') AS card_type,
+                   COALESCE(c.card_subtype, '') AS card_subtype,
+                   COALESCE(c.printed_total, '') AS printed_total,
+                   COALESCE(c.regulation_mark, '') AS regulation_mark,
+                   c.hp, COALESCE(c.rarity, '') AS rarity,
+                   COALESCE(c.primary_image_url, '') AS image_url
+            FROM cards c
+            JOIN sets s ON s.id = c.set_id
+            WHERE c.language = 'en-US'
+              AND s.code LIKE ? COLLATE NOCASE
+              AND ltrim(c.number, '0') = ltrim(?, '0')
+              AND ltrim(COALESCE(c.printed_total, ''), '0') = ltrim(?, '0')
+            ORDER BY c.id
+            """,
+            (prefix + "%", number, total),
+        ).fetchall()
+        matched_types = (
+            tuple(
+                item["type"]
+                for item in connection.execute(
+                    "SELECT type FROM card_types WHERE card_id = ? ORDER BY position",
+                    (rows[0]["id"],),
+                ).fetchall()
+            )
+            if len(rows) == 1
+            else ()
+        )
+
+    if not rows:
+        return ExactCardResult("no_match")
+    if len(rows) != 1:
+        return ExactCardResult("ambiguous", match_count=len(rows))
+    row = rows[0]
+    return ExactCardResult(
+        "exact",
+        CatalogCard(
+            id=row["id"],
+            set_id=row["set_id"],
+            set_code=row["set_code"],
+            set_name=row["set_name"],
+            card_name=row["card_name"],
+            card_type=row["card_type"],
+            card_subtype=row["card_subtype"],
+            types=matched_types,
+            card_number=row["card_number"],
+            printed_total=row["printed_total"],
+            regulation_mark=row["regulation_mark"],
+            hp=row["hp"],
+            rarity=row["rarity"],
+            image_url=row["image_url"],
+        ),
+        match_count=1,
+    )

@@ -1,6 +1,6 @@
 # Tiny Card Text Scanner
 
-**Current build: Iteration 15 — Dark set badge recovery**
+**Current build: Iteration 16 — Partial set badge recovery**
 
 This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. After reading, complete set-and-number fields are checked against the local catalog. Images stay on this computer, and scanning uses no internet API.
 
@@ -70,7 +70,8 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 12 — Inventory regulation marks:** Exposes each owned card's canonical regulation mark through the read-only inventory endpoint and displays it on every collection tile, laying the foundation for later regulation-mark searching and filtering.
 - **Iteration 13 — Light and dark themes:** Adds a shared theme control to the scanner and collection pages, follows the system preference initially, and remembers a manual light/dark selection in the browser.
 - **Iteration 14 — Timed scan diagnostics:** Automatically records client total time, server time, OCR time, attempted treatments, parsed fields, and timeout status for every scan. OCR has a 10-second budget so difficult fallbacks return available evidence instead of searching indefinitely.
-- **Iteration 15 — Dark set badge recovery (current):** Recovers tiny inverse-color set badges such as BLK and WHT when OCR changes exactly one letter and only one local card satisfies the repaired code, number, and printed total. Missing or ambiguous codes remain unmatched.
+- **Iteration 15 — Dark set badge recovery:** Recovers tiny inverse-color set badges such as BLK and WHT when OCR changes exactly one letter and only one local card satisfies the repaired code, number, and printed total. Missing or ambiguous codes remain unmatched.
+- **Iteration 16 — Partial set badge recovery (current):** Handles inverse-color badges such as TEF when OCR retains only the leading one or two set-code letters. Recovery requires both printed numbers and exactly one compatible local card; a completely missing or ambiguous code remains unmatched.
 
 The launcher preloads RapidOCR before opening the scanner. The operational reader stops after the first high-confidence treatment only when its set code, card number, and any printed total resolve to one exact local card. Non-matches automatically continue through the remaining treatments. The page keeps both total scan time and server OCR time visible after every scan and disables **Next card** until the current reading is complete.
 
@@ -95,9 +96,9 @@ Future material changes should advance the iteration number and add one short en
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-Manually saved correction rows are stored in `ocr_reads_it15.csv`. Every scan also adds an automatic timing row to `scan_performance_it15.csv`; no Save button is required for that diagnostic log. Webcam filenames begin with `webcam_`, and every new exact OCR crop is stored under `benchmark_crops/iteration_15`. Earlier iteration files remain untouched as OCR evidence.
+Manually saved correction rows are stored in `ocr_reads_it16.csv`. Every scan also adds an automatic timing row to `scan_performance_it16.csv`; no Save button is required for that diagnostic log. Webcam filenames begin with `webcam_`, and every new exact OCR crop is stored under `benchmark_crops/iteration_16`. Earlier iteration files remain untouched as OCR evidence.
 
-The scanner displays and stores the literal OCR result first. It then separates the letters and digit groups into editable fields. A unique one-letter set-code repair may be used for exact local matching, but never changes the retained literal OCR. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_15`, while the correction CSV keeps both the untouched OCR result and your corrected labels. The automatic performance CSV records the timings and treatments for every attempt, including scans you do not manually save.
+The scanner displays and stores the literal OCR result first. It then separates the letters and digit groups into editable fields. A unique one-letter repair or partial-code recovery may be used for exact local matching, but never changes the retained literal OCR. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_16`, while the correction CSV keeps both the untouched OCR result and your corrected labels. The automatic performance CSV records the timings and treatments for every attempt, including scans you do not manually save.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 

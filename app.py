@@ -25,7 +25,7 @@ from PIL import Image
 
 from card_scanner.ocr import scan_crop, warm_up_ocr
 from card_scanner.catalog import known_set_codes
-from card_api.catalog import find_exact_card
+from card_api.catalog import find_exact_card, find_unique_card_by_partial_code
 from card_api.config import DATABASE_PATH as CARD_CATALOG_PATH
 from card_scanner.lookup import CardInfo
 from inventory import InventoryChange, InventoryDatabase
@@ -33,17 +33,17 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it15.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it16.csv"))
 SCAN_PERFORMANCE_PATH = Path(
     os.environ.get(
         "SCAN_PERFORMANCE_CSV",
-        ROOT / "scan_performance_it15.csv",
+        ROOT / "scan_performance_it16.csv",
     )
 )
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_15",
+        ROOT / "benchmark_crops" / "iteration_16",
     )
 )
 INVENTORY_PATH = Path(
@@ -53,8 +53,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 15
-ITERATION_NAME = "Dark set badge recovery"
+ITERATION = 16
+ITERATION_NAME = "Partial set badge recovery"
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -269,7 +269,32 @@ def exact_catalog_fields(text: str) -> tuple[str, str, str, str] | None:
                 repaired_fields.add(
                     (regulation_mark, repaired_code, card_number, set_total)
                 )
-    return next(iter(repaired_fields)) if len(repaired_fields) == 1 else None
+    if len(repaired_fields) == 1:
+        return next(iter(repaired_fields))
+    if repaired_fields:
+        return None
+
+    # Some inverse-color badges retain only their first letter (for example,
+    # TEF -> T). This path requires both printed numbers and one unique local
+    # card whose canonical set code starts with that retained token.
+    if set_total:
+        partial_matches: set[tuple[str, str, str, str]] = set()
+        for token in tokens:
+            if len(token) not in (1, 2) or token == regulation_mark:
+                continue
+            partial = find_unique_card_by_partial_code(
+                token,
+                card_number,
+                set_total,
+                database_path=CARD_CATALOG_PATH,
+            )
+            if partial.status == "exact" and partial.card is not None:
+                partial_matches.add(
+                    (regulation_mark, partial.card.set_code, card_number, set_total)
+                )
+        if len(partial_matches) == 1:
+            return next(iter(partial_matches))
+    return None
 
 
 def exact_catalog_fields_from_readings(literal_text: str, readings: tuple) -> (
@@ -588,7 +613,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-15"
+    server_version = "TinyTextReader/iteration-16"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
