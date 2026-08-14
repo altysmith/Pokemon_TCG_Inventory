@@ -12,7 +12,8 @@
   }
 
   function effectiveTheme() {
-    return savedTheme() || (systemPreference.matches ? 'dark' : 'light');
+    const pageDefault = document.documentElement.dataset.theme;
+    return savedTheme() || (pageDefault === 'light' || pageDefault === 'dark' ? pageDefault : null) || (systemPreference.matches ? 'dark' : 'light');
   }
 
   function updateButton(theme) {

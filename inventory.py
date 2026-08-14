@@ -47,6 +47,8 @@ class InventoryChange:
 class InventoryHolding:
     card_id: str
     quantity: int
+    created_at: str = ""
+    updated_at: str = ""
 
 
 class InventoryDatabase:
@@ -135,11 +137,17 @@ class InventoryDatabase:
             return ()
         with self.connect() as connection:
             rows = connection.execute(
-                "SELECT card_id, quantity FROM inventory_holdings "
+                "SELECT card_id, quantity, created_at, updated_at "
+                "FROM inventory_holdings "
                 "WHERE quantity > 0 ORDER BY card_id"
             ).fetchall()
         return tuple(
-            InventoryHolding(str(row["card_id"]), int(row["quantity"]))
+            InventoryHolding(
+                str(row["card_id"]),
+                int(row["quantity"]),
+                str(row["created_at"]),
+                str(row["updated_at"]),
+            )
             for row in rows
         )
 

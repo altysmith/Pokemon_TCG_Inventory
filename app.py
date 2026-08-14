@@ -33,17 +33,17 @@ from inventory import InventoryChange, InventoryDatabase
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it16.csv"))
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it17.csv"))
 SCAN_PERFORMANCE_PATH = Path(
     os.environ.get(
         "SCAN_PERFORMANCE_CSV",
-        ROOT / "scan_performance_it16.csv",
+        ROOT / "scan_performance_it17.csv",
     )
 )
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_16",
+        ROOT / "benchmark_crops" / "iteration_17",
     )
 )
 INVENTORY_PATH = Path(
@@ -53,8 +53,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 16
-ITERATION_NAME = "Partial set badge recovery"
+ITERATION = 17
+ITERATION_NAME = "Premium digital binder"
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -539,6 +539,13 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
     if not CARD_CATALOG_PATH.is_file():
         raise ValueError("Local card catalog is unavailable.")
     quantities = {holding.card_id: holding.quantity for holding in holdings}
+    holding_dates = {
+        holding.card_id: {
+            "date_added": holding.created_at,
+            "date_updated": holding.updated_at,
+        }
+        for holding in holdings
+    }
     placeholders = ",".join("?" for _ in quantities)
     from card_api.database import CatalogDatabase
 
@@ -566,6 +573,7 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
         types_by_card[row["card_id"]].append(row["type"])
     for item in items:
         item["quantity"] = quantities[item["id"]]
+        item.update(holding_dates[item["id"]])
         item["types"] = types_by_card[item["id"]]
         item["display_subtype"] = (
             f"{item['card_subtype'].title()} Energy"
@@ -613,7 +621,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-16"
+    server_version = "TinyTextReader/iteration-17"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")

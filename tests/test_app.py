@@ -23,10 +23,10 @@ from inventory import InventoryDatabase
 class AppTests(unittest.TestCase):
     def test_automatic_scan_performance_is_logged_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "scan_performance_it16.csv"
+            path = Path(temp_dir) / "scan_performance_it17.csv"
             record = {
                 "scanned_at": "2026-08-13T15:00:00-04:00",
-                "iteration": 16,
+                "iteration": 17,
                 "scan_id": "scan-timing-1",
                 "ocr_engine": "RapidOCR",
                 "ocr_elapsed_seconds": "4.250",
@@ -94,6 +94,8 @@ class AppTests(unittest.TestCase):
                 snapshot = app.inventory_snapshot()
 
         self.assertEqual(snapshot["items"][0]["regulation_mark"], "H")
+        self.assertTrue(snapshot["items"][0]["date_added"])
+        self.assertTrue(snapshot["items"][0]["date_updated"])
 
     def test_element_view_keeps_other_card_categories_after_pokemon(self) -> None:
         items = [
@@ -298,7 +300,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 16,
+                "iteration": 17,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -314,7 +316,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 16,
+                        "iteration": 17,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",
@@ -356,21 +358,29 @@ class AppTests(unittest.TestCase):
             html.index('id="add_inventory"'),
             html.index('id="regulation_mark"'),
         )
-        self.assertIn("ITERATION 16", html)
-        self.assertIn("PARTIAL SET BADGE RECOVERY", html)
+        self.assertIn("ITERATION 17", html)
+        self.assertIn("PREMIUM DIGITAL BINDER", html)
         self.assertIn("EDITABLE CORRECTIONS", html)
         self.assertIn("fetch('/lookup'", javascript)
         self.assertIn("await lookupCurrentCard()", javascript)
-        self.assertIn("const UI_ITERATION = 16", javascript)
+        self.assertIn("const UI_ITERATION = 17", javascript)
         self.assertIn("fetch('/scan/timing'", javascript)
         self.assertIn("10s LIMIT REACHED", javascript)
         self.assertIn('id="theme_toggle"', html)
         self.assertIn('src="/theme.js"', html)
         theme_javascript = (app.WEB_ROOT / "theme.js").read_text(encoding="utf-8")
         inventory_html = (app.WEB_ROOT / "inventory.html").read_text(encoding="utf-8")
+        inventory_javascript = (app.WEB_ROOT / "inventory.js").read_text(encoding="utf-8")
         stylesheet = (app.WEB_ROOT / "style.css").read_text(encoding="utf-8")
         self.assertIn('id="theme_toggle"', inventory_html)
         self.assertIn('src="/theme.js"', inventory_html)
+        self.assertIn('id="card_drawer"', inventory_html)
+        self.assertIn('data-mode="typing"', inventory_html)
+        self.assertIn('id="inventory_search"', inventory_html)
+        self.assertIn("function categoryKey", inventory_javascript)
+        self.assertIn("function openDrawer", inventory_javascript)
+        self.assertIn("loading = 'lazy'", inventory_javascript)
+        self.assertIn("No cards in your inventory match these filters", inventory_javascript)
         self.assertIn("prefers-color-scheme: dark", theme_javascript)
         self.assertIn("localStorage.setItem", theme_javascript)
         self.assertIn(':root[data-theme="dark"]', stylesheet)
