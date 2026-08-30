@@ -8,7 +8,7 @@ if not exist "%COLLECTION_PY%" (
   pause
   exit /b 1
 )
-call "%~dp0_ensure_dependencies.bat" "%COLLECTION_PY%" "%~dp0requirements.txt"
+call "%~dp0tools\_ensure_dependencies.bat" "%COLLECTION_PY%" "%~dp0requirements.txt"
 if errorlevel 1 (
   pause
   exit /b 1

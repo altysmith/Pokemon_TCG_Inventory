@@ -6,7 +6,22 @@ This local browser app provides catalog search, quantity-based collection manage
 
 ## Run it
 
-Double-click **`Start Pokemon Collection.bat`**. It starts the private local app and opens the Search page at `http://127.0.0.1:8766/` in your normal browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Keep the small command window open while using the app; close it when finished.
+Double-click **`Start Pokemon Collection.bat`**. This is the one normal application launcher. It starts the private local app and opens the Search page at `http://127.0.0.1:8766/` in your normal browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Keep the small command window open while using the app; close it when finished.
+
+The launcher now uses an operating-system-level single-instance lock plus a server API version check. Double-clicking it again opens the already-running current app instead of starting another server. If an older build still owns the port, startup stops with a clear instruction to close the older command window; it never shares the port with incompatible code.
+
+### Project folder map
+
+- `web/` — the active Search, Collection, and Deck Check interface.
+- `app.py`, `inventory.py`, `deck_checker.py`, `saved_decks.py` — active application code.
+- `card_api/` and `data/` — rebuildable canonical card catalog and preserved Malie source data.
+- `user_data/` — personal inventory, saved decks, backups, and ignored runtime lock files.
+- `tests/` — portable automated tests and their small tracked fixtures.
+- `tools/` — optional catalog update/API launchers and their dependency helper.
+- `legacy_webcam_scanner/` — dormant webcam UI plus ignored historical OCR evidence.
+- `collection_showcase/` — separate read-only collection snapshot viewer.
+
+Only **`Start Pokemon Collection.bat`** launches the normal collection application. Optional catalog maintenance launchers are tucked under `tools/` and do not launch the collection UI.
 
 RapidOCR, ONNX Runtime, Tesseract, and the required Python runtime are installed on this machine. `requirements.txt` is included for installing the project on another computer.
 
@@ -30,9 +45,9 @@ The canonical catalog contains no user quantities or collection records. Persona
 
 ### Update and run
 
-- Double-click `check_card_updates.bat` to compare the local manifest with Malie's current English export index without changing local data.
-- Double-click `update_card_database.bat` to preserve new/changed raw exports and rebuild the affected catalog data.
-- Double-click `run_card_api.bat`, then open `http://127.0.0.1:8770/docs` for the interactive local API documentation.
+- Double-click `tools\check_card_updates.bat` to compare the local manifest with Malie's current English export index without changing local data.
+- Double-click `tools\update_card_database.bat` to preserve new/changed raw exports and rebuild the affected catalog data.
+- Double-click `tools\run_card_api.bat`, then open `http://127.0.0.1:8770/docs` for the interactive local API documentation.
 
 Equivalent command-line operations are:
 
@@ -102,9 +117,9 @@ Search is the primary intake method in Iteration 18. The page begins with no car
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-Manually saved correction rows are stored in `ocr_reads_it18.csv`. Every scan also adds an automatic timing row to `scan_performance_it18.csv`; no Save button is required for that diagnostic log. Webcam filenames begin with `webcam_`, and every new exact OCR crop is stored under `benchmark_crops/iteration_18`. Earlier iteration files remain untouched as OCR evidence.
+Manually saved correction rows are stored in `legacy_webcam_scanner/evidence/ocr_reads_it18.csv`. Every scan also adds an automatic timing row to `legacy_webcam_scanner/evidence/scan_performance_it18.csv`; no Save button is required for that diagnostic log. Webcam filenames begin with `webcam_`, and every new exact OCR crop is stored under `legacy_webcam_scanner/evidence/benchmark_crops/iteration_18`. Earlier iteration files remain untouched as OCR evidence.
 
-The scanner displays and stores the literal OCR result first. It then separates the letters and digit groups into editable fields. A unique one-letter repair or partial-code recovery may be used for exact local matching, but never changes the retained literal OCR. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_18`, while the correction CSV keeps both the untouched OCR result and your corrected labels. The automatic performance CSV records the timings and treatments for every attempt, including scans you do not manually save.
+The scanner displays and stores the literal OCR result first. It then separates the letters and digit groups into editable fields. A unique one-letter repair or partial-code recovery may be used for exact local matching, but never changes the retained literal OCR. Every scan gets a unique ID. Its exact crop is stored under `legacy_webcam_scanner/evidence/benchmark_crops/iteration_18`, while the correction CSV keeps both the untouched OCR result and your corrected labels. The automatic performance CSV records the timings and treatments for every attempt, including scans you do not manually save.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 

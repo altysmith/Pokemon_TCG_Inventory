@@ -40,23 +40,28 @@ from collection_transfer import (
 )
 from deck_checker import check_deck_list, parse_deck_list
 from inventory import InventoryChange, InventoryDatabase, InventoryLocation, InventoryLocationChange
+from runtime_guard import RuntimeLock
 from saved_decks import SavedDeck, SavedDeckDatabase
 
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
 LEGACY_SCANNER_WEB_ROOT = ROOT / "legacy_webcam_scanner" / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it18.csv"))
+LEGACY_EVIDENCE_ROOT = ROOT / "legacy_webcam_scanner" / "evidence"
+RUNTIME_ROOT = ROOT / "user_data" / "runtime"
+CSV_PATH = Path(
+    os.environ.get("OCR_BENCHMARK_CSV", LEGACY_EVIDENCE_ROOT / "ocr_reads_it18.csv")
+)
 SCAN_PERFORMANCE_PATH = Path(
     os.environ.get(
         "SCAN_PERFORMANCE_CSV",
-        ROOT / "scan_performance_it18.csv",
+        LEGACY_EVIDENCE_ROOT / "scan_performance_it18.csv",
     )
 )
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_18",
+        LEGACY_EVIDENCE_ROOT / "benchmark_crops" / "iteration_18",
     )
 )
 INVENTORY_PATH = Path(
@@ -74,7 +79,7 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
-SERVER_API_VERSION = 2
+SERVER_API_VERSION = 3
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -1528,21 +1533,37 @@ def main() -> None:
         help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
-    existing = _running_collection_server(args.port)
-    if existing is not None:
+    runtime_lock = RuntimeLock(
+        f"PokemonCardCollection-Port-{args.port}",
+        RUNTIME_ROOT / f"collection-{args.port}.lock",
+    )
+    if not runtime_lock.acquire():
+        existing = _running_collection_server(args.port)
         url = f"http://127.0.0.1:{args.port}{args.start_path}"
-        if existing.get("server_api_version") == SERVER_API_VERSION:
+        if existing and existing.get("server_api_version") == SERVER_API_VERSION:
             print(f"The current Pokemon Collection app is already running at {url}")
             if not args.no_browser:
                 webbrowser.open(url)
             return
         raise SystemExit(
+            "Another Pokemon Collection process is already starting or running. "
+            "Close its command window before trying again."
+        )
+    existing = _running_collection_server(args.port)
+    if existing is not None:
+        url = f"http://127.0.0.1:{args.port}{args.start_path}"
+        runtime_lock.release()
+        raise SystemExit(
             f"An older Pokemon Collection server is still using port {args.port}. "
             "Close every older Pokemon Collection command window, then start the app again."
         )
-    inventory_database()
-    saved_deck_database()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
+    try:
+        inventory_database()
+        saved_deck_database()
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
+    except BaseException:
+        runtime_lock.release()
+        raise
     url = f"http://127.0.0.1:{server.server_port}{args.start_path}"
     print(f"Pokémon collection is running at {url}")
     print("Press Ctrl+C to stop it.")
@@ -1554,6 +1575,7 @@ def main() -> None:
         pass
     finally:
         server.server_close()
+        runtime_lock.release()
 
 
 if __name__ == "__main__":

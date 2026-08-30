@@ -13,6 +13,7 @@ from app import extract_footer_fields
 
 
 ROOT = Path(__file__).resolve().parent
+EVIDENCE_ROOT = ROOT / "evidence"
 
 
 def _letters(value: str) -> tuple[str, str]:
@@ -30,7 +31,9 @@ def _numbers(value: str) -> tuple[str, str]:
 
 
 def main() -> None:
-    with (ROOT / "ocr_reads_it5.csv").open(newline="", encoding="utf-8-sig") as source:
+    with (EVIDENCE_ROOT / "ocr_reads_it5.csv").open(
+        newline="", encoding="utf-8-sig"
+    ) as source:
         rows = [row for row in csv.DictReader(source) if row["image_name"].startswith("webcam_")]
 
     correct = dict.fromkeys(("regulation_mark", "set_code", "card_number", "set_total"), 0)
@@ -40,7 +43,15 @@ def main() -> None:
         expected_reg, expected_set = _letters(row["corrected_letters"])
         expected_number, expected_total = _numbers(row["corrected_numbers"])
         expected = (expected_reg, expected_set, expected_number, expected_total)
-        with Image.open(row["crop_path"]) as opened:
+        crop_path = Path(row["crop_path"])
+        if not crop_path.is_file():
+            crop_path = (
+                EVIDENCE_ROOT
+                / "benchmark_crops"
+                / crop_path.parent.name
+                / crop_path.name
+            )
+        with Image.open(crop_path) as opened:
             result = scan_crop(opened.convert("RGB"), derive_card_candidates=False)
             actual = extract_footer_fields(result.raw_text)
         for field, wanted, got in zip(correct, expected, actual):
