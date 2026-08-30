@@ -52,6 +52,48 @@ class InventoryDatabaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already undone"):
             self.database.undo_add(added.event_id)
 
+    def test_manual_quantity_can_increase_decrease_and_remove_a_card(self) -> None:
+        added = self.database.set_quantity("malie:sv5:123", 12)
+        reduced = self.database.set_quantity("malie:sv5:123", 4)
+        removed = self.database.set_quantity("malie:sv5:123", 0)
+
+        self.assertEqual((added.quantity_delta, reduced.quantity_delta), (12, -8))
+        self.assertEqual((removed.quantity, removed.quantity_delta), (0, -4))
+        self.assertEqual(self.database.quantity("malie:sv5:123"), 0)
+        connection = sqlite3.connect(self.path)
+        try:
+            actions = connection.execute(
+                "SELECT action, quantity_delta FROM inventory_events ORDER BY id"
+            ).fetchall()
+        finally:
+            connection.close()
+        self.assertEqual(
+            actions,
+            [("manual_set", 12), ("manual_set", -8), ("manual_set", -4)],
+        )
+        backups = sorted((self.path.parent / "backups").glob("inventory-backup-*.sqlite3"))
+        self.assertEqual(len(backups), 3)
+        backup = sqlite3.connect(backups[-1])
+        try:
+            prior = backup.execute(
+                "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
+                ("malie:sv5:123",),
+            ).fetchone()
+            integrity = backup.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            backup.close()
+        self.assertEqual(prior, (4,))
+        self.assertEqual(integrity, "ok")
+
+    def test_setting_existing_quantity_is_a_noop(self) -> None:
+        self.database.set_quantity("malie:sv5:123", 3)
+        backups_before = tuple((self.path.parent / "backups").glob("*.sqlite3"))
+        unchanged = self.database.set_quantity("malie:sv5:123", 3)
+        backups_after = tuple((self.path.parent / "backups").glob("*.sqlite3"))
+
+        self.assertEqual((unchanged.event_id, unchanged.quantity_delta), (0, 0))
+        self.assertEqual(len(backups_after), len(backups_before))
+
     def test_database_is_independent_of_catalog_tables(self) -> None:
         connection = sqlite3.connect(self.path)
         try:

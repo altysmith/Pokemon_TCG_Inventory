@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0f13">
+    <title>Search Pokémon Cards</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/theme.js"></script>
+  </head>
+  <body class="catalog-body">
+    <main class="catalog-app">
+      <aside class="catalog-sidebar">
+        <div class="binder-brand">
+          <span class="binder-brand-mark" aria-hidden="true">◆</span>
+          <div><strong>Card Intake</strong><small>Local English catalog</small></div>
+        </div>
+        <nav class="catalog-primary-nav" aria-label="Card intake">
+          <a class="is-active" href="/">Search</a>
+          <a href="/inventory">Collection</a>
+          <a href="/deck">Deck Check</a>
+        </nav>
+        <div class="catalog-sidebar-note">
+          <strong>ITERATION 18</strong>
+          <span>Search-first collection intake</span>
+        </div>
+        <button id="theme_toggle" class="binder-theme-toggle" type="button">Light mode</button>
+      </aside>
+
+      <section class="catalog-main">
+        <header class="catalog-header">
+          <div>
+            <p class="binder-view-eyebrow">Local catalog · English</p>
+            <h1>What card are you looking for?</h1>
+            <p>Choose one or more search options, then press Enter or Search. No cards appear until you ask for them.</p>
+          </div>
+          <a class="catalog-collection-link" href="/inventory">View collection</a>
+        </header>
+
+        <form id="catalog_search_form" class="catalog-search-controls" role="search">
+          <label class="catalog-query">
+            <span>Search cards</span>
+            <input id="catalog_query" type="search" placeholder="Card name, set code, set name, or collector number" autocomplete="off" autofocus>
+          </label>
+          <div class="catalog-filter-row">
+            <label>Format
+              <select id="catalog_format">
+                <option value="">Any format</option>
+                <option value="standard" selected>Standard · Marks H, I, J</option>
+                <option value="expanded">Expanded · All local eras</option>
+              </select>
+            </label>
+            <label>Set
+              <select id="catalog_set"><option value="">Any set</option></select>
+            </label>
+            <label>Card type
+              <select id="catalog_card_type">
+                <option value="">Any card type</option>
+                <option value="pokemon">Pokémon</option>
+                <option value="supporter">Supporter</option>
+                <option value="item">Item</option>
+                <option value="stadium">Stadium</option>
+                <option value="tool">Pokémon Tool</option>
+                <option value="basic-energy">Basic Energy</option>
+                <option value="special-energy">Special Energy</option>
+                <option value="ace-spec">ACE SPEC</option>
+              </select>
+            </label>
+            <button class="catalog-search-button" type="submit">Search cards</button>
+          </div>
+          <div id="catalog_active_filters" class="catalog-active-filters" aria-label="Active search filters">
+            <span>Active filters</span>
+            <div id="catalog_filter_chips" class="catalog-filter-chips"></div>
+            <button id="catalog_reset_filters" class="catalog-reset-filters" type="button" hidden>Reset filters</button>
+          </div>
+          <p class="catalog-search-hint">Standard currently means regulation marks H, I, or J and can be updated when rotation changes.</p>
+        </form>
+
+        <div class="catalog-result-summary">
+          <p id="catalog_status" role="status">Preparing search options…</p>
+          <div id="catalog_pagination" class="catalog-pagination" hidden>
+            <button id="catalog_previous" type="button" disabled>Previous</button>
+            <span id="catalog_page">—</span>
+            <button id="catalog_next" type="button" disabled>Next</button>
+          </div>
+        </div>
+        <div id="catalog_results" class="catalog-results" aria-live="polite">
+          <div class="catalog-welcome">
+            <span aria-hidden="true">⌕</span>
+            <strong>Search when you are ready.</strong>
+            <p>Select a format, set, card type, or enter a name or number. Press Enter or use the Search button to see matching cards.</p>
+          </div>
+        </div>
+        <div id="catalog_pagination_bottom" class="catalog-pagination catalog-pagination-bottom" hidden>
+          <button id="catalog_previous_bottom" type="button" disabled>Previous</button>
+          <span id="catalog_page_bottom">—</span>
+          <button id="catalog_next_bottom" type="button" disabled>Next</button>
+          <button id="catalog_back_to_top" class="catalog-back-to-top" type="button">Back to top</button>
+        </div>
+      </section>
+    </main>
+    <script src="/card-inspector.js"></script>
+    <script src="/search.js"></script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-"""Local browser interface for the tiny card text scanner."""
+"""Local Pokémon collection, catalog search, and deck-checking application."""
 
 from __future__ import annotations
 
@@ -23,27 +23,35 @@ from urllib.parse import parse_qs, urlparse
 
 from PIL import Image
 
-from card_scanner.ocr import scan_crop, warm_up_ocr
+from card_scanner.ocr import scan_crop
 from card_scanner.catalog import known_set_codes
 from card_api.catalog import find_exact_card, find_unique_card_by_partial_code
 from card_api.config import DATABASE_PATH as CARD_CATALOG_PATH
+from card_api.database import CatalogDatabase
 from card_scanner.lookup import CardInfo
+from collection_transfer import (
+    build_collection_export,
+    render_collection_csv,
+    render_collection_json,
+)
+from deck_checker import check_deck_list
 from inventory import InventoryChange, InventoryDatabase
 
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it17.csv"))
+LEGACY_SCANNER_WEB_ROOT = ROOT / "legacy_webcam_scanner" / "web"
+CSV_PATH = Path(os.environ.get("OCR_BENCHMARK_CSV", ROOT / "ocr_reads_it18.csv"))
 SCAN_PERFORMANCE_PATH = Path(
     os.environ.get(
         "SCAN_PERFORMANCE_CSV",
-        ROOT / "scan_performance_it17.csv",
+        ROOT / "scan_performance_it18.csv",
     )
 )
 CROP_DIR = Path(
     os.environ.get(
         "OCR_BENCHMARK_CROP_DIR",
-        ROOT / "benchmark_crops" / "iteration_17",
+        ROOT / "benchmark_crops" / "iteration_18",
     )
 )
 INVENTORY_PATH = Path(
@@ -53,8 +61,8 @@ INVENTORY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 17
-ITERATION_NAME = "Premium digital binder"
+ITERATION = 18
+ITERATION_NAME = "Search-first collection intake"
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -483,6 +491,169 @@ def inventory_database() -> InventoryDatabase:
     return database
 
 
+STANDARD_REGULATION_MARKS = ("H", "I", "J")
+ACE_SPEC_RARITY = "ACE_SPEC_RARE"
+CATALOG_CARD_CATEGORIES = {
+    "pokemon": ("POKEMON", ""),
+    "supporter": ("TRAINER", "SUPPORTER"),
+    "item": ("TRAINER", "ITEM"),
+    "stadium": ("TRAINER", "STADIUM"),
+    "tool": ("TRAINER", "TOOL"),
+    "basic-energy": ("ENERGY", "BASIC"),
+    "special-energy": ("ENERGY", "SPECIAL"),
+}
+
+
+def catalog_facets() -> dict:
+    """Return search choices without selecting or exposing any card rows."""
+    if not CARD_CATALOG_PATH.is_file():
+        raise ValueError("Local card catalog is unavailable. Run update_card_database.bat first.")
+    with CatalogDatabase(CARD_CATALOG_PATH).connect() as connection:
+        sets = [
+            dict(row)
+            for row in connection.execute(
+                """
+                SELECT id, name, code FROM sets
+                WHERE language = 'en-US'
+                ORDER BY release_date DESC, name COLLATE NOCASE
+                """
+            ).fetchall()
+        ]
+    return {
+        "sets": sets,
+        "formats": [
+            {"value": "standard", "label": "Standard", "marks": list(STANDARD_REGULATION_MARKS)},
+            {"value": "expanded", "label": "Expanded", "marks": []},
+        ],
+        "language": "en-US",
+    }
+
+
+def catalog_search(
+    query: str = "",
+    *,
+    set_id: str = "",
+    format_name: str = "",
+    card_category: str = "",
+    limit: int = 48,
+    offset: int = 0,
+) -> dict:
+    """Search the local English catalog and attach current owned quantities."""
+    if not CARD_CATALOG_PATH.is_file():
+        raise ValueError("Local card catalog is unavailable. Run update_card_database.bat first.")
+    selected_limit = max(1, min(int(limit), 100))
+    selected_offset = max(0, int(offset))
+    selected_set = set_id.strip()
+    selected_format = format_name.strip().lower()
+    selected_category = card_category.strip().lower()
+    if selected_format not in {"", "standard", "expanded"}:
+        raise ValueError("Format must be Standard or Expanded.")
+    if selected_category not in {"", "ace-spec", *CATALOG_CARD_CATEGORIES}:
+        raise ValueError("Unknown card type filter.")
+    if not any((query.strip(), selected_set, selected_format, selected_category)):
+        raise ValueError("Choose at least one search option before searching.")
+
+    filters = ["c.language = 'en-US'"]
+    parameters: list[object] = []
+    if selected_set:
+        filters.append("c.set_id = ?")
+        parameters.append(selected_set)
+    if selected_format == "standard":
+        placeholders = ",".join("?" for _ in STANDARD_REGULATION_MARKS)
+        filters.append(f"c.regulation_mark IN ({placeholders})")
+        parameters.extend(STANDARD_REGULATION_MARKS)
+    if selected_category:
+        if selected_category == "ace-spec":
+            filters.append("c.rarity = ? COLLATE NOCASE")
+            parameters.append(ACE_SPEC_RARITY)
+        else:
+            card_type, card_subtype = CATALOG_CARD_CATEGORIES[selected_category]
+            filters.append("c.card_type = ? COLLATE NOCASE")
+            parameters.append(card_type)
+            if card_subtype:
+                filters.append("c.card_subtype = ? COLLATE NOCASE")
+                parameters.append(card_subtype)
+    terms = re.findall(r"[A-Za-z0-9'-]+", query.strip())[:6]
+    for term in terms:
+        filters.append(
+            """(
+                c.name LIKE ? COLLATE NOCASE
+                OR s.name LIKE ? COLLATE NOCASE
+                OR EXISTS (
+                    SELECT 1 FROM set_codes sc
+                    WHERE sc.set_id = s.id AND sc.code = ? COLLATE NOCASE
+                )
+                OR ltrim(c.number, '0') = ltrim(?, '0')
+            )"""
+        )
+        parameters.extend((f"%{term}%", f"%{term}%", term, term))
+    where = " WHERE " + " AND ".join(filters)
+    order_by = (
+        "c.number_numeric, c.number, c.name COLLATE NOCASE"
+        if selected_set
+        else "c.name COLLATE NOCASE, s.name COLLATE NOCASE, c.number_numeric, c.number"
+    )
+
+    with CatalogDatabase(CARD_CATALOG_PATH).connect() as connection:
+        total = int(
+            connection.execute(
+                "SELECT COUNT(*) AS count FROM cards c JOIN sets s ON s.id = c.set_id" + where,
+                parameters,
+            ).fetchone()["count"]
+        )
+        rows = connection.execute(
+            """
+            SELECT c.id, c.name, c.card_type,
+                   COALESCE(c.card_subtype, '') AS card_subtype,
+                   c.number, c.number_numeric,
+                   COALESCE(c.printed_total, '') AS printed_total,
+                   COALESCE(c.regulation_mark, '') AS regulation_mark,
+                   COALESCE(c.primary_image_url, '') AS image_url,
+                   s.id AS set_id, s.name AS set_name, s.code AS set_code
+            FROM cards c JOIN sets s ON s.id = c.set_id
+            """
+            + where
+            + f" ORDER BY {order_by} LIMIT ? OFFSET ?",
+            [*parameters, selected_limit, selected_offset],
+        ).fetchall()
+    quantities = {holding.card_id: holding.quantity for holding in inventory_database().holdings()}
+    items = [dict(row) for row in rows]
+    for item in items:
+        item["quantity"] = quantities.get(item["id"], 0)
+    return {
+        "items": items,
+        "total": total,
+        "limit": selected_limit,
+        "offset": selected_offset,
+        "format": selected_format,
+        "card_category": selected_category,
+        "language": "en-US",
+    }
+
+
+def set_catalog_inventory_quantity(data: dict) -> InventoryChange:
+    """Set quantity only for an immutable card ID present in the local catalog."""
+    card_id = str(data.get("card_id", "")).strip()
+    quantity_text = str(data.get("quantity", "")).strip()
+    if not card_id:
+        raise ValueError("A canonical card ID is required for inventory.")
+    if not quantity_text.isdigit():
+        raise ValueError("Inventory quantity must be a whole number.")
+    quantity = int(quantity_text)
+    if quantity < 0 or quantity > 9999:
+        raise ValueError("Inventory quantity must be between 0 and 9999.")
+    if not CARD_CATALOG_PATH.is_file():
+        raise ValueError("Local card catalog is unavailable.")
+    with CatalogDatabase(CARD_CATALOG_PATH).connect() as connection:
+        exists = connection.execute(
+            "SELECT 1 FROM cards WHERE id = ? AND language = 'en-US'",
+            (card_id,),
+        ).fetchone()
+    if exists is None:
+        raise ValueError("That canonical card is not in the local English catalog.")
+    return inventory_database().set_quantity(card_id, quantity)
+
+
 INVENTORY_SORTS = {"name", "set_number", "category", "subtype", "element"}
 NON_POKEMON_TYPE_ORDER = {
     "Item": 0,
@@ -555,6 +726,7 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
             SELECT c.id, c.name, c.card_type, COALESCE(c.card_subtype, '') AS card_subtype,
                    c.number, c.number_numeric, COALESCE(c.printed_total, '') AS printed_total,
                    COALESCE(c.regulation_mark, '') AS regulation_mark,
+                   COALESCE(c.rarity, '') AS rarity,
                    COALESCE(c.primary_image_url, '') AS image_url,
                    s.name AS set_name, s.code AS set_code
             FROM cards c JOIN sets s ON s.id = c.set_id
@@ -580,6 +752,7 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
             if item["card_type"] == "ENERGY" and item["card_subtype"]
             else item["card_subtype"].title()
         )
+        item["is_ace_spec"] = item["rarity"].upper() == ACE_SPEC_RARITY
         item["element_group"] = _inventory_element_group(item)
 
     items.sort(key=lambda item: _inventory_sort_key(item, selected_sort))
@@ -621,7 +794,7 @@ def undo_inventory_add(data: dict) -> InventoryChange:
 
 
 class ScannerHandler(BaseHTTPRequestHandler):
-    server_version = "TinyTextReader/iteration-17"
+    server_version = "TinyTextReader/iteration-18"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -635,6 +808,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _download(self, content: bytes, content_type: str, filename: str) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(content)
+
     def _body_json(self) -> dict:
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0 or length > MAX_REQUEST_BYTES:
@@ -644,6 +826,12 @@ class ScannerHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         parsed = urlparse(self.path)
         route = parsed.path
+        if route == "/scan":
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", "/")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
         if route == "/health":
             self._json(
                 {
@@ -665,19 +853,71 @@ class ScannerHandler(BaseHTTPRequestHandler):
             except (ValueError, OSError) as exc:
                 self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+        if route in {"/inventory/export.json", "/inventory/export.csv"}:
+            try:
+                payload = build_collection_export(inventory_snapshot("name"))
+                timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+                if route.endswith(".json"):
+                    self._download(
+                        render_collection_json(payload),
+                        "application/json; charset=utf-8",
+                        f"pokemon-collection-{timestamp}.json",
+                    )
+                else:
+                    self._download(
+                        render_collection_csv(payload),
+                        "text/csv; charset=utf-8",
+                        f"pokemon-collection-{timestamp}.csv",
+                    )
+            except (ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if route == "/catalog/search":
+            query = parse_qs(parsed.query)
+            try:
+                self._json(
+                    {
+                        "ok": True,
+                        **catalog_search(
+                            query.get("q", [""])[0],
+                            set_id=query.get("set", [""])[0],
+                            format_name=query.get("format", [""])[0],
+                            card_category=query.get("type", [""])[0],
+                            limit=int(query.get("limit", [48])[0]),
+                            offset=int(query.get("offset", [0])[0]),
+                        ),
+                    }
+                )
+            except (TypeError, ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if route == "/catalog/facets":
+            try:
+                self._json({"ok": True, **catalog_facets()})
+            except (ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         files = {
-            "/": "index.html",
+            "/": "search.html",
             "/inventory": "inventory.html",
-            "/app.js": "app.js",
+            "/deck": "deck.html",
+            "/search.js": "search.js",
             "/inventory.js": "inventory.js",
+            "/deck.js": "deck.js",
+            "/card-inspector.js": "card-inspector.js",
             "/theme.js": "theme.js",
             "/style.css": "style.css",
         }
-        filename = files.get(route)
-        if not filename:
-            self.send_error(HTTPStatus.NOT_FOUND)
-            return
-        path = WEB_ROOT / filename
+        if route == "/legacy-webcam-scanner":
+            path = LEGACY_SCANNER_WEB_ROOT / "index.html"
+        elif route == "/legacy-webcam-scanner/app.js":
+            path = LEGACY_SCANNER_WEB_ROOT / "app.js"
+        else:
+            filename = files.get(route)
+            if not filename:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            path = WEB_ROOT / filename
         content = path.read_bytes()
         content_type = {
             ".html": "text/html; charset=utf-8",
@@ -722,6 +962,16 @@ class ScannerHandler(BaseHTTPRequestHandler):
             elif self.path == "/inventory/undo":
                 change = undo_inventory_add(data)
                 self._json({"ok": True, "inventory": asdict(change)})
+            elif self.path == "/inventory/set-quantity":
+                change = set_catalog_inventory_quantity(data)
+                self._json({"ok": True, "inventory": asdict(change)})
+            elif self.path == "/deck/check":
+                result = check_deck_list(
+                    str(data.get("deck_list", "")),
+                    catalog_path=CARD_CATALOG_PATH,
+                    inventory_path=INVENTORY_PATH,
+                )
+                self._json({"ok": True, **result})
             elif self.path == "/scan/timing":
                 row = save_scan_performance(data)
                 self._json(
@@ -864,16 +1114,20 @@ class ScannerHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the local card scanner")
+    parser = argparse.ArgumentParser(description="Run the local Pokémon collection app")
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--start-path",
+        choices=("/", "/legacy-webcam-scanner"),
+        default="/",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
-    print("Preparing the OCR reader for the first card...")
-    warm_up_ocr()
     inventory_database()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
-    url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"Card scanner is running at {url}")
+    url = f"http://127.0.0.1:{server.server_port}{args.start_path}"
+    print(f"Pokémon collection is running at {url}")
     print("Press Ctrl+C to stop it.")
     if not args.no_browser:
         threading.Timer(0.7, lambda: webbrowser.open(url)).start()

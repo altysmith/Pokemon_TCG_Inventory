@@ -8,6 +8,11 @@ if not exist "%PYTHON_EXE%" (
   pause
   exit /b 1
 )
+call "%~dp0_ensure_dependencies.bat" "%PYTHON_EXE%" "%~dp0requirements.txt"
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
 
 "%PYTHON_EXE%" -m card_api update
 pause

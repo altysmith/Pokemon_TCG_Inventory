@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS inventory_holdings (
 CREATE TABLE IF NOT EXISTS inventory_events (
     id INTEGER PRIMARY KEY,
     card_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK(action IN ('scan_add', 'undo')),
+    action TEXT NOT NULL CHECK(action IN ('scan_add', 'manual_set', 'undo')),
     quantity_delta INTEGER NOT NULL CHECK(quantity_delta != 0),
     source_scan_id TEXT,
     related_event_id INTEGER UNIQUE REFERENCES inventory_events(id),
@@ -62,6 +63,25 @@ class InventoryDatabase:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
             self._migrate_batch_quantities(connection)
+            self._migrate_manual_quantities(connection)
+
+    def create_backup(self) -> Path | None:
+        """Create a consistent, timestamped SQLite snapshot before a mutation."""
+        if not self.path.is_file():
+            return None
+        backup_directory = self.path.parent / "backups"
+        backup_directory.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        destination = backup_directory / f"{self.path.stem}-backup-{timestamp}.sqlite3"
+        with closing(sqlite3.connect(self.path, timeout=15)) as source:
+            with closing(sqlite3.connect(destination)) as backup:
+                source.backup(backup)
+                backup.commit()
+                integrity = backup.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            destination.unlink(missing_ok=True)
+            raise RuntimeError("The automatic inventory backup failed its integrity check.")
+        return destination
 
     @staticmethod
     def _migrate_batch_quantities(connection: sqlite3.Connection) -> None:
@@ -98,6 +118,48 @@ class InventoryDatabase:
                    related_event_id, created_at
             FROM inventory_events_legacy;
             DROP TABLE inventory_events_legacy;
+            CREATE INDEX idx_inventory_events_card
+                ON inventory_events(card_id, id DESC);
+            COMMIT;
+            """
+        )
+        connection.execute("PRAGMA foreign_keys = ON")
+
+    @staticmethod
+    def _migrate_manual_quantities(connection: sqlite3.Connection) -> None:
+        """Allow audited absolute quantity changes from catalog search rows."""
+        row = connection.execute(
+            """
+            SELECT sql FROM sqlite_master
+            WHERE type = 'table' AND name = 'inventory_events'
+            """
+        ).fetchone()
+        table_sql = str(row["sql"] if row else "")
+        if "manual_set" in table_sql:
+            return
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript(
+            """
+            BEGIN IMMEDIATE;
+            DROP INDEX IF EXISTS idx_inventory_events_card;
+            ALTER TABLE inventory_events RENAME TO inventory_events_before_manual;
+            CREATE TABLE inventory_events (
+                id INTEGER PRIMARY KEY,
+                card_id TEXT NOT NULL,
+                action TEXT NOT NULL CHECK(action IN ('scan_add', 'manual_set', 'undo')),
+                quantity_delta INTEGER NOT NULL CHECK(quantity_delta != 0),
+                source_scan_id TEXT,
+                related_event_id INTEGER UNIQUE REFERENCES inventory_events(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO inventory_events(
+                id, card_id, action, quantity_delta, source_scan_id,
+                related_event_id, created_at
+            )
+            SELECT id, card_id, action, quantity_delta, source_scan_id,
+                   related_event_id, created_at
+            FROM inventory_events_before_manual;
+            DROP TABLE inventory_events_before_manual;
             CREATE INDEX idx_inventory_events_card
                 ON inventory_events(card_id, id DESC);
             COMMIT;
@@ -165,6 +227,7 @@ class InventoryDatabase:
             raise ValueError("Inventory quantity must be between 1 and 99.")
         added_quantity = quantity
         self.initialize()
+        self.create_backup()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
@@ -200,11 +263,64 @@ class InventoryDatabase:
         """Compatibility helper for callers that add exactly one copy."""
         return self.add_cards(card_id, 1, scan_id=scan_id)
 
+    def set_quantity(self, card_id: str, quantity: int) -> InventoryChange:
+        """Set one canonical card quantity and retain the signed adjustment."""
+        value = card_id.strip()
+        if not value:
+            raise ValueError("A canonical card ID is required for inventory.")
+        if quantity < 0 or quantity > 9999:
+            raise ValueError("Inventory quantity must be between 0 and 9999.")
+        self.initialize()
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
+                (value,),
+            ).fetchone()
+        existing_quantity = int(existing["quantity"]) if existing else 0
+        if existing_quantity == quantity:
+            return InventoryChange(value, quantity, 0, 0)
+        self.create_backup()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
+                (value,),
+            ).fetchone()
+            prior_quantity = int(row["quantity"]) if row else 0
+            quantity_delta = quantity - prior_quantity
+            if quantity_delta == 0:
+                return InventoryChange(value, quantity, 0, 0)
+            if quantity:
+                connection.execute(
+                    """
+                    INSERT INTO inventory_holdings(card_id, quantity)
+                    VALUES (?, ?)
+                    ON CONFLICT(card_id) DO UPDATE SET
+                        quantity=excluded.quantity,
+                        updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (value, quantity),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM inventory_holdings WHERE card_id = ?",
+                    (value,),
+                )
+            cursor = connection.execute(
+                """
+                INSERT INTO inventory_events(card_id, action, quantity_delta)
+                VALUES (?, 'manual_set', ?)
+                """,
+                (value, quantity_delta),
+            )
+        return InventoryChange(value, quantity, int(cursor.lastrowid), quantity_delta)
+
     def undo_add(self, event_id: int) -> InventoryChange:
         if event_id <= 0:
             raise ValueError("A valid inventory event is required to undo an addition.")
         if not self.path.is_file():
             raise ValueError("The inventory database has not been created yet.")
+        self.create_backup()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             event = connection.execute(

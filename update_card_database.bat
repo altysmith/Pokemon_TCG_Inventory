@@ -8,6 +8,11 @@ if not exist "%PYTHON_EXE%" (
   pause
   exit /b 1
 )
+call "%~dp0_ensure_dependencies.bat" "%PYTHON_EXE%" "%~dp0requirements.txt"
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
 
 echo Checking Malie and rebuilding the local catalog from preserved raw JSON...
 "%PYTHON_EXE%" -m card_api sync
