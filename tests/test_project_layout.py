@@ -26,7 +26,11 @@ class ProjectLayoutTests(unittest.TestCase):
             },
         )
         launcher = (ROOT / "Start Pokemon Collection.bat").read_text(encoding="utf-8")
-        self.assertIn(r"tools\_ensure_dependencies.bat", launcher)
+        self.assertIn(r"tools\launch_collection_app.ps1", launcher)
+        app_launcher = (ROOT / "tools" / "launch_collection_app.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(r'_ensure_dependencies.bat', app_launcher)
 
     def test_legacy_outputs_default_outside_the_active_root(self) -> None:
         evidence = ROOT / "legacy_webcam_scanner" / "evidence"
