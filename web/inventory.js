@@ -3,6 +3,8 @@ const statusText = document.querySelector('#inventory_status');
 const searchInput = document.querySelector('#inventory_search');
 const sortSelect = document.querySelector('#inventory_sort');
 const setFilter = document.querySelector('#set_filter');
+const exportCsv = document.querySelector('#inventory_export_csv');
+const exportJson = document.querySelector('#inventory_export_json');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
 const categoryNavigation = document.querySelector('#category_navigation');
 const allButton = document.querySelector('[data-category="all"]');
@@ -191,6 +193,83 @@ async function inventoryRequest(url, payload) {
   const data = await response.json();
   if (!response.ok || !data.ok) throw new Error(data.error || 'The inventory request could not be completed.');
   return data;
+}
+
+const COLLECTION_EXPORT_FIELDS = [
+  'schema', 'schema_version', 'card_id', 'quantity', 'name', 'set_name', 'set_code',
+  'number', 'printed_total', 'card_type', 'card_subtype', 'types', 'regulation_mark',
+  'rarity', 'date_added', 'date_updated',
+];
+
+function collectionExportPayload(items, exportedAt = new Date().toISOString()) {
+  const cards = items.map((item) => ({
+    card_id: item.id,
+    quantity: Number(item.quantity),
+    name: item.name || '',
+    set_name: item.set_name || '',
+    set_code: item.set_code || '',
+    number: item.number || '',
+    printed_total: item.printed_total || '',
+    card_type: item.card_type || '',
+    card_subtype: item.card_subtype || '',
+    types: [...(item.types || [])],
+    regulation_mark: item.regulation_mark || '',
+    rarity: item.rarity || '',
+    date_added: item.date_added || '',
+    date_updated: item.date_updated || '',
+  }));
+  return {
+    schema: 'pokemon-card-collection',
+    schema_version: 1,
+    exported_at: exportedAt,
+    application: 'Pokemon Card Collection',
+    summary: {
+      unique_cards: cards.length,
+      total_copies: cards.reduce((sum, card) => sum + card.quantity, 0),
+    },
+    cards,
+  };
+}
+
+function csvValue(value) {
+  const text = String(value ?? '');
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function collectionExportCsv(payload) {
+  const rows = payload.cards.map((card) => ({
+    schema: payload.schema,
+    schema_version: payload.schema_version,
+    ...card,
+    types: card.types.join('|'),
+  }));
+  return [
+    COLLECTION_EXPORT_FIELDS.join(','),
+    ...rows.map((row) => COLLECTION_EXPORT_FIELDS.map((field) => csvValue(row[field])).join(',')),
+  ].join('\r\n') + '\r\n';
+}
+
+function exportFilename(extension) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `pokemon-collection-${value.year}${value.month}${value.day}-${value.hour}${value.minute}${value.second}.${extension}`;
+}
+
+function prepareCollectionExport(event, format) {
+  const payload = collectionExportPayload(state.items);
+  const content = format === 'json'
+    ? `${JSON.stringify(payload, null, 2)}\n`
+    : `\ufeff${collectionExportCsv(payload)}`;
+  const type = format === 'json' ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8';
+  const url = URL.createObjectURL(new Blob([content], {type}));
+  event.currentTarget.href = url;
+  event.currentTarget.download = exportFilename(format);
+  statusText.textContent = `${format.toUpperCase()} export downloaded: ${payload.summary.unique_cards} unique cards, ${payload.summary.total_copies} total copies.`;
+  statusText.hidden = false;
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function collectorNumber(card) {
@@ -1066,6 +1145,8 @@ searchInput.addEventListener('input', () => {
 });
 sortSelect.addEventListener('change', () => { state.sort = sortSelect.value; render(); });
 setFilter.addEventListener('change', () => { state.set = setFilter.value; render(); });
+exportCsv.addEventListener('click', (event) => prepareCollectionExport(event, 'csv'));
+exportJson.addEventListener('click', (event) => prepareCollectionExport(event, 'json'));
 drawerClose.addEventListener('click', closeDrawer);
 document.querySelector('#drawer_image_button').addEventListener('click', (event) => {
   const card = selectedCard();
