@@ -5,6 +5,18 @@ const summary = document.querySelector('#deck_summary');
 const statusText = document.querySelector('#deck_status');
 const errorsContainer = document.querySelector('#deck_errors');
 const resultsContainer = document.querySelector('#deck_results');
+const libraryCards = document.querySelector('#deck_library_cards');
+const libraryCount = document.querySelector('#deck_library_count');
+const libraryStatus = document.querySelector('#deck_library_status');
+const savePanel = document.querySelector('#deck_save_panel');
+const deckName = document.querySelector('#deck_name');
+const saveButton = document.querySelector('#deck_save');
+const saveStatus = document.querySelector('#deck_save_status');
+
+let savedDecks = [];
+let renamingDeckId = 0;
+let currentSavedDeckId = 0;
+let lastCheckedDeckList = '';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -17,6 +29,187 @@ function escapeHtml(value) {
 
 function printingLabel(card) {
   return `${card.set_code || '—'} · ${card.number || '—'}`;
+}
+
+function tcgplayerSearchUrl(card) {
+  const searchTerms = [card.name, card.set_code, card.number].filter(Boolean).join(' ');
+  const parameters = new URLSearchParams({
+    productLineName: 'pokemon',
+    productTypeName: 'Cards',
+    q: searchTerms,
+    view: 'grid',
+  });
+  return `https://www.tcgplayer.com/search/pokemon/product?${parameters.toString()}`;
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+  if (!response.ok || !data.ok) throw new Error(data.error || 'The request could not be completed.');
+  return data;
+}
+
+function savedDeckDate(value) {
+  const parsed = new Date(`${String(value).replace(' ', 'T')}Z`);
+  if (Number.isNaN(parsed.getTime())) return value || '';
+  return new Intl.DateTimeFormat(undefined, {month: 'short', day: 'numeric', year: 'numeric'}).format(parsed);
+}
+
+function setLibraryStatus(message, state = '') {
+  libraryStatus.textContent = message;
+  libraryStatus.className = `deck-library-status ${state ? `is-${state}` : ''}`;
+}
+
+function renderDeckLibrary() {
+  libraryCount.textContent = `${savedDecks.length} ${savedDecks.length === 1 ? 'deck' : 'decks'}`;
+  if (!savedDecks.length) {
+    libraryCards.innerHTML = `
+      <div class="deck-library-empty">
+        <strong>No saved decks yet.</strong>
+        <span>Check a deck below, give it a name, and save it here.</span>
+      </div>`;
+    return;
+  }
+  libraryCards.innerHTML = savedDecks.map(deck => {
+    if (deck.id === renamingDeckId) {
+      return `
+        <article class="deck-library-card is-renaming">
+          <form class="deck-library-rename" data-deck-id="${deck.id}">
+            <label for="rename_deck_${deck.id}">New deck name</label>
+            <input id="rename_deck_${deck.id}" name="name" maxlength="80" value="${escapeHtml(deck.name)}" required>
+            <div><button type="submit">Save name</button><button class="is-secondary" type="button" data-cancel-rename>Cancel</button></div>
+          </form>
+        </article>`;
+    }
+    return `
+      <article class="deck-library-card ${deck.id === currentSavedDeckId ? 'is-current' : ''}">
+        <button class="deck-library-open" type="button" data-open-deck="${deck.id}">
+          <small>SAVED DECK</small>
+          <strong>${escapeHtml(deck.name)}</strong>
+          <span>${deck.card_count} cards · ${deck.unique_entries} unique entries</span>
+          <em>Updated ${escapeHtml(savedDeckDate(deck.updated_at))}</em>
+        </button>
+        <div class="deck-library-card-actions">
+          <button type="button" data-rename-deck="${deck.id}">Rename</button>
+          <button class="is-remove" type="button" data-remove-deck="${deck.id}">Remove</button>
+        </div>
+      </article>`;
+  }).join('');
+
+  document.querySelectorAll('[data-open-deck]').forEach(button => {
+    button.addEventListener('click', () => openSavedDeck(Number(button.dataset.openDeck)));
+  });
+  document.querySelectorAll('[data-rename-deck]').forEach(button => {
+    button.addEventListener('click', () => {
+      renamingDeckId = Number(button.dataset.renameDeck);
+      renderDeckLibrary();
+      document.querySelector(`#rename_deck_${renamingDeckId}`)?.focus();
+    });
+  });
+  document.querySelectorAll('[data-remove-deck]').forEach(button => {
+    button.addEventListener('click', () => removeSavedDeck(Number(button.dataset.removeDeck)));
+  });
+  document.querySelectorAll('[data-cancel-rename]').forEach(button => {
+    button.addEventListener('click', () => {
+      renamingDeckId = 0;
+      renderDeckLibrary();
+    });
+  });
+  document.querySelectorAll('.deck-library-rename').forEach(renameForm => {
+    renameForm.addEventListener('submit', event => renameSavedDeck(event, renameForm));
+  });
+}
+
+async function loadSavedDecks(message = '') {
+  try {
+    const data = await requestJson('/decks');
+    savedDecks = data.decks;
+    renderDeckLibrary();
+    setLibraryStatus(message || (savedDecks.length ? 'Select a deck to open and recheck it.' : 'Your library is ready for its first deck.'), message ? 'saved' : '');
+  } catch (error) {
+    setLibraryStatus(error.message, 'error');
+  }
+}
+
+async function renameSavedDeck(event, renameForm) {
+  event.preventDefault();
+  const id = Number(renameForm.dataset.deckId);
+  const name = new FormData(renameForm).get('name');
+  try {
+    const data = await requestJson('/decks/rename', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id, name}),
+    });
+    if (currentSavedDeckId === id) deckName.value = data.deck.name;
+    renamingDeckId = 0;
+    await loadSavedDecks(`Renamed to ${data.deck.name}.`);
+  } catch (error) {
+    setLibraryStatus(error.message, 'error');
+  }
+}
+
+async function removeSavedDeck(id) {
+  const deck = savedDecks.find(item => item.id === id);
+  if (!deck || !window.confirm(`Remove ${deck.name} from your saved deck library?`)) return;
+  try {
+    await requestJson('/decks/remove', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id}),
+    });
+    if (currentSavedDeckId === id) {
+      currentSavedDeckId = 0;
+      savePanel.hidden = true;
+    }
+    await loadSavedDecks(`${deck.name} was removed from the library.`);
+  } catch (error) {
+    setLibraryStatus(error.message, 'error');
+  }
+}
+
+function configureSavePanel(data) {
+  if (data.errors.length) {
+    savePanel.hidden = true;
+    return;
+  }
+  savePanel.hidden = false;
+  const saved = savedDecks.find(deck => deck.id === currentSavedDeckId);
+  if (saved) {
+    deckName.value = saved.name;
+    deckName.disabled = true;
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saved in library';
+    saveStatus.textContent = 'This saved list was rechecked against your current inventory.';
+    return;
+  }
+  deckName.disabled = false;
+  saveButton.disabled = false;
+  saveButton.textContent = 'Save to deck library';
+  saveStatus.textContent = 'Saving this list will not change or reserve inventory cards.';
+}
+
+async function saveCheckedDeck() {
+  if (!lastCheckedDeckList || deckList.value.trim() !== lastCheckedDeckList) {
+    saveStatus.textContent = 'Check this deck again before saving it.';
+    return;
+  }
+  saveButton.disabled = true;
+  saveButton.textContent = 'Saving…';
+  try {
+    const data = await requestJson('/decks/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: deckName.value, deck_list: lastCheckedDeckList}),
+    });
+    currentSavedDeckId = data.deck.id;
+    await loadSavedDecks(`${data.deck.name} was saved.`);
+    configureSavePanel({errors: []});
+  } catch (error) {
+    saveButton.disabled = false;
+    saveButton.textContent = 'Save to deck library';
+    saveStatus.textContent = error.message;
+  }
 }
 
 function renderSummary(data) {
@@ -154,6 +347,9 @@ function renderResults(items, ignoredBasicEnergy = []) {
                   <strong>Same-name substitute available</strong>
                   <span>${substitutes.map(card => `${card.quantity}× ${escapeHtml(printingLabel(card))}`).join(' · ')}</span>
                 </div>` : ''}
+              <a class="deck-tcgplayer-link" href="${escapeHtml(tcgplayerSearchUrl(item))}" target="_blank" rel="noopener noreferrer" aria-label="Find ${escapeHtml(item.name)} on TCGplayer">
+                Find on TCGplayer <span aria-hidden="true">↗</span>
+              </a>
             </div>
           </article>`;
       }).join('')
@@ -209,31 +405,66 @@ function renderResults(items, ignoredBasicEnergy = []) {
   selectDeckItem(firstMissing >= 0 ? firstMissing : 0);
 }
 
-form.addEventListener('submit', async event => {
-  event.preventDefault();
+async function checkCurrentDeck() {
   submitButton.disabled = true;
   submitButton.textContent = 'Checking…';
   statusText.textContent = 'Comparing the deck with your local inventory…';
   summary.hidden = true;
+  savePanel.hidden = true;
   errorsContainer.hidden = true;
   resultsContainer.innerHTML = '';
   try {
-    const response = await fetch('/deck/check', {
+    const checkedDeckList = deckList.value.trim();
+    const data = await requestJson('/deck/check', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({deck_list: deckList.value}),
+      body: JSON.stringify({deck_list: checkedDeckList}),
     });
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || 'Deck check failed.');
+    lastCheckedDeckList = checkedDeckList;
     renderSummary(data);
     renderErrors(data.errors);
     renderResults(data.items, data.ignored_basic_energy || []);
+    configureSavePanel(data);
     const ignored = data.summary.ignored_basic_energy_cards || 0;
     statusText.textContent = `${data.summary.unique_lines} deck entries checked. ${ignored ? `${ignored} Basic Energy ${ignored === 1 ? 'card was' : 'cards were'} ignored. ` : ''}Your collection was not changed.`;
   } catch (error) {
+    lastCheckedDeckList = '';
     statusText.textContent = error.message;
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = 'Check my inventory';
   }
+}
+
+async function openSavedDeck(id) {
+  const deck = savedDecks.find(item => item.id === id);
+  if (!deck) return;
+  currentSavedDeckId = id;
+  deckList.value = deck.deck_list;
+  deckName.value = deck.name;
+  renderDeckLibrary();
+  form.scrollIntoView({behavior: 'smooth', block: 'start'});
+  await checkCurrentDeck();
+}
+
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  await checkCurrentDeck();
 });
+
+deckList.addEventListener('input', () => {
+  if (deckList.value.trim() === lastCheckedDeckList) return;
+  currentSavedDeckId = 0;
+  savePanel.hidden = true;
+  renderDeckLibrary();
+});
+
+saveButton.addEventListener('click', saveCheckedDeck);
+deckName.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    saveCheckedDeck();
+  }
+});
+
+loadSavedDecks();

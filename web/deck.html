@@ -37,6 +37,19 @@
           <a class="catalog-collection-link" href="/inventory">View collection</a>
         </header>
 
+        <section class="deck-library-panel" aria-labelledby="deck_library_heading">
+          <header>
+            <div>
+              <span>YOUR DECKS</span>
+              <h2 id="deck_library_heading">Saved deck library</h2>
+              <p>Open any saved list to check it against your collection as it exists today.</p>
+            </div>
+            <strong id="deck_library_count">0 decks</strong>
+          </header>
+          <p id="deck_library_status" class="deck-library-status" role="status">Loading saved decks…</p>
+          <div id="deck_library_cards" class="deck-library-cards"></div>
+        </section>
+
         <section class="deck-import-panel">
           <form id="deck_form">
             <label for="deck_list">Deck list</label>
@@ -49,6 +62,14 @@
         </section>
 
         <section id="deck_summary" class="deck-summary" hidden aria-live="polite"></section>
+        <section id="deck_save_panel" class="deck-save-panel" hidden>
+          <div>
+            <label for="deck_name">Deck name</label>
+            <input id="deck_name" type="text" maxlength="80" autocomplete="off" placeholder="Example: Raging Bolt">
+          </div>
+          <button id="deck_save" class="catalog-search-button" type="button">Save to deck library</button>
+          <p id="deck_save_status" role="status">Saving a deck never changes or reserves inventory cards.</p>
+        </section>
         <p id="deck_status" class="deck-status" role="status">Paste a deck list when you are ready.</p>
         <section id="deck_errors" class="deck-errors" hidden></section>
         <section id="deck_results" class="deck-results" aria-live="polite"></section>

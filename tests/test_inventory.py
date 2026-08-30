@@ -94,6 +94,68 @@ class InventoryDatabaseTests(unittest.TestCase):
         self.assertEqual((unchanged.event_id, unchanged.quantity_delta), (0, 0))
         self.assertEqual(len(backups_after), len(backups_before))
 
+    def test_bulk_quantities_use_one_backup_and_one_transaction(self) -> None:
+        self.database.set_quantities({"card-1": 2, "card-2": 4})
+        backups_before = tuple((self.path.parent / "backups").glob("*.sqlite3"))
+
+        changes = self.database.set_quantities({"card-1": 7, "card-2": 0, "card-3": 1})
+        backups_after = tuple((self.path.parent / "backups").glob("*.sqlite3"))
+
+        self.assertEqual(len(backups_after), len(backups_before) + 1)
+        self.assertEqual(
+            [(change.card_id, change.quantity, change.quantity_delta) for change in changes],
+            [("card-1", 7, 5), ("card-2", 0, -4), ("card-3", 1, 1)],
+        )
+        self.assertEqual(
+            [(holding.card_id, holding.quantity) for holding in self.database.holdings()],
+            [("card-1", 7), ("card-3", 1)],
+        )
+
+    def test_optional_locations_allocate_owned_copies_without_changing_totals(self) -> None:
+        self.database.set_quantity("card-1", 6)
+        first = self.database.create_location("Deck Box 1")
+        second = self.database.create_location("Trade Binder")
+
+        first_change = self.database.set_location_quantity("card-1", first.id, 2)
+        second_change = self.database.set_location_quantity("card-1", second.id, 3)
+        renamed = self.database.rename_location(second.id, "Deck Box 2")
+
+        self.assertEqual(self.database.quantity("card-1"), 6)
+        self.assertEqual((first_change.assigned_quantity, first_change.unassigned_quantity), (2, 4))
+        self.assertEqual((second_change.assigned_quantity, second_change.unassigned_quantity), (5, 1))
+        self.assertEqual(renamed.name, "Deck Box 2")
+        self.assertEqual(
+            [(item.location_id, item.card_id, item.quantity) for item in self.database.location_allocations()],
+            [(first.id, "card-1", 2), (second.id, "card-1", 3)],
+        )
+
+    def test_locations_prevent_double_allocation_and_invalid_total_reduction(self) -> None:
+        self.database.set_quantity("card-1", 5)
+        first = self.database.create_location("Deck Box 1")
+        second = self.database.create_location("Deck Box 2")
+        self.database.set_location_quantity("card-1", first.id, 3)
+
+        with self.assertRaisesRegex(ValueError, "Only 2 copies"):
+            self.database.set_location_quantity("card-1", second.id, 3)
+        with self.assertRaisesRegex(ValueError, "assigned to locations"):
+            self.database.set_quantity("card-1", 2)
+        with self.assertRaisesRegex(ValueError, "assigned to locations"):
+            self.database.set_quantities({"card-1": 2})
+
+        self.assertEqual(self.database.quantity("card-1"), 5)
+
+    def test_removing_location_returns_copies_to_unassigned_without_removing_cards(self) -> None:
+        self.database.set_quantity("card-1", 4)
+        location = self.database.create_location("Deck Box 1")
+        self.database.set_location_quantity("card-1", location.id, 3)
+
+        released = self.database.remove_location(location.id)
+
+        self.assertEqual(released, 3)
+        self.assertEqual(self.database.quantity("card-1"), 4)
+        self.assertEqual(self.database.locations(), ())
+        self.assertEqual(self.database.location_allocations(), ())
+
     def test_database_is_independent_of_catalog_tables(self) -> None:
         connection = sqlite3.connect(self.path)
         try:
@@ -108,6 +170,8 @@ class InventoryDatabaseTests(unittest.TestCase):
 
         self.assertIn("inventory_holdings", tables)
         self.assertIn("inventory_events", tables)
+        self.assertIn("inventory_locations", tables)
+        self.assertIn("inventory_location_holdings", tables)
         self.assertNotIn("cards", tables)
 
     def test_iteration_7_database_migrates_without_losing_inventory(self) -> None:

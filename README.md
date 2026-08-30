@@ -122,10 +122,37 @@ The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuild
 
 Open **My Collection** to view the digital binder. The persistent sidebar filters the same owned records by Pokemon type, Trainer subtype, Energy kind, or ACE SPEC status, while **Typing**, **A–Z**, and **Set** independently determine how those records are organized. Search matches card names, set names/codes, collector numbers, categories, and ACE SPEC. Set and sort controls narrow or reorder the current view. **Recently added** uses the permanent inventory timestamp. Click card artwork for the full-screen inspection view, or click its name/details to open the quantity drawer without losing the binder position. The detail drawer can set an exact quantity, confirms before removing the final copy, and saves through the same audited inventory endpoint used by catalog search.
 
-The Collection toolbar provides **CSV** and **JSON** exports. Both use the versioned `pokemon-card-collection` schema and preserve immutable canonical card IDs, exact quantities, readable card identity fields, and inventory timestamps. JSON is the canonical transfer/restore representation because it retains structured fields and export metadata. CSV contains the same card records in an Excel-friendly UTF-8 table for sorting or editing. Both formats already have non-mutating parsers and validation tests; a later import screen can preview either file before offering an explicit merge or replacement operation.
+The Collection toolbar provides **CSV** and **JSON** exports. Both use the versioned `pokemon-card-collection` schema and preserve immutable canonical card IDs, exact quantities, readable card identity fields, and inventory timestamps. JSON is the canonical transfer/restore representation because it retains structured fields and export metadata. CSV contains the same card records in an Excel-friendly UTF-8 table for sorting or editing.
+
+Use **Import** beside those export buttons to select either format. Import is always preview-first and shows summary counts for additions, quantity changes, removals, unchanged cards, and the resulting total. Only affected cards are listed, with search, change-type filtering, and 75-row pagination for thousand-card collections. **Update listed cards** changes only rows present in the file. **Restore / replace** makes the collection exactly match the file and therefore previews cards that would be removed. Applying requires confirmation, revalidates every canonical ID against the local English catalog, rejects stale previews if the collection changed, and performs all edits in one transaction after creating one integrity-checked database backup. Normal one-card corrections remain available in real time through the collection detail drawer.
 
 - `GET /inventory/export.json` downloads the structured collection export.
 - `GET /inventory/export.csv` downloads the spreadsheet-compatible collection export.
+- `POST /inventory/import/preview` validates and compares an export without changing inventory.
+- `POST /inventory/import/apply` revalidates and applies the confirmed preview.
+
+### Saved deck library
+
+The **Deck Check** page includes an optional saved deck library. After a clean deck list has been checked, give it a name and select **Save to deck library**. Opening a saved deck restores the original list and immediately checks it against the collection as it exists now, so readiness is never treated as a permanent or potentially stale result. Saved decks can be renamed or removed from the library.
+
+### Optional physical locations
+
+The Collection sidebar can organize owned copies into optional locations such as **Deck Box 1**, **Trade Binder**, or **Shelf**. Existing and newly added cards begin in the virtual **Unassigned** location. Open a card's detail drawer to assign any number of its owned copies to one or more locations. **All cards** always shows the complete collection; selecting a location shows only its assigned copies and uses that location's quantities on the card badges.
+
+Location assignments never create, remove, or reserve collection records. The combined quantity assigned across locations cannot exceed the card's total owned quantity, and the total owned quantity cannot be lowered below the number already assigned. Removing a location returns all of its assigned copies to **Unassigned** without changing collection totals. Location edits create the same automatic SQLite backups as other collection edits.
+
+- `GET /inventory/locations` lists active locations and aggregate counts.
+- `POST /inventory/locations/create` creates an optional location.
+- `POST /inventory/locations/rename` renames a location.
+- `POST /inventory/locations/remove` archives a location and releases its assignments.
+- `POST /inventory/locations/set-quantity` changes one card's quantity in one location.
+
+Decks are stored separately in `user_data/decks.sqlite3`. Saving, opening, renaming, or removing a deck never changes, reserves, or moves inventory quantities. Removed decks are archived internally instead of having their stored list immediately destroyed. Both personal SQLite databases remain local and are ignored by Git.
+
+- `GET /decks` lists active saved decks.
+- `POST /decks/save` saves a validated deck list.
+- `POST /decks/rename` changes only the saved deck name.
+- `POST /decks/remove` archives a saved deck without changing inventory.
 
 The 26 saved webcam crops were re-run offline after installing RapidOCR and adding joined-language cleanup. Exact set-code reads improved from 1/26 to 21/26, card-number reads from 3/26 to 25/26, and set-total reads from 4/25 to 23/25. Regulation marks remained unreliable at 1/20, so that field stays editable and must not be used for automatic card identity or sorting.
 

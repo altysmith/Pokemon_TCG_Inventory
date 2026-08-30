@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import hashlib
 import io
 import importlib.util
 import json
@@ -31,11 +32,14 @@ from card_api.database import CatalogDatabase
 from card_scanner.lookup import CardInfo
 from collection_transfer import (
     build_collection_export,
+    parse_collection_csv,
+    parse_collection_json,
     render_collection_csv,
     render_collection_json,
 )
-from deck_checker import check_deck_list
-from inventory import InventoryChange, InventoryDatabase
+from deck_checker import check_deck_list, parse_deck_list
+from inventory import InventoryChange, InventoryDatabase, InventoryLocation, InventoryLocationChange
+from saved_decks import SavedDeck, SavedDeckDatabase
 
 
 ROOT = Path(__file__).resolve().parent
@@ -58,6 +62,12 @@ INVENTORY_PATH = Path(
     os.environ.get(
         "INVENTORY_DATABASE_PATH",
         ROOT / "user_data" / "inventory.sqlite3",
+    )
+)
+DECK_LIBRARY_PATH = Path(
+    os.environ.get(
+        "DECK_LIBRARY_DATABASE_PATH",
+        ROOT / "user_data" / "decks.sqlite3",
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
@@ -491,6 +501,71 @@ def inventory_database() -> InventoryDatabase:
     return database
 
 
+def saved_deck_database() -> SavedDeckDatabase:
+    database = SavedDeckDatabase(DECK_LIBRARY_PATH)
+    database.initialize()
+    return database
+
+
+def saved_decks_snapshot() -> dict:
+    decks = [asdict(deck) for deck in saved_deck_database().decks()]
+    return {"decks": decks, "count": len(decks), "inventory_changed": False}
+
+
+def _saved_deck_name(data: dict) -> str:
+    name = " ".join(str(data.get("name", "")).split())
+    if not name:
+        raise ValueError("Give this deck a name before saving it.")
+    if len(name) > 80:
+        raise ValueError("Deck names must be 80 characters or fewer.")
+    return name
+
+
+def _saved_deck_id(data: dict, *, required: bool = True) -> int:
+    value = data.get("id", 0)
+    if isinstance(value, bool):
+        value = 0
+    try:
+        deck_id = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("A valid saved deck is required.") from exc
+    if required and deck_id <= 0:
+        raise ValueError("A valid saved deck is required.")
+    return max(0, deck_id)
+
+
+def save_saved_deck(data: dict) -> SavedDeck:
+    name = _saved_deck_name(data)
+    deck_list = str(data.get("deck_list", "")).strip()
+    if not deck_list:
+        raise ValueError("Paste and check a deck list before saving it.")
+    if len(deck_list) > 100_000:
+        raise ValueError("That deck list is too large to save.")
+    entries, errors = parse_deck_list(deck_list)
+    if errors:
+        raise ValueError("Fix the lines needing review before saving this deck.")
+    if not entries:
+        raise ValueError("No cards were found in that deck list.")
+    return saved_deck_database().save(
+        name,
+        deck_list,
+        sum(entry.quantity for entry in entries),
+        len(entries),
+        deck_id=_saved_deck_id(data, required=False),
+    )
+
+
+def rename_saved_deck(data: dict) -> SavedDeck:
+    return saved_deck_database().rename(
+        _saved_deck_id(data),
+        _saved_deck_name(data),
+    )
+
+
+def remove_saved_deck(data: dict) -> None:
+    saved_deck_database().remove(_saved_deck_id(data))
+
+
 STANDARD_REGULATION_MARKS = ("H", "I", "J")
 ACE_SPEC_RARITY = "ACE_SPEC_RARE"
 CATALOG_CARD_CATEGORIES = {
@@ -654,6 +729,78 @@ def set_catalog_inventory_quantity(data: dict) -> InventoryChange:
     return inventory_database().set_quantity(card_id, quantity)
 
 
+def _inventory_location_id(data: dict) -> int:
+    value = data.get("location_id", 0)
+    if isinstance(value, bool):
+        value = 0
+    try:
+        location_id = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("A valid inventory location is required.") from exc
+    if location_id <= 0:
+        raise ValueError("A valid inventory location is required.")
+    return location_id
+
+
+def create_inventory_location(data: dict) -> InventoryLocation:
+    return inventory_database().create_location(str(data.get("name", "")))
+
+
+def rename_inventory_location(data: dict) -> InventoryLocation:
+    return inventory_database().rename_location(
+        _inventory_location_id(data),
+        str(data.get("name", "")),
+    )
+
+
+def remove_inventory_location(data: dict) -> int:
+    return inventory_database().remove_location(_inventory_location_id(data))
+
+
+def set_inventory_location_quantity(data: dict) -> InventoryLocationChange:
+    card_id = str(data.get("card_id", "")).strip()
+    quantity = data.get("quantity")
+    if isinstance(quantity, bool):
+        quantity = None
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Location quantity must be a whole number.") from exc
+    return inventory_database().set_location_quantity(
+        card_id,
+        _inventory_location_id(data),
+        quantity,
+    )
+
+
+def inventory_locations_snapshot() -> dict:
+    database = inventory_database()
+    holdings = database.holdings()
+    allocations = database.location_allocations()
+    total_by_card = {holding.card_id: holding.quantity for holding in holdings}
+    assigned_by_card: dict[str, int] = {}
+    for allocation in allocations:
+        assigned_by_card[allocation.card_id] = (
+            assigned_by_card.get(allocation.card_id, 0) + allocation.quantity
+        )
+    unassigned = {
+        card_id: quantity - assigned_by_card.get(card_id, 0)
+        for card_id, quantity in total_by_card.items()
+    }
+    return {
+        "locations": [asdict(location) for location in database.locations()],
+        "unassigned": {
+            "unique_cards": sum(quantity > 0 for quantity in unassigned.values()),
+            "total_copies": sum(max(0, quantity) for quantity in unassigned.values()),
+        },
+        "all": {
+            "unique_cards": len(holdings),
+            "total_copies": sum(total_by_card.values()),
+        },
+        "inventory_changed": False,
+    }
+
+
 INVENTORY_SORTS = {"name", "set_number", "category", "subtype", "element"}
 NON_POKEMON_TYPE_ORDER = {
     "Item": 0,
@@ -699,13 +846,38 @@ def _inventory_sort_key(item: dict, selected_sort: str) -> tuple:
 def inventory_snapshot(sort_by: str = "name") -> dict:
     """Join user quantities to rebuildable catalog details for read-only display."""
     selected_sort = sort_by if sort_by in INVENTORY_SORTS else "name"
-    holdings = inventory_database().holdings()
+    database = inventory_database()
+    holdings = database.holdings()
+    locations = database.locations()
+    allocations = database.location_allocations()
+    allocations_by_card: dict[str, dict[str, int]] = {}
+    for allocation in allocations:
+        allocations_by_card.setdefault(allocation.card_id, {})[
+            str(allocation.location_id)
+        ] = allocation.quantity
+    assigned_by_card = {
+        card_id: sum(card_allocations.values())
+        for card_id, card_allocations in allocations_by_card.items()
+    }
+    location_payload = [asdict(location) for location in locations]
+    unassigned_payload = {
+        "unique_cards": sum(
+            holding.quantity - assigned_by_card.get(holding.card_id, 0) > 0
+            for holding in holdings
+        ),
+        "total_copies": sum(
+            max(0, holding.quantity - assigned_by_card.get(holding.card_id, 0))
+            for holding in holdings
+        ),
+    }
     if not holdings:
         return {
             "items": [],
             "unique_cards": 0,
             "total_copies": 0,
             "sort": selected_sort,
+            "locations": location_payload,
+            "unassigned": unassigned_payload,
         }
     if not CARD_CATALOG_PATH.is_file():
         raise ValueError("Local card catalog is unavailable.")
@@ -745,6 +917,9 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
         types_by_card[row["card_id"]].append(row["type"])
     for item in items:
         item["quantity"] = quantities[item["id"]]
+        item["locations"] = allocations_by_card.get(item["id"], {})
+        item["assigned_quantity"] = assigned_by_card.get(item["id"], 0)
+        item["unassigned_quantity"] = item["quantity"] - item["assigned_quantity"]
         item.update(holding_dates[item["id"]])
         item["types"] = types_by_card[item["id"]]
         item["display_subtype"] = (
@@ -761,6 +936,160 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
         "unique_cards": len(items),
         "total_copies": sum(item["quantity"] for item in items),
         "sort": selected_sort,
+        "locations": location_payload,
+        "unassigned": unassigned_payload,
+    }
+
+
+def _parse_inventory_import(data: dict) -> tuple[dict, str]:
+    filename = Path(str(data.get("filename", "")).strip()).name
+    content = data.get("content", "")
+    if not filename or not isinstance(content, str) or not content.strip():
+        raise ValueError("Choose a non-empty CSV or JSON collection export.")
+    suffix = Path(filename).suffix.casefold()
+    if suffix == ".json":
+        payload = parse_collection_json(content)
+    elif suffix == ".csv":
+        payload = parse_collection_csv(content)
+    else:
+        raise ValueError("Collection imports must use a .json or .csv file.")
+    return payload, filename
+
+
+def _catalog_cards_for_import(card_ids: set[str]) -> dict[str, dict]:
+    if not card_ids:
+        return {}
+    if not CARD_CATALOG_PATH.is_file():
+        raise ValueError("Local card catalog is unavailable.")
+    found: dict[str, dict] = {}
+    with CatalogDatabase(CARD_CATALOG_PATH).connect() as connection:
+        ordered_ids = sorted(card_ids)
+        for start in range(0, len(ordered_ids), 400):
+            batch = ordered_ids[start : start + 400]
+            placeholders = ",".join("?" for _ in batch)
+            rows = connection.execute(
+                f"""
+                SELECT c.id, c.name, c.number, COALESCE(c.printed_total, '') AS printed_total,
+                       COALESCE(c.primary_image_url, '') AS image_url,
+                       s.name AS set_name, s.code AS set_code
+                FROM cards c JOIN sets s ON s.id = c.set_id
+                WHERE c.language = 'en-US' AND c.id IN ({placeholders})
+                """,
+                batch,
+            ).fetchall()
+            found.update({str(row["id"]): dict(row) for row in rows})
+    return found
+
+
+def _inventory_import_fingerprint(
+    mode: str,
+    imported: dict[str, int],
+    current: dict[str, int],
+) -> str:
+    encoded = json.dumps(
+        {
+            "mode": mode,
+            "imported": sorted(imported.items()),
+            "current": sorted(current.items()),
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def inventory_import_preview(data: dict) -> dict:
+    """Validate an export and summarize exact changes without mutating inventory."""
+    mode = str(data.get("mode", "update")).strip().casefold()
+    if mode not in {"update", "replace"}:
+        raise ValueError("Choose Update listed cards or Restore/replace.")
+    payload, filename = _parse_inventory_import(data)
+    imported_cards = {card["card_id"]: card for card in payload["cards"]}
+    imported = {card_id: card["quantity"] for card_id, card in imported_cards.items()}
+    current = {
+        holding.card_id: holding.quantity
+        for holding in inventory_database().holdings()
+    }
+    catalog = _catalog_cards_for_import(set(imported) | (set(current) if mode == "replace" else set()))
+    unknown_ids = sorted(set(imported) - set(catalog))
+    errors = [
+        f"{imported_cards[card_id].get('name') or card_id}: canonical card ID is not in the local English catalog."
+        for card_id in unknown_ids
+    ]
+
+    considered = set(imported) | (set(current) if mode == "replace" else set())
+    counts = {"additions": 0, "quantity_changes": 0, "removals": 0, "unchanged": 0}
+    changes = []
+    for card_id in considered:
+        old_quantity = current.get(card_id, 0)
+        new_quantity = imported.get(card_id, 0 if mode == "replace" else old_quantity)
+        if old_quantity == new_quantity:
+            counts["unchanged"] += 1
+            continue
+        if old_quantity == 0:
+            change_type = "addition"
+            counts["additions"] += 1
+        elif new_quantity == 0:
+            change_type = "removal"
+            counts["removals"] += 1
+        else:
+            change_type = "quantity_change"
+            counts["quantity_changes"] += 1
+        details = catalog.get(card_id) or imported_cards.get(card_id, {})
+        changes.append(
+            {
+                "card_id": card_id,
+                "name": details.get("name", card_id),
+                "set_name": details.get("set_name", ""),
+                "set_code": details.get("set_code", ""),
+                "number": details.get("number", ""),
+                "printed_total": details.get("printed_total", ""),
+                "image_url": details.get("image_url", ""),
+                "old_quantity": old_quantity,
+                "new_quantity": new_quantity,
+                "change": change_type,
+            }
+        )
+    changes.sort(key=lambda item: (item["change"], str(item["name"]).casefold(), item["card_id"]))
+    total_before = sum(current.values())
+    total_after = (
+        sum(imported.values())
+        if mode == "replace"
+        else total_before + sum(item["new_quantity"] - item["old_quantity"] for item in changes)
+    )
+    return {
+        "filename": filename,
+        "mode": mode,
+        "preview_id": _inventory_import_fingerprint(mode, imported, current),
+        "can_apply": not errors,
+        "errors": errors,
+        "summary": {
+            **counts,
+            "affected_cards": len(changes),
+            "imported_cards": len(imported),
+            "total_before": total_before,
+            "total_after": total_after,
+        },
+        "changes": changes,
+    }
+
+
+def apply_inventory_import(data: dict) -> dict:
+    """Revalidate a preview, then apply it as one backed-up bulk mutation."""
+    preview = inventory_import_preview(data)
+    if not preview["can_apply"]:
+        raise ValueError("Fix the import errors before applying this collection file.")
+    if str(data.get("preview_id", "")) != preview["preview_id"]:
+        raise ValueError("The collection changed after this preview. Preview the file again.")
+    quantities = {
+        item["card_id"]: int(item["new_quantity"])
+        for item in preview["changes"]
+    }
+    changes = inventory_database().set_quantities(quantities)
+    return {
+        "mode": preview["mode"],
+        "filename": preview["filename"],
+        "applied_cards": len(changes),
+        "summary": preview["summary"],
     }
 
 
@@ -843,13 +1172,26 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     is not None,
                     "local_catalog_available": CARD_CATALOG_PATH.is_file(),
                     "inventory_available": INVENTORY_PATH.is_file(),
+                    "deck_library_available": DECK_LIBRARY_PATH.is_file(),
                 }
             )
+            return
+        if route == "/decks":
+            try:
+                self._json({"ok": True, **saved_decks_snapshot()})
+            except (ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         if route == "/inventory/cards":
             sort_by = parse_qs(parsed.query).get("sort", ["name"])[0]
             try:
                 self._json({"ok": True, **inventory_snapshot(sort_by)})
+            except (ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if route == "/inventory/locations":
+            try:
+                self._json({"ok": True, **inventory_locations_snapshot()})
             except (ValueError, OSError) as exc:
                 self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
@@ -965,6 +1307,47 @@ class ScannerHandler(BaseHTTPRequestHandler):
             elif self.path == "/inventory/set-quantity":
                 change = set_catalog_inventory_quantity(data)
                 self._json({"ok": True, "inventory": asdict(change)})
+            elif self.path == "/inventory/locations/create":
+                location = create_inventory_location(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "location": asdict(location),
+                        "inventory_changed": False,
+                    }
+                )
+            elif self.path == "/inventory/locations/rename":
+                location = rename_inventory_location(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "location": asdict(location),
+                        "inventory_changed": False,
+                    }
+                )
+            elif self.path == "/inventory/locations/remove":
+                released = remove_inventory_location(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "removed": True,
+                        "released_copies": released,
+                        "inventory_changed": False,
+                    }
+                )
+            elif self.path == "/inventory/locations/set-quantity":
+                change = set_inventory_location_quantity(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "allocation": asdict(change),
+                        "inventory_changed": False,
+                    }
+                )
+            elif self.path == "/inventory/import/preview":
+                self._json({"ok": True, **inventory_import_preview(data)})
+            elif self.path == "/inventory/import/apply":
+                self._json({"ok": True, **apply_inventory_import(data)})
             elif self.path == "/deck/check":
                 result = check_deck_list(
                     str(data.get("deck_list", "")),
@@ -972,6 +1355,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     inventory_path=INVENTORY_PATH,
                 )
                 self._json({"ok": True, **result})
+            elif self.path == "/decks/save":
+                deck = save_saved_deck(data)
+                self._json({"ok": True, "deck": asdict(deck), "inventory_changed": False})
+            elif self.path == "/decks/rename":
+                deck = rename_saved_deck(data)
+                self._json({"ok": True, "deck": asdict(deck), "inventory_changed": False})
+            elif self.path == "/decks/remove":
+                remove_saved_deck(data)
+                self._json({"ok": True, "removed": True, "inventory_changed": False})
             elif self.path == "/scan/timing":
                 row = save_scan_performance(data)
                 self._json(
@@ -1125,6 +1517,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     inventory_database()
+    saved_deck_database()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
     url = f"http://127.0.0.1:{server.server_port}{args.start_path}"
     print(f"Pokémon collection is running at {url}")
