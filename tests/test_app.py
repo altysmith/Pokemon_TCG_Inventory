@@ -9,15 +9,26 @@ from unittest.mock import patch
 import app
 from app import (
     add_inventory_card,
+    apply_inventory_import,
     catalog_facets,
     catalog_search,
+    create_inventory_location,
     exact_catalog_fields,
     extract_footer_fields,
     extract_footer_fields_from_readings,
     extract_literal_groups,
+    inventory_import_preview,
+    inventory_locations_snapshot,
+    remove_saved_deck,
+    remove_inventory_location,
+    rename_saved_deck,
+    rename_inventory_location,
     save_benchmark_label,
+    save_saved_deck,
     save_scan_performance,
+    saved_decks_snapshot,
     set_catalog_inventory_quantity,
+    set_inventory_location_quantity,
 )
 from card_scanner.ocr import LiteralReading
 from card_scanner.lookup import CardInfo
@@ -93,6 +104,208 @@ class AppTests(unittest.TestCase):
                     }
                 )
             )
+
+    def test_saved_deck_library_does_not_change_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inventory_path = root / "inventory.sqlite3"
+            decks_path = root / "decks.sqlite3"
+            inventory = InventoryDatabase(inventory_path)
+            inventory.set_quantity("card-1", 4)
+            before = inventory.holdings()
+            with (
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+                patch.object(app, "DECK_LIBRARY_PATH", decks_path),
+            ):
+                deck = save_saved_deck(
+                    {
+                        "name": "Test Deck",
+                        "deck_list": "Pokémon: 2\n2 Raging Bolt ex TEF 123",
+                    }
+                )
+                renamed = rename_saved_deck({"id": deck.id, "name": "Deck Box Candidate"})
+                snapshot = saved_decks_snapshot()
+                remove_saved_deck({"id": deck.id})
+                empty_snapshot = saved_decks_snapshot()
+
+            after = InventoryDatabase(inventory_path).holdings()
+
+        self.assertEqual(renamed.name, "Deck Box Candidate")
+        self.assertEqual(snapshot["count"], 1)
+        self.assertEqual(snapshot["decks"][0]["deck_list"], "Pokémon: 2\n2 Raging Bolt ex TEF 123")
+        self.assertEqual(empty_snapshot["count"], 0)
+        self.assertEqual(after, before)
+
+    def test_saved_deck_requires_a_clean_named_deck_list(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(app, "DECK_LIBRARY_PATH", Path(temp_dir) / "decks.sqlite3"):
+                with self.assertRaisesRegex(ValueError, "name"):
+                    save_saved_deck({"name": "", "deck_list": "1 Budew PRE 004"})
+                with self.assertRaisesRegex(ValueError, "lines needing review"):
+                    save_saved_deck({"name": "Broken", "deck_list": "not a deck line"})
+
+    def test_collection_import_preview_and_apply_support_update_and_replace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES ('set-1', 'Test Set', 'TST', 'en-US')"
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO cards(id, set_id, language, name, number, number_numeric)
+                    VALUES (?, 'set-1', 'en-US', ?, ?, ?)
+                    """,
+                    [
+                        ("card-1", "One", "001", 1),
+                        ("card-2", "Two", "002", 2),
+                        ("card-3", "Three", "003", 3),
+                    ],
+                )
+            inventory = InventoryDatabase(inventory_path)
+            inventory.set_quantities({"card-1": 2, "card-3": 4})
+            content = json.dumps(
+                {
+                    "schema": EXPORT_SCHEMA,
+                    "schema_version": EXPORT_SCHEMA_VERSION,
+                    "cards": [
+                        {"card_id": "card-1", "quantity": 5},
+                        {"card_id": "card-2", "quantity": 1},
+                    ],
+                }
+            )
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+            ):
+                update = inventory_import_preview(
+                    {"filename": "collection.json", "content": content, "mode": "update"}
+                )
+                replace_preview = inventory_import_preview(
+                    {"filename": "collection.json", "content": content, "mode": "replace"}
+                )
+                backups_before = tuple((inventory_path.parent / "backups").glob("*.sqlite3"))
+                applied = apply_inventory_import(
+                    {
+                        "filename": "collection.json",
+                        "content": content,
+                        "mode": "update",
+                        "preview_id": update["preview_id"],
+                    }
+                )
+                backups_after = tuple((inventory_path.parent / "backups").glob("*.sqlite3"))
+                final_holdings = [
+                    (holding.card_id, holding.quantity) for holding in inventory.holdings()
+                ]
+
+        self.assertEqual(update["summary"]["additions"], 1)
+        self.assertEqual(update["summary"]["quantity_changes"], 1)
+        self.assertEqual(update["summary"]["removals"], 0)
+        self.assertEqual(update["summary"]["total_after"], 10)
+        self.assertEqual(replace_preview["summary"]["removals"], 1)
+        self.assertEqual(replace_preview["summary"]["total_after"], 6)
+        self.assertEqual(applied["applied_cards"], 2)
+        self.assertEqual(len(backups_after), len(backups_before) + 1)
+        self.assertEqual(final_holdings, [("card-1", 5), ("card-2", 1), ("card-3", 4)])
+
+    def test_collection_import_rejects_a_stale_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES ('set-1', 'Test Set', 'TST', 'en-US')"
+                )
+                connection.execute(
+                    "INSERT INTO cards(id, set_id, language, name, number) VALUES ('card-1', 'set-1', 'en-US', 'One', '001')"
+                )
+            inventory = InventoryDatabase(inventory_path)
+            inventory.set_quantity("card-1", 1)
+            content = json.dumps(
+                {
+                    "schema": EXPORT_SCHEMA,
+                    "schema_version": EXPORT_SCHEMA_VERSION,
+                    "cards": [{"card_id": "card-1", "quantity": 2}],
+                }
+            )
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+            ):
+                preview = inventory_import_preview(
+                    {"filename": "collection.json", "content": content, "mode": "update"}
+                )
+                inventory.set_quantity("card-1", 3)
+                with self.assertRaisesRegex(ValueError, "changed after this preview"):
+                    apply_inventory_import(
+                        {
+                            "filename": "collection.json",
+                            "content": content,
+                            "mode": "update",
+                            "preview_id": preview["preview_id"],
+                        }
+                    )
+
+    def test_collection_import_scales_past_sqlite_parameter_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            cards = [
+                (f"card-{index:04d}", f"Card {index}", str(index), index)
+                for index in range(1, 1002)
+            ]
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES ('set-1', 'Large Set', 'LRG', 'en-US')"
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO cards(id, set_id, language, name, number, number_numeric)
+                    VALUES (?, 'set-1', 'en-US', ?, ?, ?)
+                    """,
+                    cards,
+                )
+            content = json.dumps(
+                {
+                    "schema": EXPORT_SCHEMA,
+                    "schema_version": EXPORT_SCHEMA_VERSION,
+                    "cards": [
+                        {"card_id": card_id, "quantity": 1}
+                        for card_id, _name, _number, _numeric in cards
+                    ],
+                }
+            )
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+            ):
+                preview = inventory_import_preview(
+                    {"filename": "large.json", "content": content, "mode": "update"}
+                )
+                result = apply_inventory_import(
+                    {
+                        "filename": "large.json",
+                        "content": content,
+                        "mode": "update",
+                        "preview_id": preview["preview_id"],
+                    }
+                )
+                holdings_count = len(InventoryDatabase(inventory_path).holdings())
+
+        self.assertTrue(preview["can_apply"])
+        self.assertEqual(preview["summary"]["affected_cards"], 1001)
+        self.assertEqual(result["applied_cards"], 1001)
+        self.assertEqual(holdings_count, 1001)
 
     def test_catalog_search_combines_set_code_number_and_inventory_quantity(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -283,6 +496,44 @@ class AppTests(unittest.TestCase):
         self.assertTrue(snapshot["items"][0]["is_ace_spec"])
         self.assertTrue(snapshot["items"][0]["date_added"])
         self.assertTrue(snapshot["items"][0]["date_updated"])
+
+    def test_inventory_snapshot_attaches_optional_location_quantities(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES ('set-1', 'Test Set', 'TST', 'en-US')"
+                )
+                connection.execute(
+                    "INSERT INTO cards(id, set_id, language, name, card_type, number) "
+                    "VALUES ('card-1', 'set-1', 'en-US', 'Budew', 'POKEMON', '004')"
+                )
+            InventoryDatabase(inventory_path).set_quantity("card-1", 5)
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+            ):
+                location = create_inventory_location({"name": "Deck Box 1"})
+                set_inventory_location_quantity(
+                    {"card_id": "card-1", "location_id": location.id, "quantity": 2}
+                )
+                snapshot = app.inventory_snapshot()
+                locations = inventory_locations_snapshot()
+                renamed = rename_inventory_location(
+                    {"location_id": location.id, "name": "Main Deck Box"}
+                )
+                released = remove_inventory_location({"location_id": location.id})
+
+        self.assertEqual(snapshot["items"][0]["quantity"], 5)
+        self.assertEqual(snapshot["items"][0]["locations"], {str(location.id): 2})
+        self.assertEqual(snapshot["items"][0]["unassigned_quantity"], 3)
+        self.assertEqual(locations["unassigned"], {"unique_cards": 1, "total_copies": 3})
+        self.assertEqual(renamed.name, "Main Deck Box")
+        self.assertEqual(released, 2)
 
     def test_element_view_keeps_other_card_categories_after_pokemon(self) -> None:
         items = [
@@ -593,6 +844,23 @@ class AppTests(unittest.TestCase):
         self.assertIn('href="/inventory/export.csv"', inventory_html)
         self.assertIn('href="/inventory/export.json"', inventory_html)
         self.assertIn(".binder-export-actions", stylesheet)
+        self.assertIn('id="inventory_import_dialog"', inventory_html)
+        self.assertIn('value="update" checked', inventory_html)
+        self.assertIn('value="replace"', inventory_html)
+        self.assertIn("IMPORT_PREVIEW_PAGE_SIZE = 75", inventory_javascript)
+        self.assertIn("fetch('/inventory/import/preview'", inventory_javascript)
+        self.assertIn("fetch('/inventory/import/apply'", inventory_javascript)
+        self.assertIn("window.confirm(warning)", inventory_javascript)
+        self.assertIn(".collection-import-dialog", stylesheet)
+        self.assertIn('id="inventory_locations_dialog"', inventory_html)
+        self.assertIn('id="drawer_location_quantity"', inventory_html)
+        self.assertIn('data-location="unassigned"', inventory_html)
+        self.assertIn("async function saveDrawerLocation", inventory_javascript)
+        self.assertIn("async function createLocation", inventory_javascript)
+        self.assertIn("fetch(url", inventory_javascript)
+        self.assertIn("'/inventory/locations/set-quantity'", inventory_javascript)
+        self.assertIn(".inventory-locations-dialog", stylesheet)
+        self.assertIn(".card-drawer-location-editor", stylesheet)
         self.assertIn("No cards in your inventory match these filters", inventory_javascript)
         self.assertIn("prefers-color-scheme: dark", theme_javascript)
         self.assertIn("localStorage.setItem", theme_javascript)
@@ -632,6 +900,14 @@ class AppTests(unittest.TestCase):
         deck_javascript = (app.WEB_ROOT / "deck.js").read_text(encoding="utf-8")
         self.assertNotIn('href="/scan"', deck_html)
         self.assertIn('id="deck_list"', deck_html)
+        self.assertIn('id="deck_library_cards"', deck_html)
+        self.assertIn('id="deck_save_panel"', deck_html)
+        self.assertIn("requestJson('/decks'", deck_javascript)
+        self.assertIn("requestJson('/decks/save'", deck_javascript)
+        self.assertIn("requestJson('/decks/rename'", deck_javascript)
+        self.assertIn("requestJson('/decks/remove'", deck_javascript)
+        self.assertIn("This saved list was rechecked against your current inventory", deck_javascript)
+        self.assertIn(".deck-library-cards", stylesheet)
         self.assertIn("deck-missing-gallery", deck_javascript)
         self.assertIn("deck-owned-gallery", deck_javascript)
         self.assertIn("Full deck list", deck_javascript)
@@ -646,6 +922,11 @@ class AppTests(unittest.TestCase):
         self.assertIn("Missing cards", deck_javascript)
         self.assertIn("Cards you already have", deck_javascript)
         self.assertIn("Same-name substitute available", deck_javascript)
+        self.assertIn("function tcgplayerSearchUrl", deck_javascript)
+        self.assertIn("https://www.tcgplayer.com/search/pokemon/product?", deck_javascript)
+        self.assertIn("Find on TCGplayer", deck_javascript)
+        self.assertIn('rel="noopener noreferrer"', deck_javascript)
+        self.assertIn(".deck-tcgplayer-link", stylesheet)
         self.assertIn("possible_substitute_cards", deck_javascript)
         self.assertIn("Basic Energy ignored", deck_javascript)
         self.assertIn("ignored_basic_energy_cards", deck_javascript)

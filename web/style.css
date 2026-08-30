@@ -228,6 +228,11 @@ input:focus { border-color: var(--ink); }
 .binder-nav-item b { color: var(--binder-faint); font-size: 10px; font-weight: 700; }
 .binder-nav-item.is-active b { color: #f0746c; }
 .binder-nav-icon { color: #a8b1b9; font-size: 14px; text-align: center; }
+.binder-location-nav { margin: 8px 0 3px; padding: 10px 0 9px; border-block: 1px solid var(--binder-border); }
+.binder-location-nav > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 8px 5px; }
+.binder-location-nav h2 { margin: 0; color: var(--binder-faint); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.binder-location-nav > header button { border: 0; background: transparent; color: var(--binder-muted); padding: 3px; font: 750 10px "Segoe UI", sans-serif; cursor: pointer; }
+.binder-location-nav > header button:hover { color: var(--binder-text); }
 [data-tone="fire"] .binder-nav-icon { color: #e65a4d; }
 [data-tone="water"] .binder-nav-icon { color: #4a9cdb; }
 [data-tone="grass"] .binder-nav-icon { color: #58a96b; }
@@ -289,8 +294,8 @@ input:focus { border-color: var(--ink); }
 .binder-export-actions { display: grid; gap: 5px; }
 .binder-export-actions > span { color: var(--binder-faint); font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .binder-export-actions > div { display: flex; gap: 6px; }
-.binder-export-actions a { display: inline-grid; min-height: 34px; min-width: 58px; place-items: center; border: 1px solid var(--binder-border-strong); border-radius: 7px; background: var(--binder-panel); color: var(--binder-text); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-decoration: none; }
-.binder-export-actions a:hover { border-color: var(--binder-accent); background: var(--binder-accent-soft); }
+.binder-export-actions a, .binder-export-actions button { display: inline-grid; min-height: 34px; min-width: 58px; place-items: center; border: 1px solid var(--binder-border-strong); border-radius: 7px; background: var(--binder-panel); color: var(--binder-text); padding: 0 10px; font: 800 10px "Segoe UI", sans-serif; letter-spacing: .04em; text-decoration: none; cursor: pointer; }
+.binder-export-actions a:hover, .binder-export-actions button:hover { border-color: var(--binder-accent); background: var(--binder-accent-soft); }
 .binder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
 .binder-card {
   min-width: 0;
@@ -356,11 +361,103 @@ input:focus { border-color: var(--ink); }
 .card-drawer-save-feedback { min-height: 17px; margin: 7px 0 0; color: var(--binder-faint); font-size: 10px; font-weight: 700; text-align: center; }
 .card-drawer-save-feedback.is-saved { color: #65d6a2; }
 .card-drawer-save-feedback.is-error { color: #ff7b72; }
+.card-drawer-location-editor { margin-top: 12px; padding: 13px; border: 1px solid var(--binder-border); border-radius: 10px; background: var(--binder-panel-raised); }
+.card-drawer-location-editor > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.card-drawer-location-editor > div:first-child span { color: var(--binder-muted); font-size: 11px; font-weight: 750; }
+.card-drawer-location-editor > div:first-child strong { font-size: 11px; }
+.card-drawer-location-editor > p { margin: 7px 0 10px; color: var(--binder-faint); font-size: 10px; line-height: 1.45; }
+.card-drawer-location-editor label { display: grid; gap: 4px; margin-top: 8px; color: var(--binder-muted); font-size: 10px; font-weight: 750; }
+.card-drawer-location-editor select, .card-drawer-location-editor input { width: 100%; min-height: 39px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 7px 9px; font: 700 13px "Segoe UI", sans-serif; }
+.card-drawer-location-manage { width: 100%; min-height: 35px; margin-top: 6px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: transparent; color: var(--binder-muted); font: 750 11px "Segoe UI", sans-serif; cursor: pointer; }
+.card-drawer-location-manage:hover { color: var(--binder-text); background: var(--binder-panel); }
+.card-drawer-location-allocations { margin-top: 9px; border-top: 1px solid var(--binder-border); }
+.card-drawer-location-allocations div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--binder-border); color: var(--binder-muted); font-size: 11px; }
+.card-drawer-location-allocations p { margin: 9px 2px 0; color: var(--binder-faint); font-size: 10px; }
 .card-drawer-details { margin: 16px 0 0; }
 .card-drawer-details div { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--binder-border); }
 .card-drawer-details dt { color: var(--binder-muted); font-size: 11px; }
 .card-drawer-details dd { margin: 0; font-size: 11px; font-weight: 700; text-align: right; }
 .card-drawer-note { margin: 16px 2px; color: var(--binder-faint); font-size: 10px; line-height: 1.5; }
+
+.collection-import-dialog { width: min(1060px, calc(100vw - 32px)); max-width: none; height: min(840px, calc(100vh - 32px)); max-height: none; margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--binder-border-strong); border-radius: 16px; background: var(--binder-bg); color: var(--binder-text); box-shadow: 0 35px 100px rgba(0,0,0,.55); }
+.collection-import-dialog::backdrop { background: rgba(2,4,6,.82); backdrop-filter: blur(8px); }
+.collection-import-shell { display: grid; grid-template-rows: auto auto auto minmax(0,1fr) auto; height: 100%; }
+.collection-import-shell > header { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 22px 26px 18px; border-bottom: 1px solid var(--binder-border); background: var(--binder-panel); }
+.collection-import-shell > header small { color: var(--binder-accent); font-size: 10px; font-weight: 850; letter-spacing: .13em; }
+.collection-import-shell > header h2 { margin: 5px 0 0; font-size: 25px; }
+.collection-import-shell > header p { margin: 5px 0 0; color: var(--binder-muted); font-size: 12px; }
+.collection-import-shell > header button { border: 0; background: transparent; color: var(--binder-muted); font: 300 30px/1 "Segoe UI", sans-serif; cursor: pointer; }
+.collection-import-setup { display: grid; grid-template-columns: minmax(220px,1fr) minmax(390px,1.7fr) 170px; gap: 16px; align-items: end; padding: 18px 26px; border-bottom: 1px solid var(--binder-border); }
+.collection-import-file, .collection-import-list-controls label { display: grid; gap: 6px; color: var(--binder-faint); font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.collection-import-file input, .collection-import-list-controls input, .collection-import-list-controls select { min-height: 42px; min-width: 0; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 9px 11px; font: 600 12px "Segoe UI", sans-serif; }
+.collection-import-file input[type=file] { display: block; width: 100%; }
+.collection-import-setup fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.collection-import-setup legend { margin-bottom: 6px; color: var(--binder-faint); font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.collection-import-setup fieldset label { display: flex; align-items: start; gap: 8px; min-height: 62px; padding: 10px; border: 1px solid var(--binder-border); border-radius: 8px; background: var(--binder-panel); cursor: pointer; }
+.collection-import-setup fieldset input { margin-top: 3px; accent-color: var(--binder-accent); }
+.collection-import-setup fieldset span { display: grid; gap: 3px; }
+.collection-import-setup fieldset strong { font-size: 12px; }
+.collection-import-setup fieldset small { color: var(--binder-muted); font-size: 10px; line-height: 1.35; }
+.collection-import-primary, .collection-import-apply { min-height: 44px; border: 1px solid var(--binder-accent); border-radius: 8px; background: var(--binder-accent); color: #fff; font: 800 12px "Segoe UI", sans-serif; cursor: pointer; }
+.collection-import-primary:disabled, .collection-import-apply:disabled { opacity: .42; cursor: default; }
+.collection-import-status { margin: 0; padding: 12px 26px; border-bottom: 1px solid var(--binder-border); color: var(--binder-muted); font-size: 12px; }
+.collection-import-status.is-error { color: #ff7b72; }
+.collection-import-status.is-saved { color: #65d6a2; }
+.collection-import-results { min-height: 0; padding: 18px 26px 24px; overflow: auto; }
+.collection-import-summary { display: grid; grid-template-columns: repeat(6,minmax(90px,1fr)); overflow: hidden; border: 1px solid var(--binder-border); border-radius: 10px; background: var(--binder-panel); }
+.collection-import-summary div { padding: 12px 14px; border-left: 1px solid var(--binder-border); }
+.collection-import-summary div:first-child { border-left: 0; }
+.collection-import-summary span { display: block; color: var(--binder-faint); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.collection-import-summary strong { display: block; margin-top: 5px; font-size: 20px; }
+.collection-import-errors { margin-top: 14px; padding: 13px 15px; border: 1px solid rgba(255,98,91,.42); border-radius: 9px; background: rgba(168,46,53,.12); color: #ff8a84; font-size: 12px; }
+.collection-import-errors p { margin: 5px 0; }
+.collection-import-list-controls { display: grid; grid-template-columns: 220px minmax(240px,1fr); gap: 12px; margin-top: 16px; }
+.collection-import-changes { margin-top: 12px; border: 1px solid var(--binder-border); border-radius: 10px; overflow: hidden; }
+.collection-import-change { display: grid; grid-template-columns: 110px minmax(180px,1fr) minmax(130px,.65fr) 150px; gap: 12px; align-items: center; min-height: 58px; padding: 9px 13px; border-top: 1px solid var(--binder-border); background: var(--binder-panel); }
+.collection-import-change:first-child { border-top: 0; }
+.collection-import-change > b { color: var(--binder-muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.collection-import-change.is-addition > b { color: #65d6a2; }
+.collection-import-change.is-removal > b { color: #ff7b72; }
+.collection-import-change strong { display: block; font-size: 13px; }
+.collection-import-change small { display: block; margin-top: 2px; color: var(--binder-muted); font-size: 10px; }
+.collection-import-change code { color: var(--binder-faint); font-size: 10px; }
+.collection-import-change .quantity { justify-self: end; font-size: 14px; font-weight: 850; }
+.collection-import-change .quantity span { color: var(--binder-faint); padding: 0 6px; }
+.collection-import-empty { margin: 0; padding: 30px; color: var(--binder-muted); text-align: center; }
+.collection-import-pages { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 13px; }
+.collection-import-pages button { min-height: 34px; border: 1px solid var(--binder-border-strong); border-radius: 7px; background: var(--binder-panel); color: var(--binder-text); padding: 0 13px; font: 750 11px "Segoe UI", sans-serif; cursor: pointer; }
+.collection-import-pages button:disabled { opacity: .35; cursor: default; }
+.collection-import-pages span { color: var(--binder-muted); font-size: 11px; }
+.collection-import-shell > footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 26px; border-top: 1px solid var(--binder-border); background: var(--binder-panel); }
+.collection-import-shell > footer p { margin: 0; color: var(--binder-muted); font-size: 11px; }
+.collection-import-apply { min-width: 190px; }
+
+.inventory-locations-dialog { width: min(660px, calc(100vw - 30px)); max-width: none; margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--binder-border-strong); border-radius: 15px; background: var(--binder-bg); color: var(--binder-text); box-shadow: 0 35px 100px rgba(0,0,0,.55); }
+.inventory-locations-dialog::backdrop { background: rgba(2,4,6,.82); backdrop-filter: blur(8px); }
+.inventory-locations-shell > header { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding: 21px 23px 17px; border-bottom: 1px solid var(--binder-border); background: var(--binder-panel); }
+.inventory-locations-shell > header small { color: var(--binder-accent); font-size: 10px; font-weight: 850; letter-spacing: .13em; }
+.inventory-locations-shell > header h2 { margin: 5px 0 0; font-size: 24px; }
+.inventory-locations-shell > header p { margin: 5px 0 0; color: var(--binder-muted); font-size: 12px; }
+.inventory-locations-shell > header button { border: 0; background: transparent; color: var(--binder-muted); font: 300 30px/1 "Segoe UI", sans-serif; cursor: pointer; }
+.inventory-location-create { display: grid; grid-template-columns: minmax(0,1fr) 130px; gap: 8px; padding: 18px 23px 8px; }
+.inventory-location-create label { grid-column: 1 / -1; color: var(--binder-faint); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.inventory-location-create input, .inventory-location-create button { min-height: 43px; border: 1px solid var(--binder-border-strong); border-radius: 8px; }
+.inventory-location-create input { background: var(--binder-panel); color: var(--binder-text); padding: 8px 11px; font: 650 14px "Segoe UI", sans-serif; }
+.inventory-location-create button { background: var(--binder-accent); color: #fff; font: 800 12px "Segoe UI", sans-serif; cursor: pointer; }
+.inventory-locations-status { margin: 0; padding: 5px 23px 12px; color: var(--binder-muted); font-size: 12px; }
+.inventory-locations-status.is-saved { color: #65d6a2; }
+.inventory-locations-status.is-error { color: #ff7b72; }
+.inventory-locations-list { max-height: min(430px, 48vh); margin: 0 23px; overflow-y: auto; border: 1px solid var(--binder-border); border-radius: 10px; background: var(--binder-panel); }
+.inventory-locations-list article { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 68px; padding: 11px 13px; border-top: 1px solid var(--binder-border); }
+.inventory-locations-list article:first-child { border-top: 0; }
+.inventory-locations-list strong, .inventory-locations-list small { display: block; }
+.inventory-locations-list strong { font-size: 14px; }
+.inventory-locations-list small { margin-top: 4px; color: var(--binder-muted); font-size: 11px; }
+.inventory-locations-list article > div:last-child { display: flex; gap: 6px; }
+.inventory-locations-list button { min-height: 34px; border: 1px solid var(--binder-border-strong); border-radius: 7px; background: var(--binder-panel-raised); color: var(--binder-text); padding: 0 10px; font: 750 11px "Segoe UI", sans-serif; cursor: pointer; }
+.inventory-locations-list button.is-remove { color: #ff7b72; }
+.inventory-locations-empty { margin: 0; padding: 30px 18px; color: var(--binder-muted); text-align: center; }
+.inventory-locations-shell > footer { margin-top: 16px; padding: 14px 23px; border-top: 1px solid var(--binder-border); background: var(--binder-panel); color: var(--binder-muted); font-size: 11px; line-height: 1.45; }
 
 @media (min-width: 1500px) {
   .binder-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
@@ -378,6 +475,7 @@ input:focus { border-color: var(--ink); }
   .binder-sidebar { position: static; display: block; height: auto; padding: 12px; border-right: 0; border-bottom: 1px solid var(--binder-border); }
   .binder-brand { margin-bottom: 8px; }
   .binder-category-nav { display: none; }
+  .binder-location-nav { display: inline-block; width: min(100%, 330px); vertical-align: top; }
   .binder-sidebar > .binder-nav-item, .binder-recent { display: inline-grid; width: auto; min-width: 120px; margin-right: 5px; }
   .binder-sidebar-footer { position: absolute; top: 13px; right: 12px; margin: 0; padding: 0; border: 0; }
   .binder-sidebar-footer a { display: none; }
@@ -387,6 +485,17 @@ input:focus { border-color: var(--ink); }
   .binder-content-toolbar { align-items: stretch; flex-direction: column; padding: 20px 14px 14px; }
   .binder-controls { display: grid; grid-template-columns: 1fr 1fr; }
   .binder-controls select { width: 100%; min-width: 0; }
+  .collection-import-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
+  .collection-import-setup { grid-template-columns: 1fr; }
+  .collection-import-setup fieldset { grid-template-columns: 1fr; }
+  .collection-import-summary { grid-template-columns: repeat(2,1fr); }
+  .collection-import-summary div { border-top: 1px solid var(--binder-border); }
+  .collection-import-list-controls { grid-template-columns: 1fr; }
+  .collection-import-change { grid-template-columns: 90px minmax(0,1fr); }
+  .collection-import-change code, .collection-import-change .quantity { grid-column: 2; justify-self: start; }
+  .inventory-location-create { grid-template-columns: 1fr; }
+  .inventory-location-create label { grid-column: 1; }
+  .inventory-locations-list article { align-items: stretch; flex-direction: column; }
   .binder-groups { padding: 0 14px 34px; }
   .binder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .binder-alphabet { margin-inline: 14px; }
@@ -502,6 +611,39 @@ body.card-inspector-open { overflow: hidden; }
 }
 
 /* Read-only deck inventory check */
+.deck-library-panel { padding: 24px clamp(18px, 5vw, 72px) 28px; border-bottom: 1px solid var(--binder-border); background: var(--binder-bg); }
+.deck-library-panel > header { display: flex; align-items: end; justify-content: space-between; gap: 22px; }
+.deck-library-panel > header span { color: var(--binder-accent); font-size: 10px; font-weight: 850; letter-spacing: .13em; }
+.deck-library-panel > header h2 { margin: 5px 0 0; font-size: 25px; letter-spacing: -.025em; }
+.deck-library-panel > header p { margin: 5px 0 0; color: var(--binder-muted); font-size: 12px; }
+.deck-library-panel > header > strong { flex: none; color: var(--binder-muted); font-size: 13px; }
+.deck-library-status { margin: 14px 0 0; color: var(--binder-faint); font-size: 11px; }
+.deck-library-status.is-saved { color: #65d6a2; }
+.deck-library-status.is-error { color: #ff7b72; }
+.deck-library-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 13px; }
+.deck-library-empty { grid-column: 1 / -1; display: grid; gap: 5px; min-height: 96px; place-content: center; border: 1px dashed var(--binder-border-strong); border-radius: 11px; background: var(--binder-panel); color: var(--binder-muted); text-align: center; }
+.deck-library-empty strong { color: var(--binder-text); font-size: 16px; }
+.deck-library-empty span { font-size: 11px; }
+.deck-library-card { min-width: 0; overflow: hidden; border: 1px solid var(--binder-border); border-radius: 11px; background: var(--binder-panel); transition: border-color .15s ease, transform .15s ease; }
+.deck-library-card:hover { transform: translateY(-1px); border-color: var(--binder-border-strong); }
+.deck-library-card.is-current { border-color: #52c58e; box-shadow: 0 0 0 1px rgba(82,197,142,.1); }
+.deck-library-open { display: grid; width: 100%; min-height: 118px; align-content: start; border: 0; background: transparent; color: var(--binder-text); padding: 15px 16px 13px; text-align: left; cursor: pointer; }
+.deck-library-open small { color: var(--binder-accent); font-size: 9px; font-weight: 850; letter-spacing: .12em; }
+.deck-library-open strong { margin-top: 6px; overflow: hidden; font-size: 18px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.deck-library-open span { margin-top: 7px; color: var(--binder-muted); font-size: 11px; }
+.deck-library-open em { margin-top: 9px; color: var(--binder-faint); font-size: 10px; font-style: normal; }
+.deck-library-open:hover { background: var(--binder-panel-raised); }
+.deck-library-card-actions { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--binder-border); }
+.deck-library-card-actions button { min-height: 34px; border: 0; border-left: 1px solid var(--binder-border); background: transparent; color: var(--binder-muted); font: 750 10px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-library-card-actions button:first-child { border-left: 0; }
+.deck-library-card-actions button:hover { background: var(--binder-panel-raised); color: var(--binder-text); }
+.deck-library-card-actions button.is-remove:hover { color: #ff7b72; }
+.deck-library-rename { display: grid; gap: 8px; min-height: 153px; align-content: center; padding: 15px; }
+.deck-library-rename label { color: var(--binder-faint); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.deck-library-rename input { min-width: 0; min-height: 40px; border: 1px solid var(--binder-border-strong); border-radius: 7px; background: var(--binder-panel-raised); color: var(--binder-text); padding: 8px 10px; font-size: 13px; }
+.deck-library-rename div { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.deck-library-rename button { min-height: 34px; border: 1px solid var(--binder-accent); border-radius: 7px; background: var(--binder-accent); color: #fff; font: 750 10px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-library-rename button.is-secondary { border-color: var(--binder-border-strong); background: transparent; color: var(--binder-muted); }
 .deck-import-panel { padding: 28px clamp(18px, 5vw, 72px); border-bottom: 1px solid var(--binder-border); background: var(--binder-panel); }
 .deck-import-panel form { max-width: 1080px; }
 .deck-import-panel label { color: var(--binder-muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
@@ -521,6 +663,13 @@ body.card-inspector-open { overflow: hidden; }
 .deck-summary dl div { padding: 2px 14px; border-left: 1px solid var(--binder-border); text-align: center; }
 .deck-summary dt { color: var(--binder-faint); font-size: 9px; font-weight: 750; text-transform: uppercase; }
 .deck-summary dd { margin: 5px 0 0; font-size: 19px; font-weight: 800; }
+.deck-save-panel { display: grid; grid-template-columns: minmax(220px, 1fr) 210px; gap: 13px 16px; align-items: end; margin: 14px clamp(18px, 4vw, 52px) 0; padding: 16px 18px; border: 1px solid var(--binder-border-strong); border-radius: 11px; background: var(--binder-panel); }
+.deck-save-panel > div { display: grid; gap: 6px; }
+.deck-save-panel label { color: var(--binder-faint); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.deck-save-panel input { min-height: 43px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel-raised); color: var(--binder-text); padding: 9px 11px; font-size: 14px; }
+.deck-save-panel input:disabled { opacity: .72; }
+.deck-save-panel button { min-height: 43px; }
+.deck-save-panel p { grid-column: 1 / -1; margin: 0; color: var(--binder-muted); font-size: 10px; }
 .deck-errors { margin: 22px clamp(18px, 4vw, 52px) 0; padding: 18px; border: 1px solid rgba(220, 76, 68, .35); border-radius: 11px; background: var(--binder-accent-soft); }
 .deck-errors h2 { margin: 0 0 10px; font-size: 14px; }
 .deck-errors div { display: grid; grid-template-columns: 60px minmax(180px, 1fr) minmax(200px, 1fr); gap: 12px; padding: 8px 0; border-top: 1px solid var(--binder-border); font-size: 10px; }
@@ -554,6 +703,9 @@ body.card-inspector-open { overflow: hidden; }
 .deck-owned-card .deck-gallery-copy p { font-size: 10px; }
 .deck-gallery-substitute { display: grid; gap: 3px; margin-top: 9px; padding: 8px; border-left: 2px solid #e8b84f; background: rgba(221,171,61,.08); color: #e8b84f; font-size: 10px; line-height: 1.35; }
 .deck-gallery-substitute span { color: var(--binder-muted); }
+.deck-tcgplayer-link { display: flex; min-height: 38px; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; border: 1px solid #4f8fcf; border-radius: 8px; background: rgba(42,103,164,.13); color: #78b9f5; font-size: 12px; font-weight: 800; text-align: center; text-decoration: none; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
+.deck-tcgplayer-link:hover { transform: translateY(-1px); border-color: #78b9f5; background: rgba(42,103,164,.24); }
+.deck-tcgplayer-link:focus-visible { outline: 3px solid rgba(120,185,245,.3); outline-offset: 2px; }
 .deck-section-empty { grid-column: 1 / -1; margin: 0; padding: 18px; border: 1px dashed var(--binder-border-strong); border-radius: 10px; color: var(--binder-muted); }
 .deck-section-empty.is-ready { border-color: rgba(82,197,142,.35); color: #65d6a2; }
 .deck-builder-layout { display: grid; grid-template-columns: minmax(245px, 1.08fr) minmax(245px, 1fr) minmax(235px, 310px); gap: 18px; align-items: start; }
@@ -590,6 +742,8 @@ body.card-inspector-open { overflow: hidden; }
 .deck-builder-preview dd.is-ignored { color: var(--binder-muted); }
 
 @media (max-width: 800px) {
+  .deck-library-panel > header { align-items: start; flex-direction: column; }
+  .deck-library-cards { grid-template-columns: 1fr; }
   .deck-import-actions, .deck-summary { align-items: stretch; flex-direction: column; }
   .deck-import-actions button { flex-basis: 46px; }
   .deck-summary dl { width: 100%; min-width: 0; }
@@ -601,6 +755,8 @@ body.card-inspector-open { overflow: hidden; }
   .deck-owned-gallery { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
   .deck-builder-layout { grid-template-columns: 1fr; }
   .deck-builder-preview { position: static; width: min(320px, 100%); min-height: 0; }
+  .deck-save-panel { grid-template-columns: 1fr; }
+  .deck-save-panel p { grid-column: 1; }
 }
 
 /* Iteration 18 readability pass: keep essential actions and results easy to see. */

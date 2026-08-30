@@ -31,6 +31,29 @@ CREATE TABLE IF NOT EXISTS inventory_events (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS inventory_locations (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archived_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_locations_active_name
+    ON inventory_locations(lower(name)) WHERE archived_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS inventory_location_holdings (
+    location_id INTEGER NOT NULL REFERENCES inventory_locations(id) ON DELETE CASCADE,
+    card_id TEXT NOT NULL REFERENCES inventory_holdings(card_id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(location_id, card_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_location_holdings_card
+    ON inventory_location_holdings(card_id, location_id);
+
 CREATE INDEX IF NOT EXISTS idx_inventory_events_card
     ON inventory_events(card_id, id DESC);
 """
@@ -50,6 +73,32 @@ class InventoryHolding:
     quantity: int
     created_at: str = ""
     updated_at: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryLocation:
+    id: int
+    name: str
+    unique_cards: int = 0
+    total_copies: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryLocationAllocation:
+    location_id: int
+    card_id: str
+    quantity: int
+
+
+@dataclass(frozen=True)
+class InventoryLocationChange:
+    location_id: int
+    card_id: str
+    quantity: int
+    assigned_quantity: int
+    unassigned_quantity: int
 
 
 class InventoryDatabase:
@@ -213,6 +262,224 @@ class InventoryDatabase:
             for row in rows
         )
 
+    @staticmethod
+    def _location_name(name: str) -> str:
+        value = " ".join(str(name).split())
+        if not value:
+            raise ValueError("Give this location a name.")
+        if len(value) > 60:
+            raise ValueError("Location names must be 60 characters or fewer.")
+        return value
+
+    @staticmethod
+    def _allocated_quantity(connection: sqlite3.Connection, card_id: str) -> int:
+        row = connection.execute(
+            "SELECT COALESCE(SUM(quantity), 0) AS quantity "
+            "FROM inventory_location_holdings WHERE card_id = ?",
+            (card_id,),
+        ).fetchone()
+        return int(row["quantity"] if row else 0)
+
+    def locations(self) -> tuple[InventoryLocation, ...]:
+        self.initialize()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT l.id, l.name, l.created_at, l.updated_at,
+                       COUNT(h.card_id) AS unique_cards,
+                       COALESCE(SUM(h.quantity), 0) AS total_copies
+                FROM inventory_locations l
+                LEFT JOIN inventory_location_holdings h ON h.location_id = l.id
+                WHERE l.archived_at IS NULL
+                GROUP BY l.id
+                ORDER BY l.name COLLATE NOCASE, l.id
+                """
+            ).fetchall()
+        return tuple(
+            InventoryLocation(
+                id=int(row["id"]),
+                name=str(row["name"]),
+                unique_cards=int(row["unique_cards"]),
+                total_copies=int(row["total_copies"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+            for row in rows
+        )
+
+    def location_allocations(self) -> tuple[InventoryLocationAllocation, ...]:
+        self.initialize()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT h.location_id, h.card_id, h.quantity
+                FROM inventory_location_holdings h
+                JOIN inventory_locations l ON l.id = h.location_id
+                WHERE l.archived_at IS NULL
+                ORDER BY h.card_id, h.location_id
+                """
+            ).fetchall()
+        return tuple(
+            InventoryLocationAllocation(
+                location_id=int(row["location_id"]),
+                card_id=str(row["card_id"]),
+                quantity=int(row["quantity"]),
+            )
+            for row in rows
+        )
+
+    def create_location(self, name: str) -> InventoryLocation:
+        value = self._location_name(name)
+        self.initialize()
+        self.create_backup()
+        try:
+            with self.connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    "INSERT INTO inventory_locations(name) VALUES (?)",
+                    (value,),
+                )
+                location_id = int(cursor.lastrowid)
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("A location already uses that name.") from exc
+        return next(location for location in self.locations() if location.id == location_id)
+
+    def rename_location(self, location_id: int, name: str) -> InventoryLocation:
+        value = self._location_name(name)
+        if location_id <= 0:
+            raise ValueError("A valid inventory location is required.")
+        self.initialize()
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT name FROM inventory_locations WHERE id = ? AND archived_at IS NULL",
+                (location_id,),
+            ).fetchone()
+        if not existing:
+            raise ValueError("That inventory location no longer exists.")
+        if str(existing["name"]) == value:
+            return next(location for location in self.locations() if location.id == location_id)
+        self.create_backup()
+        try:
+            with self.connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "UPDATE inventory_locations SET name = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ? AND archived_at IS NULL",
+                    (value, location_id),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("A location already uses that name.") from exc
+        return next(location for location in self.locations() if location.id == location_id)
+
+    def remove_location(self, location_id: int) -> int:
+        """Archive a location and return its copies to the virtual Unassigned pool."""
+        if location_id <= 0:
+            raise ValueError("A valid inventory location is required.")
+        self.initialize()
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT l.id, COALESCE(SUM(h.quantity), 0) AS released
+                FROM inventory_locations l
+                LEFT JOIN inventory_location_holdings h ON h.location_id = l.id
+                WHERE l.id = ? AND l.archived_at IS NULL
+                GROUP BY l.id
+                """,
+                (location_id,),
+            ).fetchone()
+        if not row:
+            raise ValueError("That inventory location no longer exists.")
+        released = int(row["released"])
+        self.create_backup()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM inventory_location_holdings WHERE location_id = ?",
+                (location_id,),
+            )
+            connection.execute(
+                "UPDATE inventory_locations "
+                "SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ? AND archived_at IS NULL",
+                (location_id,),
+            )
+        return released
+
+    def set_location_quantity(
+        self,
+        card_id: str,
+        location_id: int,
+        quantity: int,
+    ) -> InventoryLocationChange:
+        value = str(card_id).strip()
+        if not value:
+            raise ValueError("A canonical card ID is required for inventory.")
+        if location_id <= 0:
+            raise ValueError("A valid inventory location is required.")
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or not 0 <= quantity <= 9999:
+            raise ValueError("Location quantity must be between 0 and 9999.")
+        self.initialize()
+        with self.connect() as connection:
+            holding = connection.execute(
+                "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
+                (value,),
+            ).fetchone()
+            location = connection.execute(
+                "SELECT id FROM inventory_locations WHERE id = ? AND archived_at IS NULL",
+                (location_id,),
+            ).fetchone()
+            current = connection.execute(
+                "SELECT quantity FROM inventory_location_holdings "
+                "WHERE location_id = ? AND card_id = ?",
+                (location_id, value),
+            ).fetchone()
+            other = connection.execute(
+                "SELECT COALESCE(SUM(quantity), 0) AS quantity "
+                "FROM inventory_location_holdings WHERE card_id = ? AND location_id != ?",
+                (value, location_id),
+            ).fetchone()
+        if not holding:
+            raise ValueError("That card is not currently in the collection.")
+        if not location:
+            raise ValueError("That inventory location no longer exists.")
+        total_owned = int(holding["quantity"])
+        other_assigned = int(other["quantity"] if other else 0)
+        if other_assigned + quantity > total_owned:
+            available = max(0, total_owned - other_assigned)
+            raise ValueError(
+                f"Only {available} copies are available for this location."
+            )
+        current_quantity = int(current["quantity"]) if current else 0
+        if current_quantity != quantity:
+            self.create_backup()
+            with self.connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                if quantity:
+                    connection.execute(
+                        """
+                        INSERT INTO inventory_location_holdings(location_id, card_id, quantity)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(location_id, card_id) DO UPDATE SET
+                            quantity = excluded.quantity,
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (location_id, value, quantity),
+                    )
+                else:
+                    connection.execute(
+                        "DELETE FROM inventory_location_holdings "
+                        "WHERE location_id = ? AND card_id = ?",
+                        (location_id, value),
+                    )
+        assigned = other_assigned + quantity
+        return InventoryLocationChange(
+            location_id=location_id,
+            card_id=value,
+            quantity=quantity,
+            assigned_quantity=assigned,
+            unassigned_quantity=total_owned - assigned,
+        )
+
     def add_cards(
         self,
         card_id: str,
@@ -276,7 +543,13 @@ class InventoryDatabase:
                 "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
                 (value,),
             ).fetchone()
+            allocated_quantity = self._allocated_quantity(connection, value)
         existing_quantity = int(existing["quantity"]) if existing else 0
+        if quantity < allocated_quantity:
+            raise ValueError(
+                f"{allocated_quantity} copies are assigned to locations. "
+                "Reduce those assignments before lowering the total."
+            )
         if existing_quantity == quantity:
             return InventoryChange(value, quantity, 0, 0)
         self.create_backup()
@@ -315,6 +588,95 @@ class InventoryDatabase:
             )
         return InventoryChange(value, quantity, int(cursor.lastrowid), quantity_delta)
 
+    def set_quantities(self, quantities: dict[str, int]) -> tuple[InventoryChange, ...]:
+        """Apply validated absolute quantities in one transaction and one backup."""
+        normalized: dict[str, int] = {}
+        for card_id, quantity in quantities.items():
+            value = str(card_id).strip()
+            if not value:
+                raise ValueError("A canonical card ID is required for inventory.")
+            if isinstance(quantity, bool) or not isinstance(quantity, int) or not 0 <= quantity <= 9999:
+                raise ValueError("Inventory quantity must be between 0 and 9999.")
+            normalized[value] = quantity
+        if not normalized:
+            return ()
+
+        self.initialize()
+        prior = {
+            holding.card_id: holding.quantity
+            for holding in self.holdings()
+            if holding.card_id in normalized
+        }
+        changed = {
+            card_id: quantity
+            for card_id, quantity in normalized.items()
+            if prior.get(card_id, 0) != quantity
+        }
+        if not changed:
+            return ()
+
+        with self.connect() as connection:
+            allocated = {
+                str(row["card_id"]): int(row["quantity"])
+                for row in connection.execute(
+                    "SELECT card_id, SUM(quantity) AS quantity "
+                    "FROM inventory_location_holdings GROUP BY card_id"
+                ).fetchall()
+            }
+        conflicts = [
+            (card_id, allocated.get(card_id, 0))
+            for card_id, quantity in changed.items()
+            if quantity < allocated.get(card_id, 0)
+        ]
+        if conflicts:
+            card_id, assigned = sorted(conflicts)[0]
+            raise ValueError(
+                f"{card_id} has {assigned} copies assigned to locations. "
+                "Reduce those assignments before lowering the total."
+            )
+
+        self.create_backup()
+        results = []
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for card_id in sorted(changed):
+                quantity = changed[card_id]
+                row = connection.execute(
+                    "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
+                    (card_id,),
+                ).fetchone()
+                prior_quantity = int(row["quantity"]) if row else 0
+                quantity_delta = quantity - prior_quantity
+                if not quantity_delta:
+                    continue
+                if quantity:
+                    connection.execute(
+                        """
+                        INSERT INTO inventory_holdings(card_id, quantity)
+                        VALUES (?, ?)
+                        ON CONFLICT(card_id) DO UPDATE SET
+                            quantity=excluded.quantity,
+                            updated_at=CURRENT_TIMESTAMP
+                        """,
+                        (card_id, quantity),
+                    )
+                else:
+                    connection.execute(
+                        "DELETE FROM inventory_holdings WHERE card_id = ?",
+                        (card_id,),
+                    )
+                cursor = connection.execute(
+                    """
+                    INSERT INTO inventory_events(card_id, action, quantity_delta)
+                    VALUES (?, 'manual_set', ?)
+                    """,
+                    (card_id, quantity_delta),
+                )
+                results.append(
+                    InventoryChange(card_id, quantity, int(cursor.lastrowid), quantity_delta)
+                )
+        return tuple(results)
+
     def undo_add(self, event_id: int) -> InventoryChange:
         if event_id <= 0:
             raise ValueError("A valid inventory event is required to undo an addition.")
@@ -347,6 +709,12 @@ class InventoryDatabase:
             if holding is None or int(holding["quantity"]) < added_quantity:
                 raise ValueError("The inventory quantity cannot be reduced further.")
             quantity = int(holding["quantity"]) - added_quantity
+            allocated_quantity = self._allocated_quantity(connection, card_id)
+            if quantity < allocated_quantity:
+                raise ValueError(
+                    f"{allocated_quantity} copies are assigned to locations. "
+                    "Reduce those assignments before undoing this addition."
+                )
             if quantity:
                 connection.execute(
                     """
