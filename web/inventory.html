@@ -33,20 +33,26 @@
             <h2>Energy</h2>
             <div id="energy_categories"></div>
           </section>
+          <section>
+            <h2>Special</h2>
+            <div id="special_categories"></div>
+          </section>
         </nav>
 
         <button id="recent_button" class="binder-nav-item binder-recent" type="button" data-category="recent">
           <span class="binder-nav-icon" aria-hidden="true">◷</span><span>Recently added</span>
         </button>
 
-        <div class="binder-sidebar-footer">
-          <a href="/">Back to scanner</a>
-          <button id="theme_toggle" class="binder-theme-toggle" type="button">Light mode</button>
-        </div>
       </aside>
 
       <section class="binder-main">
         <header class="binder-toolbar">
+          <nav class="binder-top-navigation" aria-label="Main card tools">
+            <a class="is-active" href="/inventory">My Collection</a>
+            <a href="/">Search Cards</a>
+            <a href="/deck">Check a Deck</a>
+            <button id="theme_toggle" type="button">Light Mode</button>
+          </nav>
           <div class="binder-organize" role="group" aria-label="Organize collection by">
             <span>Organize by</span>
             <button class="is-active" type="button" data-mode="typing">Typing</button>
@@ -67,6 +73,13 @@
             <p id="view_count">Loading your collection…</p>
           </div>
           <div class="binder-controls">
+            <div class="binder-export-actions" aria-label="Export collection">
+              <span>Export collection</span>
+              <div>
+                <a href="/inventory/export.csv" download>CSV</a>
+                <a href="/inventory/export.json" download>JSON</a>
+              </div>
+            </div>
             <label>Set filter
               <select id="set_filter"><option value="all">All owned sets</option></select>
             </label>
@@ -87,7 +100,23 @@
           <button id="drawer_close" type="button" aria-label="Close card details">×</button>
         </div>
         <div class="card-drawer-scroll">
-          <div class="card-drawer-image-wrap"><img id="drawer_image" alt=""></div>
+          <button id="drawer_image_button" class="card-drawer-image-wrap" type="button" aria-label="Enlarge selected card artwork">
+            <img id="drawer_image" alt="">
+            <span class="card-drawer-image-hint">Click to enlarge</span>
+          </button>
+          <section class="card-drawer-quantity-editor" aria-labelledby="drawer_quantity_label">
+            <div>
+              <span id="drawer_quantity_label">Quantity owned</span>
+              <strong id="drawer_quantity_summary">0 copies</strong>
+            </div>
+            <div class="card-drawer-quantity-controls">
+              <button id="drawer_quantity_decrease" type="button" aria-label="Decrease quantity">−</button>
+              <input id="drawer_quantity_input" type="number" inputmode="numeric" min="0" max="9999" step="1" aria-label="Quantity owned">
+              <button id="drawer_quantity_increase" type="button" aria-label="Increase quantity">+</button>
+            </div>
+            <button id="drawer_quantity_save" class="card-drawer-save" type="button">Save quantity</button>
+            <p id="drawer_quantity_feedback" class="card-drawer-save-feedback" role="status" aria-live="polite"></p>
+          </section>
           <dl class="card-drawer-details">
             <div><dt>Quantity</dt><dd id="drawer_quantity">—</dd></div>
             <div><dt>Set</dt><dd id="drawer_set">—</dd></div>
@@ -100,6 +129,7 @@
         </div>
       </aside>
     </main>
+    <script src="/card-inspector.js"></script>
     <script src="/inventory.js"></script>
   </body>
 </html>

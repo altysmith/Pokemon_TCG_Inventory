@@ -38,7 +38,8 @@ const inventoryAddQuantity = document.querySelector('#inventory_add_quantity');
 const addInventoryButton = document.querySelector('#add_inventory');
 const undoInventoryButton = document.querySelector('#undo_inventory');
 const inventoryMessage = document.querySelector('#inventory_message');
-const UI_ITERATION = 17;
+// Dormant webcam interface retained for possible future experiments.
+const UI_ITERATION = 18;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -112,7 +113,7 @@ function blockForVersion(detail) {
   state.textContent = 'RESTART NEEDED';
   state.className = 'state bad';
   instruction.textContent = detail;
-  message.textContent = 'Close the scanner command window, run run_scanner.bat again, then refresh this page.';
+  message.textContent = 'Close the command window, run Run Legacy Webcam Scanner.bat again, then refresh this page.';
 }
 
 async function verifyVersion() {

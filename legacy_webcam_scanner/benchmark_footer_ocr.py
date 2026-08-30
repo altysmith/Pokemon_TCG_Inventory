@@ -1,4 +1,4 @@
-"""Measure layout-aware footer OCR against corrected webcam benchmark rows."""
+"""Legacy benchmark for the dormant webcam OCR workflow."""
 
 from __future__ import annotations
 

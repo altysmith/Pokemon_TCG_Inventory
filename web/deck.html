@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0f13">
+    <title>Deck Inventory Check</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/theme.js"></script>
+  </head>
+  <body class="catalog-body">
+    <main class="catalog-app">
+      <aside class="catalog-sidebar">
+        <div class="binder-brand">
+          <span class="binder-brand-mark" aria-hidden="true">◆</span>
+          <div><strong>Deck Check</strong><small>Local inventory comparison</small></div>
+        </div>
+        <nav class="catalog-primary-nav" aria-label="Card tools">
+          <a href="/">Search</a>
+          <a href="/inventory">Collection</a>
+          <a class="is-active" href="/deck">Deck Check</a>
+        </nav>
+        <div class="catalog-sidebar-note">
+          <strong>READ ONLY</strong>
+          <span>Checking a deck never changes your collection.</span>
+        </div>
+        <button id="theme_toggle" class="binder-theme-toggle" type="button">Light mode</button>
+      </aside>
+
+      <section class="catalog-main deck-main">
+        <header class="catalog-header deck-header">
+          <div>
+            <p class="binder-view-eyebrow">Limitless · Pokémon TCG Live</p>
+            <h1>Can I build this deck?</h1>
+            <p>Paste a copied deck list and compare every card with your physical collection.</p>
+          </div>
+          <a class="catalog-collection-link" href="/inventory">View collection</a>
+        </header>
+
+        <section class="deck-import-panel">
+          <form id="deck_form">
+            <label for="deck_list">Deck list</label>
+            <textarea id="deck_list" spellcheck="false" placeholder="Pokémon: 18&#10;4 Raging Bolt ex TEF 123&#10;&#10;Trainer: 34&#10;4 Professor's Research SVI 189&#10;&#10;Energy: 8&#10;6 Basic Lightning Energy SVE 4"></textarea>
+            <div class="deck-import-actions">
+              <p>Pokémon use the requested printing or a gameplay-identical alternate artwork. Trainers and Special Energy match by name. Basic Energy is ignored.</p>
+              <button id="deck_submit" class="catalog-search-button" type="submit">Check my inventory</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="deck_summary" class="deck-summary" hidden aria-live="polite"></section>
+        <p id="deck_status" class="deck-status" role="status">Paste a deck list when you are ready.</p>
+        <section id="deck_errors" class="deck-errors" hidden></section>
+        <section id="deck_results" class="deck-results" aria-live="polite"></section>
+      </section>
+    </main>
+    <script src="/deck.js"></script>
+  </body>
+</html>

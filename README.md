@@ -1,18 +1,18 @@
-# Tiny Card Text Scanner
+# Pokémon Card Collection
 
-**Current build: Iteration 17 — Premium digital binder**
+**Current build: Iteration 18 — Search-first collection intake**
 
-This local browser app reads the literal text in a manually selected part of a webcam frame or still image. RapidOCR is the primary general-purpose reader; Tesseract is used only if RapidOCR finds no text. After reading, complete set-and-number fields are checked against the local catalog. Images stay on this computer, and scanning uses no internet API.
+This local browser app provides catalog search, quantity-based collection management, and read-only deck-list checking. The former webcam OCR experiment is retained as dormant legacy code but is no longer part of the normal interface.
 
 ## Run it
 
-Double-click **`run_scanner.bat`**. It starts the private local scanner and opens `http://127.0.0.1:8766/` in your normal browser. Keep the small command window open while scanning; close it when finished.
+Double-click **`Start Pokemon Collection.bat`**. It starts the private local app and opens the Search page at `http://127.0.0.1:8766/` in your normal browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Keep the small command window open while using the app; close it when finished.
 
 RapidOCR, ONNX Runtime, Tesseract, and the required Python runtime are installed on this machine. `requirements.txt` is included for installing the project on another computer.
 
 ## Local card database and API
 
-This repository contains two isolated components: the webcam scanner and the `card_api` catalog service. They share exact catalog queries while retaining separate code paths and data responsibilities.
+This repository contains the local collection application and the `card_api` catalog service. The dormant webcam experiment is isolated under `legacy_webcam_scanner/` and is not linked from the application.
 
 The catalog uses [Malie.io's formatted TCGL exports](https://malie.io/static/index.html) as its primary source. Its pipeline is:
 
@@ -72,13 +72,18 @@ For example, `/cards?set_code=SSP&number=075` returns Smoochum, while `/cards?se
 - **Iteration 14 — Timed scan diagnostics:** Automatically records client total time, server time, OCR time, attempted treatments, parsed fields, and timeout status for every scan. OCR has a 10-second budget so difficult fallbacks return available evidence instead of searching indefinitely.
 - **Iteration 15 — Dark set badge recovery:** Recovers tiny inverse-color set badges such as BLK and WHT when OCR changes exactly one letter and only one local card satisfies the repaired code, number, and printed total. Missing or ambiguous codes remain unmatched.
 - **Iteration 16 — Partial set badge recovery:** Handles inverse-color badges such as TEF when OCR retains only the leading one or two set-code letters. Recovery requires both printed numbers and exactly one compatible local card; a completely missing or ambiguous code remains unmatched.
-- **Iteration 17 — Premium digital binder (current):** Rebuilds the read-only inventory as an image-first desktop collection app with live owned-category counts, independent organization and filtering, search, adaptive sorting, recently added ordering, responsive binder grids, and an in-place card detail drawer. Duplicate printings remain one tile with a quantity badge.
+- **Iteration 17 — Premium digital binder:** Rebuilds the read-only inventory as an image-first desktop collection app with live owned-category counts, independent organization and filtering, search, adaptive sorting, recently added ordering, responsive binder grids, and an in-place card detail drawer. Duplicate printings remain one tile with a quantity badge.
+- **Iteration 18 — Search-first collection intake (current):** Makes local catalog search the primary entry method while preserving Scan and Collection. The opening page shows no catalog cards until the user chooses at least one search option and presses Enter or **Search cards**. Search combines card name, set name/code, collector number, set, format, and card type, including an ACE SPEC filter. Standard currently includes regulation marks H, I, and J; Expanded includes every English card in the local catalog. Every exact canonical row shows its image and current owned quantity with large decrement/increment controls and direct quantity editing. Collection includes a dedicated ACE SPEC view while those cards remain available under their normal Item, Tool, Stadium, or Special Energy categories. Collection artwork now uses a bounded near-screen loading queue, visible loading placeholders, request timeouts, and two retries so intermittent CDN delays do not leave random blank cards.
 
 The launcher preloads RapidOCR before opening the scanner. The operational reader stops after the first high-confidence treatment only when its set code, card number, and any printed total resolve to one exact local card. Non-matches automatically continue through the remaining treatments. The page keeps both total scan time and server OCR time visible after every scan and disables **Next card** until the current reading is complete.
 
 Future material changes should advance the iteration number and add one short entry here.
 
-## Scan a card
+## Legacy webcam scanner (dormant)
+
+The webcam interface has been removed from every visible page. Its historical UI and benchmark tooling are retained under `legacy_webcam_scanner/` so the work is not lost. The old `/scan` address now returns to Search; deliberate access remains possible at `/legacy-webcam-scanner` while the collection app is running.
+
+Search is the primary intake method in Iteration 18. The page begins with no card results. Enter a name, set name/code, collector number, or combined identifier such as `PRE 011`; or choose a set, format, or card type. ACE SPEC is available as a dedicated card-type filter without replacing a card's underlying Item, Tool, Stadium, or Special Energy category. Active choices appear as removable filter chips, and **Reset filters** restores the default Standard-only state. Press Enter or **Search cards** to submit—typing, changing filters, and removing chips do not automatically reveal cards. Standard currently means regulation marks H, I, or J, while Expanded searches every English card in the local catalog. Each result is one immutable English catalog printing. Click its artwork for a full-screen inspection view; its quantity controls save directly to the separate inventory database without changing the catalog.
 
 ### Webcam workflow
 
@@ -97,9 +102,9 @@ Future material changes should advance the iteration number and add one short en
 3. Release the pointer. OCR starts automatically. Use **Rescan Selection** to repeat the crop.
 4. Correct the fields and click **Save OCR reading**.
 
-Manually saved correction rows are stored in `ocr_reads_it17.csv`. Every scan also adds an automatic timing row to `scan_performance_it17.csv`; no Save button is required for that diagnostic log. Webcam filenames begin with `webcam_`, and every new exact OCR crop is stored under `benchmark_crops/iteration_17`. Earlier iteration files remain untouched as OCR evidence.
+Manually saved correction rows are stored in `ocr_reads_it18.csv`. Every scan also adds an automatic timing row to `scan_performance_it18.csv`; no Save button is required for that diagnostic log. Webcam filenames begin with `webcam_`, and every new exact OCR crop is stored under `benchmark_crops/iteration_18`. Earlier iteration files remain untouched as OCR evidence.
 
-The scanner displays and stores the literal OCR result first. It then separates the letters and digit groups into editable fields. A unique one-letter repair or partial-code recovery may be used for exact local matching, but never changes the retained literal OCR. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_17`, while the correction CSV keeps both the untouched OCR result and your corrected labels. The automatic performance CSV records the timings and treatments for every attempt, including scans you do not manually save.
+The scanner displays and stores the literal OCR result first. It then separates the letters and digit groups into editable fields. A unique one-letter repair or partial-code recovery may be used for exact local matching, but never changes the retained literal OCR. Every scan gets a unique ID. Its exact crop is stored under `benchmark_crops/iteration_18`, while the correction CSV keeps both the untouched OCR result and your corrected labels. The automatic performance CSV records the timings and treatments for every attempt, including scans you do not manually save.
 
 For a footer such as `H SSP en 075/191`, the untouched literal OCR is retained for benchmarking. Four editable fields separately show `H` (regulation mark), `SSP` (set code), `075` (card number), and `191` (set total). An exact standalone `en` language marker is discarded from the usable fields.
 
@@ -113,9 +118,14 @@ When OCR reads both a set code and card number, the scanner immediately checks `
 
 Inventory is never changed merely because OCR found a card. **Add copies to collection** is enabled only for one exact, conflict-free local catalog match. Choose a whole-number quantity from 1 to 99; pressing the button makes the server validate both the card and quantity again before recording the canonical card ID. No-match, ambiguous, review, and invalid-quantity requests are rejected by the server even if a browser request is sent manually.
 
-The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuildable Malie catalog. Each batch records one immutable history event with the optional originating scan ID. **Undo last batch** removes that entire batch but retains a compensating history event, so mistakes remain auditable. Back up the `user_data` folder whenever you back up the collection; Git intentionally ignores this personal database.
+The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuildable Malie catalog. Each batch records one immutable history event with the optional originating scan ID. **Undo last batch** removes that entire batch but retains a compensating history event, so mistakes remain auditable. Before any real quantity change, the app creates and integrity-checks a timestamped SQLite snapshot in `user_data/backups/`. Git intentionally ignores both the personal database and these backups.
 
-Click **View collection** at the top of the scanner to open the read-only digital binder. The persistent sidebar filters the same owned records by Pokemon type, Trainer subtype, or Energy kind, while **Typing**, **A–Z**, and **Set** independently determine how those records are organized. Search matches card names, set names/codes, and collector numbers; set and sort controls narrow or reorder the current view. **Recently added** uses the permanent inventory timestamp. Selecting a tile opens its larger artwork and canonical details without navigating away or losing the binder position. These controls never edit quantities.
+Open **My Collection** to view the digital binder. The persistent sidebar filters the same owned records by Pokemon type, Trainer subtype, Energy kind, or ACE SPEC status, while **Typing**, **A–Z**, and **Set** independently determine how those records are organized. Search matches card names, set names/codes, collector numbers, categories, and ACE SPEC. Set and sort controls narrow or reorder the current view. **Recently added** uses the permanent inventory timestamp. Click card artwork for the full-screen inspection view, or click its name/details to open the quantity drawer without losing the binder position. The detail drawer can set an exact quantity, confirms before removing the final copy, and saves through the same audited inventory endpoint used by catalog search.
+
+The Collection toolbar provides **CSV** and **JSON** exports. Both use the versioned `pokemon-card-collection` schema and preserve immutable canonical card IDs, exact quantities, readable card identity fields, and inventory timestamps. JSON is the canonical transfer/restore representation because it retains structured fields and export metadata. CSV contains the same card records in an Excel-friendly UTF-8 table for sorting or editing. Both formats already have non-mutating parsers and validation tests; a later import screen can preview either file before offering an explicit merge or replacement operation.
+
+- `GET /inventory/export.json` downloads the structured collection export.
+- `GET /inventory/export.csv` downloads the spreadsheet-compatible collection export.
 
 The 26 saved webcam crops were re-run offline after installing RapidOCR and adding joined-language cleanup. Exact set-code reads improved from 1/26 to 21/26, card-number reads from 3/26 to 25/26, and set-total reads from 4/25 to 23/25. Regulation marks remained unreliable at 1/20, so that field stays editable and must not be used for automatic card identity or sorting.
 
