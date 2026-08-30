@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set "PYTHON_EXE=C:\Users\erica\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 
 if not exist "%PYTHON_EXE%" (
@@ -8,7 +8,7 @@ if not exist "%PYTHON_EXE%" (
   pause
   exit /b 1
 )
-call "%~dp0_ensure_dependencies.bat" "%PYTHON_EXE%" "%~dp0requirements.txt"
+call "%~dp0_ensure_dependencies.bat" "%PYTHON_EXE%" "%~dp0..\requirements.txt"
 if errorlevel 1 (
   pause
   exit /b 1

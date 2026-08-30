@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 card_scans.csv
 *.csv
+!tests/fixtures/*.csv
 benchmark_crops/
 .env
 scanner_data.sqlite3
@@ -16,3 +17,5 @@ user_data/*.sqlite3
 user_data/*.sqlite3-shm
 user_data/*.sqlite3-wal
 user_data/backups/
+user_data/runtime/
+legacy_webcam_scanner/evidence/

@@ -8,7 +8,7 @@ if not exist "%SCANNER_PY%" (
   pause
   exit /b 1
 )
-call "%~dp0..\_ensure_dependencies.bat" "%SCANNER_PY%" "%~dp0..\requirements.txt"
+call "%~dp0..\tools\_ensure_dependencies.bat" "%SCANNER_PY%" "%~dp0..\requirements.txt"
 if errorlevel 1 (
   pause
   exit /b 1
