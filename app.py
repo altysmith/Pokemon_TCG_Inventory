@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from time import perf_counter
 from urllib.parse import parse_qs, urlparse
+from urllib.request import urlopen
 
 from PIL import Image
 
@@ -73,6 +74,7 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
+SERVER_API_VERSION = 2
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -1165,6 +1167,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             self._json(
                 {
                     "ok": True,
+                    "server_api_version": SERVER_API_VERSION,
                     "iteration": ITERATION,
                     "name": ITERATION_NAME,
                     "primary_ocr": "RapidOCR",
@@ -1505,6 +1508,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
         )
 
 
+def _running_collection_server(port: int) -> dict | None:
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/health", timeout=0.6) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) and payload.get("ok") else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the local Pokémon collection app")
     parser.add_argument("--port", type=int, default=8766)
@@ -1516,6 +1528,18 @@ def main() -> None:
         help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
+    existing = _running_collection_server(args.port)
+    if existing is not None:
+        url = f"http://127.0.0.1:{args.port}{args.start_path}"
+        if existing.get("server_api_version") == SERVER_API_VERSION:
+            print(f"The current Pokemon Collection app is already running at {url}")
+            if not args.no_browser:
+                webbrowser.open(url)
+            return
+        raise SystemExit(
+            f"An older Pokemon Collection server is still using port {args.port}. "
+            "Close every older Pokemon Collection command window, then start the app again."
+        )
     inventory_database()
     saved_deck_database()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
