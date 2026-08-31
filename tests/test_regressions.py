@@ -7,7 +7,7 @@ from card_scanner.ocr import TextObservation, build_evidence
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LABELED_SNAPSHOT_PATH = ROOT / "1..card_scans.csv"
+LABELED_SNAPSHOT_PATH = ROOT / "tests" / "fixtures" / "saved_scan_regressions.csv"
 
 
 def catalog_card(code: str, number: str, total: str = "") -> CardInfo:

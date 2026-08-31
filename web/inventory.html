@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0f13">
+    <title>My Pokémon Card Collection</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/theme.js"></script>
+  </head>
+  <body class="binder-body">
+    <main class="binder-app">
+      <aside class="binder-sidebar" aria-label="Collection categories">
+        <div class="binder-brand">
+          <span class="binder-brand-mark" aria-hidden="true">◆</span>
+          <div><strong>My Collection</strong><small>Physical card inventory</small></div>
+        </div>
+
+        <button class="binder-nav-item is-active" type="button" data-category="all">
+          <span class="binder-nav-icon" aria-hidden="true">▦</span><span>All cards</span><b id="count_all">0</b>
+        </button>
+
+        <section class="binder-location-nav" aria-labelledby="location_navigation_heading">
+          <header>
+            <h2 id="location_navigation_heading">Locations</h2>
+            <button id="location_manage" type="button">Manage</button>
+          </header>
+          <button class="binder-nav-item" type="button" data-location="unassigned">
+            <span class="binder-nav-icon" aria-hidden="true">○</span><span>Unassigned</span><b id="count_unassigned">0</b>
+          </button>
+          <div id="location_navigation"></div>
+        </section>
+
+        <nav id="category_navigation" class="binder-category-nav">
+          <section>
+            <h2>Pokémon</h2>
+            <div id="pokemon_categories"></div>
+          </section>
+          <section>
+            <h2>Trainers</h2>
+            <div id="trainer_categories"></div>
+          </section>
+          <section>
+            <h2>Energy</h2>
+            <div id="energy_categories"></div>
+          </section>
+          <section>
+            <h2>Special</h2>
+            <div id="special_categories"></div>
+          </section>
+        </nav>
+
+        <button id="recent_button" class="binder-nav-item binder-recent" type="button" data-category="recent">
+          <span class="binder-nav-icon" aria-hidden="true">◷</span><span>Recently added</span>
+        </button>
+
+      </aside>
+
+      <section class="binder-main">
+        <header class="binder-toolbar">
+          <nav class="binder-top-navigation" aria-label="Main card tools">
+            <a class="is-active" href="/inventory">My Collection</a>
+            <a href="/">Search Cards</a>
+            <a href="/deck">Check a Deck</a>
+            <button id="theme_toggle" type="button">Light Mode</button>
+          </nav>
+          <div class="binder-organize" role="group" aria-label="Organize collection by">
+            <span>Organize by</span>
+            <button class="is-active" type="button" data-mode="typing">Typing</button>
+            <button type="button" data-mode="alpha">A–Z</button>
+            <button type="button" data-mode="set">Set</button>
+          </div>
+          <label class="binder-search">
+            <span class="sr-only">Search cards</span>
+            <input id="inventory_search" type="search" placeholder="Search cards, sets, or numbers…" autocomplete="off">
+            <span aria-hidden="true">⌕</span>
+          </label>
+        </header>
+
+        <div class="binder-content-toolbar">
+          <div>
+            <p id="view_eyebrow" class="binder-view-eyebrow">My collection</p>
+            <h1 id="view_title">All cards</h1>
+            <p id="view_count">Loading your collection…</p>
+          </div>
+          <div class="binder-controls">
+            <div class="binder-export-actions" aria-label="Export collection">
+              <span>Export collection</span>
+              <div>
+                <a id="inventory_export_csv" href="/inventory/export.csv" download>CSV</a>
+                <a id="inventory_export_json" href="/inventory/export.json" download>JSON</a>
+                <button id="inventory_import_open" type="button">Import</button>
+              </div>
+            </div>
+            <label>Set filter
+              <select id="set_filter"><option value="all">All owned sets</option></select>
+            </label>
+            <label>Sort by
+              <select id="inventory_sort"></select>
+            </label>
+          </div>
+        </div>
+
+        <nav id="alphabet_navigation" class="binder-alphabet" aria-label="Alphabet navigation" hidden></nav>
+        <p id="inventory_status" class="binder-status" role="status">Loading your local collection…</p>
+        <div id="inventory_groups" class="binder-groups" aria-live="polite"></div>
+      </section>
+
+      <aside id="card_drawer" class="card-drawer" aria-label="Selected card details" aria-hidden="true">
+        <div class="card-drawer-header">
+          <div><small id="drawer_category">Card details</small><h2 id="drawer_name">Selected card</h2></div>
+          <button id="drawer_close" type="button" aria-label="Close card details">×</button>
+        </div>
+        <div class="card-drawer-scroll">
+          <button id="drawer_image_button" class="card-drawer-image-wrap" type="button" aria-label="Enlarge selected card artwork">
+            <img id="drawer_image" alt="">
+            <span class="card-drawer-image-hint">Click to enlarge</span>
+          </button>
+          <section class="card-drawer-quantity-editor" aria-labelledby="drawer_quantity_label">
+            <div>
+              <span id="drawer_quantity_label">Quantity owned</span>
+              <strong id="drawer_quantity_summary">0 copies</strong>
+            </div>
+            <div class="card-drawer-quantity-controls">
+              <button id="drawer_quantity_decrease" type="button" aria-label="Decrease quantity">−</button>
+              <input id="drawer_quantity_input" type="number" inputmode="numeric" min="0" max="9999" step="1" aria-label="Quantity owned">
+              <button id="drawer_quantity_increase" type="button" aria-label="Increase quantity">+</button>
+            </div>
+            <button id="drawer_quantity_save" class="card-drawer-save" type="button">Save quantity</button>
+            <p id="drawer_quantity_feedback" class="card-drawer-save-feedback" role="status" aria-live="polite"></p>
+          </section>
+          <section class="card-drawer-location-editor" aria-labelledby="drawer_location_label">
+            <div>
+              <span id="drawer_location_label">Storage locations</span>
+              <strong id="drawer_unassigned_summary">0 unassigned</strong>
+            </div>
+            <p>Optional. Assign some owned copies without changing the total quantity.</p>
+            <label>Location
+              <select id="drawer_location_select"></select>
+            </label>
+            <label>Copies in this location
+              <input id="drawer_location_quantity" type="number" inputmode="numeric" min="0" max="9999" step="1" value="0">
+            </label>
+            <button id="drawer_location_save" class="card-drawer-save" type="button">Save location quantity</button>
+            <button id="drawer_location_manage" class="card-drawer-location-manage" type="button">Manage locations</button>
+            <p id="drawer_location_feedback" class="card-drawer-save-feedback" role="status" aria-live="polite"></p>
+            <div id="drawer_location_allocations" class="card-drawer-location-allocations"></div>
+          </section>
+          <dl class="card-drawer-details">
+            <div><dt>Quantity</dt><dd id="drawer_quantity">—</dd></div>
+            <div><dt>Set</dt><dd id="drawer_set">—</dd></div>
+            <div><dt>Card number</dt><dd id="drawer_number">—</dd></div>
+            <div><dt>Category</dt><dd id="drawer_type">—</dd></div>
+            <div><dt>Regulation mark</dt><dd id="drawer_regulation">—</dd></div>
+            <div><dt>Added</dt><dd id="drawer_added">—</dd></div>
+          </dl>
+          <p class="card-drawer-note">Quantities combine identical printings. Finish-specific tracking is not available yet.</p>
+        </div>
+      </aside>
+    </main>
+
+    <dialog id="inventory_import_dialog" class="collection-import-dialog" aria-labelledby="inventory_import_title">
+      <div class="collection-import-shell">
+        <header>
+          <div>
+            <small>COLLECTION TRANSFER</small>
+            <h2 id="inventory_import_title">Preview an inventory import</h2>
+            <p>CSV and JSON exports are validated before anything changes.</p>
+          </div>
+          <button id="inventory_import_close" type="button" aria-label="Close collection import">×</button>
+        </header>
+
+        <section class="collection-import-setup">
+          <label class="collection-import-file">
+            <span>Collection file</span>
+            <input id="inventory_import_file" type="file" accept=".csv,.json,text/csv,application/json">
+          </label>
+          <fieldset>
+            <legend>Import method</legend>
+            <label>
+              <input type="radio" name="inventory_import_mode" value="update" checked>
+              <span><strong>Update listed cards</strong><small>Cards absent from the file stay unchanged.</small></span>
+            </label>
+            <label>
+              <input type="radio" name="inventory_import_mode" value="replace">
+              <span><strong>Restore / replace</strong><small>The collection will exactly match the file.</small></span>
+            </label>
+          </fieldset>
+          <button id="inventory_import_preview" class="collection-import-primary" type="button">Preview changes</button>
+        </section>
+
+        <p id="inventory_import_status" class="collection-import-status" role="status" aria-live="polite">Choose an exported CSV or JSON file to begin.</p>
+
+        <section id="inventory_import_results" class="collection-import-results" hidden>
+          <div class="collection-import-summary" aria-label="Import summary">
+            <div><span>Affected</span><strong id="import_count_affected">0</strong></div>
+            <div><span>Additions</span><strong id="import_count_additions">0</strong></div>
+            <div><span>Quantity changes</span><strong id="import_count_changes">0</strong></div>
+            <div><span>Removals</span><strong id="import_count_removals">0</strong></div>
+            <div><span>Unchanged</span><strong id="import_count_unchanged">0</strong></div>
+            <div><span>Total copies after</span><strong id="import_count_total">0</strong></div>
+          </div>
+
+          <div id="inventory_import_errors" class="collection-import-errors" hidden></div>
+
+          <div class="collection-import-list-controls">
+            <label>Show
+              <select id="inventory_import_change_filter">
+                <option value="all">All affected cards</option>
+                <option value="addition">Additions</option>
+                <option value="quantity_change">Quantity changes</option>
+                <option value="removal">Removals</option>
+              </select>
+            </label>
+            <label>Find within preview
+              <input id="inventory_import_search" type="search" placeholder="Card name, set, or number…">
+            </label>
+          </div>
+
+          <div id="inventory_import_changes" class="collection-import-changes"></div>
+          <nav class="collection-import-pages" aria-label="Import preview pages">
+            <button id="inventory_import_previous" type="button">Previous</button>
+            <span id="inventory_import_page">Page 1 of 1</span>
+            <button id="inventory_import_next" type="button">Next</button>
+          </nav>
+        </section>
+
+        <footer>
+          <p>Applying an import creates one automatic database backup first.</p>
+          <button id="inventory_import_apply" class="collection-import-apply" type="button" disabled>Apply import</button>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog id="inventory_locations_dialog" class="inventory-locations-dialog" aria-labelledby="inventory_locations_title">
+      <div class="inventory-locations-shell">
+        <header>
+          <div>
+            <small>OPTIONAL ORGANIZATION</small>
+            <h2 id="inventory_locations_title">Manage storage locations</h2>
+            <p>Create deck boxes, binders, or any physical location you want to track.</p>
+          </div>
+          <button id="inventory_locations_close" type="button" aria-label="Close location manager">×</button>
+        </header>
+        <form id="inventory_location_create" class="inventory-location-create">
+          <label for="inventory_location_name">New location</label>
+          <input id="inventory_location_name" name="name" maxlength="60" autocomplete="off" placeholder="Example: Deck Box 1" required>
+          <button type="submit">Add location</button>
+        </form>
+        <p id="inventory_locations_status" class="inventory-locations-status" role="status" aria-live="polite">Locations are optional. All existing cards begin unassigned.</p>
+        <div id="inventory_locations_list" class="inventory-locations-list"></div>
+        <footer>Removing a location returns its allocated copies to Unassigned. Your collection totals never change.</footer>
+      </div>
+    </dialog>
+    <script src="/card-inspector.js"></script>
+    <script src="/inventory.js"></script>
+  </body>
+</html>

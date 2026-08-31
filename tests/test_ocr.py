@@ -7,6 +7,18 @@ from card_scanner.ocr import LiteralReading, TextObservation, build_evidence, sc
 
 
 class OcrTests(unittest.TestCase):
+    @patch("card_scanner.ocr._run_rapidocr")
+    def test_zero_time_budget_stops_before_any_treatment(self, run_rapidocr) -> None:
+        result = scan_crop(
+            Image.new("RGB", (100, 20), "white"),
+            derive_card_candidates=False,
+            time_budget_seconds=0,
+        )
+
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.treatments_attempted, ())
+        run_rapidocr.assert_not_called()
+
     def test_correlated_passes_do_not_inflate_repetition_score(self) -> None:
         same_source, _ = build_evidence(
             (
@@ -72,6 +84,7 @@ class OcrTests(unittest.TestCase):
             (LiteralReading("ZXQ 987/654", 0.91),),
             (LiteralReading("ZXQ 987/654", 0.95),),
             (LiteralReading("ZXQ 987/654", 0.82),),
+            (LiteralReading("ZXQ 987/654", 0.84),),
         ],
     )
     def test_primary_reader_returns_literal_unknown_text(
@@ -86,11 +99,16 @@ class OcrTests(unittest.TestCase):
         self.assertEqual(result.primary_confidence, 0.95)
         self.assertEqual(
             [reading.variant for reading in result.literal_readings],
-            ["original", "enlarged_color", "enlarged_gray"],
+            [
+                "original",
+                "enlarged_color",
+                "enlarged_gray",
+                "enlarged_gray_sharp",
+            ],
         )
         self.assertEqual(
             [reading.confidence for reading in result.literal_readings],
-            [0.91, 0.95, 0.82],
+            [0.91, 0.95, 0.82, 0.84],
         )
 
     @patch("card_scanner.ocr.build_evidence")
@@ -111,6 +129,48 @@ class OcrTests(unittest.TestCase):
         self.assertEqual(result.number_candidates, ())
         build_evidence.assert_not_called()
         variants.assert_not_called()
+
+    @patch(
+        "card_scanner.ocr._run_rapidocr",
+        side_effect=[
+            (LiteralReading("O PFL 113/094", 0.91),),
+            (LiteralReading("unused", 0.99),),
+        ],
+    )
+    def test_fast_mode_stops_after_complete_high_confidence_identifier(
+        self, run_rapidocr
+    ) -> None:
+        result = scan_crop(
+            Image.new("RGB", (100, 20), "white"),
+            derive_card_candidates=False,
+            early_stop_validator=lambda text: text == "O PFL 113/094",
+        )
+
+        self.assertEqual(result.raw_text, "O PFL 113/094")
+        self.assertEqual(run_rapidocr.call_count, 1)
+        self.assertEqual(len(result.literal_readings), 1)
+        self.assertEqual(result.treatments_attempted, ("rapidocr:original",))
+
+    @patch(
+        "card_scanner.ocr._run_rapidocr",
+        side_effect=[
+            (LiteralReading("PELD113/094", 0.92),),
+            (LiteralReading("PELE 113/094", 0.88),),
+            (LiteralReading("O PFLa 113/094", 0.84),),
+            (LiteralReading("O PFLa 113/094", 0.83),),
+        ],
+    )
+    def test_fast_mode_keeps_fallbacks_when_set_code_is_missing(
+        self, run_rapidocr
+    ) -> None:
+        result = scan_crop(
+            Image.new("RGB", (100, 20), "white"),
+            derive_card_candidates=False,
+            early_stop_validator=lambda _text: False,
+        )
+
+        self.assertEqual(run_rapidocr.call_count, 4)
+        self.assertEqual(len(result.literal_readings), 4)
 
 
 if __name__ == "__main__":

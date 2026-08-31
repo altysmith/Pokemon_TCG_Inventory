@@ -10,6 +10,7 @@ const state = document.querySelector('#state');
 const message = document.querySelector('#message');
 const literalOcr = document.querySelector('#literal_ocr');
 const ocrEngine = document.querySelector('#ocr_engine');
+const scanTiming = document.querySelector('#scan_timing');
 const regulationMark = document.querySelector('#regulation_mark');
 const setCode = document.querySelector('#set_code');
 const cardNumber = document.querySelector('#card_number');
@@ -32,7 +33,13 @@ const lookupName = document.querySelector('#lookup_name');
 const lookupIdentity = document.querySelector('#lookup_identity');
 const lookupSource = document.querySelector('#lookup_source');
 const lookupMessage = document.querySelector('#lookup_message');
-const UI_ITERATION = 5;
+const inventoryQuantity = document.querySelector('#inventory_quantity');
+const inventoryAddQuantity = document.querySelector('#inventory_add_quantity');
+const addInventoryButton = document.querySelector('#add_inventory');
+const undoInventoryButton = document.querySelector('#undo_inventory');
+const inventoryMessage = document.querySelector('#inventory_message');
+// Dormant webcam interface retained for possible future experiments.
+const UI_ITERATION = 18;
 const CARD_GUIDE = {top: 0.07, height: 0.86, aspect: 5 / 7, maxWidth: 0.82};
 const IDENTIFIER_GUIDE = {left: 0.06, top: 0.915, width: 0.26, height: 0.055};
 
@@ -48,12 +55,15 @@ let scanId = '';
 let versionReady = false;
 let mediaStream = null;
 let capturedFromCamera = false;
+let lastLookupStatus = 'not_checked';
+let currentInventoryEventId = 0;
 
 function resetOcrResult() {
   rawOcr = '';
   scanId = '';
   literalOcr.textContent = 'Waiting for scan';
   ocrEngine.textContent = '';
+  scanTiming.textContent = 'SCAN TIME: NOT RUN YET';
   regulationMark.value = '';
   setCode.value = '';
   cardNumber.value = '';
@@ -68,6 +78,7 @@ function updateLookupAvailability() {
 }
 
 function resetLookup() {
+  lastLookupStatus = 'not_checked';
   lookupState.textContent = 'NOT CHECKED';
   lookupState.className = 'state';
   lookupResult.hidden = true;
@@ -76,8 +87,19 @@ function resetLookup() {
   lookupName.textContent = '';
   lookupIdentity.textContent = '';
   lookupSource.textContent = '';
-  lookupMessage.textContent = "Uses this project's local catalog first. Online lookup is only a fallback. Nothing is added to inventory.";
+  lookupButton.hidden = false;
+  lookupMessage.textContent = 'Uses the local Malie catalog only. Nothing is added automatically.';
+  resetInventoryControls();
   updateLookupAvailability();
+}
+
+function resetInventoryControls() {
+  currentInventoryEventId = 0;
+  inventoryQuantity.textContent = '-';
+  inventoryAddQuantity.value = '1';
+  addInventoryButton.disabled = true;
+  undoInventoryButton.disabled = true;
+  inventoryMessage.textContent = 'Available only after one exact, conflict-free catalog match.';
 }
 
 function blockForVersion(detail) {
@@ -91,7 +113,7 @@ function blockForVersion(detail) {
   state.textContent = 'RESTART NEEDED';
   state.className = 'state bad';
   instruction.textContent = detail;
-  message.textContent = 'Close the scanner command window, run run_scanner.bat again, then refresh this page.';
+  message.textContent = 'Close the command window, run Run Legacy Webcam Scanner.bat again, then refresh this page.';
 }
 
 async function verifyVersion() {
@@ -106,6 +128,11 @@ async function verifyVersion() {
     if (!health.primary_ocr_available) {
       blockForVersion('RapidOCR is not installed, so reliable scanning is unavailable.');
       message.textContent = 'Run the project dependency installation, restart the scanner, then refresh this page.';
+      return;
+    }
+    if (!health.local_catalog_available) {
+      blockForVersion('The local card database has not been built yet.');
+      message.textContent = 'Double-click update_card_database.bat, then restart the scanner.';
       return;
     }
     versionReady = true;
@@ -326,7 +353,7 @@ function captureFrame() {
 }
 
 async function showNextCard() {
-  if (!mediaStream) return;
+  if (!mediaStream || scanInProgress) return;
   image = null;
   selection = null;
   selectionNormalized = null;
@@ -416,6 +443,7 @@ async function scanSelection() {
   scanInProgress = true;
   scanId = '';
   saveButton.disabled = true;
+  nextCardButton.disabled = true;
   const [x1, y1, x2, y2] = selection;
   const scaleX = image.naturalWidth / canvas.width;
   const scaleY = image.naturalHeight / canvas.height;
@@ -426,7 +454,15 @@ async function scanSelection() {
   scanButton.disabled = true;
   state.textContent = 'READING...';
   state.className = 'state';
-  message.textContent = 'Reading only the letters and numbers in the selected image area...';
+  const scanStartedAt = performance.now();
+  let readingSeconds = 0;
+  scanTiming.textContent = 'SCAN TIME: 0.0s (RUNNING)';
+  message.textContent = 'Reading the card identifier. Clear cards use one quick pass; difficult cards automatically get additional treatments...';
+  const readingTimer = window.setInterval(() => {
+    readingSeconds = Math.floor((performance.now() - scanStartedAt) / 1000);
+    scanTiming.textContent = `SCAN TIME: ${((performance.now() - scanStartedAt) / 1000).toFixed(1)}s (RUNNING)`;
+    message.textContent = `Still reading the selected identifier (${readingSeconds}s). Please wait before moving to the next card...`;
+  }, 100);
   try {
     const response = await fetch('/scan', {
       method: 'POST',
@@ -439,11 +475,29 @@ async function scanSelection() {
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Scan failed');
+    const totalScanSeconds = (performance.now() - scanStartedAt) / 1000;
+    const ocrSeconds = Number(result.ocr_elapsed_seconds);
+    const treatmentCount = Array.isArray(result.treatments_attempted) ? result.treatments_attempted.length : 0;
+    const timeoutLabel = result.ocr_timed_out ? ' / 10s LIMIT REACHED' : '';
+    scanTiming.textContent = Number.isFinite(ocrSeconds)
+      ? `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL / ${ocrSeconds.toFixed(2)}s OCR / ${treatmentCount} TREATMENTS${timeoutLabel}`
+      : `SCAN TIME: ${totalScanSeconds.toFixed(2)}s TOTAL`;
     if (result.iteration !== UI_ITERATION) {
       blockForVersion(`This page is Iteration ${UI_ITERATION}, but the server returned Iteration ${result.iteration || 'unknown'}.`);
       return;
     }
     scanId = result.scan_id || '';
+    if (scanId) {
+      try {
+        await fetch('/scan/timing', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({scan_id: scanId, client_total_seconds: totalScanSeconds}),
+        });
+      } catch (_timingError) {
+        // Timing diagnostics must never discard an otherwise usable scan.
+      }
+    }
     rawOcr = result.raw_ocr || '';
     literalOcr.textContent = rawOcr || 'No text detected';
     ocrEngine.textContent = result.ocr_engine ? `Reader: ${result.ocr_engine}` : '';
@@ -455,21 +509,37 @@ async function scanSelection() {
     readerName.textContent = result.ocr_engine || 'No reader result';
     state.textContent = rawOcr ? 'TEXT READ' : 'NO TEXT';
     state.className = `state ${rawOcr ? 'good' : 'bad'}`;
-    message.textContent = rawOcr
+    message.textContent = result.ocr_timed_out
+      ? 'The 10-second OCR limit was reached. Use any readable fields, or capture the card again.'
+      : rawOcr
       ? `Literal OCR: "${rawOcr}". Correct the fields, then save.`
       : 'No text was detected. Correct the fields anyway and save this no-read example.';
     saveButton.disabled = !scanId;
+    if (setCode.value.trim() && cardNumber.value.trim()) {
+      await lookupCurrentCard();
+    }
   } catch (error) {
+    scanTiming.textContent = `SCAN TIME: ${((performance.now() - scanStartedAt) / 1000).toFixed(2)}s / ERROR`;
     state.textContent = 'SCAN ERROR';
     state.className = 'state bad';
     message.textContent = error.message;
   } finally {
+    window.clearInterval(readingTimer);
     scanInProgress = false;
     scanButton.disabled = !versionReady || !selection;
+    nextCardButton.disabled = !mediaStream;
     if (versionReady) {
-      instruction.textContent = capturedFromCamera
-        ? 'Correct and save this reading, then press Next card.'
-        : 'Drag a new box to scan another area, or use Rescan Selection.';
+      if (lastLookupStatus === 'accepted') {
+        instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
+      } else if (lastLookupStatus === 'no_match') {
+        instruction.textContent = 'No exact match was found. Correct the editable fields, then press Find this card.';
+      } else if (lastLookupStatus === 'review') {
+        instruction.textContent = 'Review the displayed card and correct a field only if the identity or printed total is wrong.';
+      } else {
+        instruction.textContent = capturedFromCamera
+          ? 'Correct and save this reading, then press Next card.'
+          : 'Drag a new box to scan another area, or use Rescan Selection.';
+      }
     }
   }
 }
@@ -501,12 +571,12 @@ for (const field of [setCode, cardNumber, setTotal]) {
   field.addEventListener('input', resetLookup);
 }
 
-lookupButton.addEventListener('click', async () => {
+async function lookupCurrentCard() {
   lookupButton.disabled = true;
   lookupState.textContent = 'CHECKING';
   lookupState.className = 'state';
   lookupResult.hidden = true;
-  lookupMessage.textContent = 'Checking the local catalog, then the online fallback if needed...';
+  lookupMessage.textContent = 'Checking the local Malie catalog...';
   try {
     const response = await fetch('/lookup', {
       method: 'POST',
@@ -521,11 +591,16 @@ lookupButton.addEventListener('click', async () => {
     if (!response.ok || !result.ok) throw new Error(result.error || 'Lookup failed');
     const card = result.card || {};
     if (!card.card_name) {
-      lookupState.textContent = 'NO MATCH';
+      lastLookupStatus = card.status === 'review' ? 'review' : 'no_match';
+      lookupState.textContent = lastLookupStatus === 'review' ? 'REVIEW' : 'NO MATCH';
       lookupState.className = 'state bad';
-      lookupMessage.textContent = 'No exact card was found. Check the set code and card number; nothing was added.';
+      lookupMessage.textContent = 'No exact local card was found. Check the set code and card number; nothing was added.';
+      instruction.textContent = lastLookupStatus === 'review'
+        ? 'Review the entered identifiers; the local catalog did not produce one unique card.'
+        : 'No exact match was found. Correct the editable fields, then press Find this card.';
       return;
     }
+    lastLookupStatus = card.status === 'accepted' ? 'accepted' : 'review';
     lookupState.textContent = card.status === 'accepted' ? 'EXACT MATCH' : 'REVIEW';
     lookupState.className = `state ${card.status === 'accepted' ? 'good' : 'bad'}`;
     lookupName.textContent = card.card_name;
@@ -539,13 +614,87 @@ lookupButton.addEventListener('click', async () => {
     }
     lookupMessage.textContent = card.review_reasons?.length
       ? `Review required: ${card.review_reasons.join('; ')}. Nothing was added.`
-      : 'Exact identity found. This is a preview only; nothing was added to inventory.';
+      : 'Exact set-and-number match. Compare the name and image to the physical card. Nothing was added.';
+    if (lastLookupStatus === 'accepted') {
+      lookupButton.hidden = true;
+      inventoryQuantity.textContent = String(result.inventory_quantity ?? 0);
+      addInventoryButton.disabled = false;
+      inventoryMessage.textContent = 'Exact match confirmed. Choose how many copies to add.';
+      instruction.textContent = 'Exact visual match found. No corrections are needed; save the OCR reading, then press Next card.';
+      message.textContent = 'The database has the canonical card information. Leave the editable boxes alone unless the displayed card is wrong.';
+    } else {
+      lookupButton.hidden = false;
+      instruction.textContent = 'Review the displayed card and correct a field only if the identity or printed total is wrong.';
+    }
   } catch (error) {
     lookupState.textContent = 'LOOKUP ERROR';
     lookupState.className = 'state bad';
     lookupMessage.textContent = `${error.message}. Your OCR result is still safe and can be saved.`;
   } finally {
     updateLookupAvailability();
+  }
+}
+
+lookupButton.addEventListener('click', () => void lookupCurrentCard());
+
+addInventoryButton.addEventListener('click', async () => {
+  if (lastLookupStatus !== 'accepted') return;
+  const quantityToAdd = Number(inventoryAddQuantity.value);
+  if (!Number.isInteger(quantityToAdd) || quantityToAdd < 1 || quantityToAdd > 99) {
+    inventoryMessage.textContent = 'Enter a whole-number quantity from 1 to 99.';
+    return;
+  }
+  addInventoryButton.disabled = true;
+  undoInventoryButton.disabled = true;
+  inventoryMessage.textContent = `Rechecking the exact match and adding ${quantityToAdd} ${quantityToAdd === 1 ? 'copy' : 'copies'}...`;
+  try {
+    const response = await fetch('/inventory/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        set_code: setCode.value,
+        card_number: cardNumber.value,
+        set_total: setTotal.value,
+        scan_id: scanId,
+        quantity: quantityToAdd,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Inventory addition failed');
+    currentInventoryEventId = Number(result.inventory?.event_id || 0);
+    inventoryQuantity.textContent = String(result.inventory?.quantity ?? 0);
+    inventoryAddQuantity.value = '1';
+    undoInventoryButton.disabled = !currentInventoryEventId;
+    const added = Number(result.inventory?.quantity_delta || quantityToAdd);
+    inventoryMessage.textContent = `Added ${added} ${added === 1 ? 'copy' : 'copies'} of ${result.card?.card_name || 'this card'}. The batch was saved locally.`;
+  } catch (error) {
+    inventoryMessage.textContent = error.message;
+  } finally {
+    addInventoryButton.disabled = lastLookupStatus !== 'accepted';
+  }
+});
+
+undoInventoryButton.addEventListener('click', async () => {
+  if (!currentInventoryEventId) return;
+  undoInventoryButton.disabled = true;
+  addInventoryButton.disabled = true;
+  inventoryMessage.textContent = 'Undoing the last batch...';
+  try {
+    const response = await fetch('/inventory/undo', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({event_id: currentInventoryEventId}),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Inventory undo failed');
+    inventoryQuantity.textContent = String(result.inventory?.quantity ?? 0);
+    const undone = Math.abs(Number(result.inventory?.quantity_delta || 0));
+    currentInventoryEventId = 0;
+    inventoryMessage.textContent = `The last batch${undone ? ` of ${undone}` : ''} was undone. The history remains recorded.`;
+  } catch (error) {
+    inventoryMessage.textContent = error.message;
+  } finally {
+    addInventoryButton.disabled = lastLookupStatus !== 'accepted';
   }
 });
 
@@ -566,7 +715,7 @@ saveButton.addEventListener('click', async () => {
     scanId = '';
     message.textContent = capturedFromCamera
       ? 'Saved this labeled example. Press Next card when the slot is ready.'
-      : 'Saved this labeled example to ocr_reads_it5.csv.';
+      : 'Saved this labeled example to the current iteration CSV.';
   } catch (error) {
     state.textContent = 'SAVE ERROR';
     state.className = 'state bad';

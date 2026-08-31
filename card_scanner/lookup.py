@@ -40,6 +40,7 @@ class CardInfo:
     alternatives: tuple[CardAlternative, ...] = ()
     review_reasons: tuple[str, ...] = ()
     image_url: str = ""
+    card_id: str = ""
 
 
 def _get_json(path: str, params: dict[str, str], api_key: str = "") -> dict:

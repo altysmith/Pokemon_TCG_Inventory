@@ -9,9 +9,10 @@ import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
+from time import monotonic
+from typing import Callable, Iterable
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 from .catalog import known_set_codes
 from .parser import (
@@ -43,6 +44,8 @@ class OcrResult:
     evidence_text: str = ""
     literal_readings: tuple["LiteralReading", ...] = ()
     primary_confidence: float = 0.0
+    treatments_attempted: tuple[str, ...] = ()
+    timed_out: bool = False
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,19 @@ def _rapidocr_engine():
     from rapidocr import RapidOCR
 
     return RapidOCR()
+
+
+def warm_up_ocr() -> None:
+    """Load models and run one inference before offering the first capture."""
+    import numpy as np
+
+    sample = Image.new("RGB", (900, 160), "white")
+    font_path = Path(r"C:\Windows\Fonts\arial.ttf")
+    font = ImageFont.truetype(str(font_path), 64) if font_path.is_file() else None
+    ImageDraw.Draw(sample).text((35, 35), "PFL 113/094", fill="black", font=font)
+    engine = _rapidocr_engine()
+    with _RAPID_OCR_LOCK:
+        engine(np.asarray(sample))
 
 
 def _run_rapidocr(image: Image.Image) -> tuple[LiteralReading, ...]:
@@ -87,10 +103,24 @@ def _rapidocr_variants(image: Image.Image) -> tuple[tuple[str, Image.Image], ...
         Image.Resampling.LANCZOS,
     )
     gray = ImageOps.autocontrast(ImageOps.grayscale(large), cutoff=1).convert("RGB")
+    sharp_width = min(2400, max(1600, image.width * 6))
+    sharp_scale = sharp_width / max(1, image.width)
+    sharp_gray = ImageOps.autocontrast(
+        ImageOps.grayscale(
+            image.resize(
+                (sharp_width, max(100, round(image.height * sharp_scale))),
+                Image.Resampling.LANCZOS,
+            )
+        ),
+        cutoff=1,
+    ).filter(
+        ImageFilter.UnsharpMask(radius=2, percent=250, threshold=1)
+    ).convert("RGB")
     return (
         ("original", image.convert("RGB")),
         ("enlarged_color", large),
         ("enlarged_gray", gray),
+        ("enlarged_gray_sharp", sharp_gray),
     )
 
 
@@ -172,7 +202,13 @@ def _source_for_variant(index: int) -> tuple[str, bool]:
     return "blue_channel", True
 
 
-def _run_tesseract(image: Image.Image, executable: str, psm: int = 7) -> str:
+def _run_tesseract(
+    image: Image.Image,
+    executable: str,
+    psm: int = 7,
+    *,
+    timeout_seconds: float = 30.0,
+) -> str:
     with tempfile.TemporaryDirectory(prefix="card_scan_") as temp_dir:
         image_path = Path(temp_dir) / "crop.png"
         image.save(image_path)
@@ -188,7 +224,11 @@ def _run_tesseract(image: Image.Image, executable: str, psm: int = 7) -> str:
             "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/\\-|",
         ]
         completed = subprocess.run(
-            command, capture_output=True, text=True, check=False, timeout=30
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(0.1, timeout_seconds),
         )
         if completed.returncode != 0:
             raise RuntimeError(completed.stderr.strip() or "Tesseract OCR failed")
@@ -276,15 +316,38 @@ def build_evidence(
     return tuple(code_candidates), tuple(number_candidates)
 
 
-def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrResult:
+def scan_crop(
+    image: Image.Image,
+    derive_card_candidates: bool = True,
+    early_stop_validator: Callable[[str], bool] | None = None,
+    time_budget_seconds: float | None = None,
+) -> OcrResult:
     """Read literal text first, then derive optional card interpretations."""
+    started = monotonic()
+    deadline = (
+        started + max(0.0, time_budget_seconds)
+        if time_budget_seconds is not None
+        else None
+    )
     observations: list[TextObservation] = []
     literal_readings: list[LiteralReading] = []
+    treatments_attempted: list[str] = []
+    timed_out = False
+
+    def remaining_seconds() -> float | None:
+        return None if deadline is None else deadline - monotonic()
+
+    def budget_exhausted() -> bool:
+        return deadline is not None and monotonic() >= deadline
 
     # This is the primary generic reader. It has no expected code, number, or
     # character whitelist. All variants remain one correlated evidence source.
     try:
         for variant_name, variant in _rapidocr_variants(image):
+            if budget_exhausted():
+                timed_out = True
+                break
+            treatments_attempted.append(f"rapidocr:{variant_name}")
             readings = _run_rapidocr(variant)
             if not readings:
                 continue
@@ -300,12 +363,20 @@ def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrRes
                 low_quality=combined.confidence < 0.65,
             )
             observations.append(observation)
+            if (
+                early_stop_validator is not None
+                and combined.confidence >= 0.82
+                and early_stop_validator(combined.text)
+            ):
+                break
     except (ImportError, OSError, RuntimeError, ValueError):
         pass
+    if budget_exhausted():
+        timed_out = True
 
     # Tesseract is now a true fallback. It runs only if RapidOCR found no text.
     variants: list[Image.Image] = []
-    if not literal_readings:
+    if not literal_readings and not timed_out:
         variants = _variants(image)
         try:
             executable = find_tesseract()
@@ -315,9 +386,29 @@ def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrRes
             for index, variant in enumerate(variants):
                 source, low_quality = _source_for_variant(index)
                 for psm in (7, 6):
-                    text = _run_tesseract(variant, executable, psm)
+                    remaining = remaining_seconds()
+                    if remaining is not None and remaining <= 0:
+                        timed_out = True
+                        break
+                    treatments_attempted.append(f"tesseract:{source}:psm{psm}")
+                    try:
+                        text = _run_tesseract(
+                            variant,
+                            executable,
+                            psm,
+                            timeout_seconds=min(30.0, remaining)
+                            if remaining is not None
+                            else 30.0,
+                        )
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                        break
                     if text:
                         observations.append(TextObservation(text, source, low_quality))
+                if timed_out:
+                    break
+    if budget_exhausted():
+        timed_out = True
 
     evidence_text = " | ".join(dict.fromkeys(item.text for item in observations))
     best_literal = max(
@@ -358,6 +449,12 @@ def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrRes
             candidate.value,
             candidate.totals[0] if candidate.totals else "",
         )
+    if best_literal:
+        ocr_engine = "RapidOCR"
+    elif any(item.startswith("tesseract:") for item in treatments_attempted):
+        ocr_engine = "Tesseract fallback"
+    else:
+        ocr_engine = "RapidOCR (no text)"
     return OcrResult(
         raw_text,
         parsed,
@@ -365,8 +462,10 @@ def scan_crop(image: Image.Image, derive_card_candidates: bool = True) -> OcrRes
         code_candidates[:8],
         number_candidates[:10],
         tuple(observations),
-        "RapidOCR" if best_literal else "Tesseract fallback",
+        ocr_engine,
         evidence_text,
         tuple(literal_readings),
         best_literal.confidence if best_literal else 0.0,
+        tuple(treatments_attempted),
+        timed_out,
     )
