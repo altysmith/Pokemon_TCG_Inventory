@@ -458,6 +458,49 @@ input:focus { border-color: var(--ink); }
 .inventory-locations-list button.is-remove { color: #ff7b72; }
 .inventory-locations-empty { margin: 0; padding: 30px 18px; color: var(--binder-muted); text-align: center; }
 .inventory-locations-shell > footer { margin-top: 16px; padding: 14px 23px; border-top: 1px solid var(--binder-border); background: var(--binder-panel); color: var(--binder-muted); font-size: 11px; line-height: 1.45; }
+.collection-deck-library { margin: 0 clamp(18px, 2.4vw, 36px) 18px; padding: 17px 18px; border: 1px solid var(--binder-border); border-radius: 12px; background: var(--binder-panel); }
+.collection-deck-library > header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.collection-deck-library > header p { margin: 0; color: var(--binder-accent); font-size: 9px; font-weight: 850; letter-spacing: .13em; }
+.collection-deck-library > header h2 { margin: 4px 0 0; font-size: 20px; }
+.collection-deck-library > header span { display: block; margin-top: 4px; color: var(--binder-muted); font-size: 11px; }
+.collection-deck-library > header a { flex: none; border: 1px solid var(--binder-border-strong); border-radius: 8px; color: var(--binder-text); padding: 9px 12px; font-size: 11px; font-weight: 750; text-decoration: none; }
+.collection-decks-status { margin: 11px 0 0; color: var(--binder-faint); font-size: 11px; }
+.collection-decks-status.is-error { color: #ff7b72; }
+.collection-decks { display: flex; gap: 9px; margin-top: 10px; overflow-x: auto; }
+.collection-decks:empty { display: none; }
+.collection-decks article { display: flex; min-width: min(100%, 390px); align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--binder-border); border-radius: 9px; background: var(--binder-panel-raised); padding: 11px 12px; }
+.collection-decks article div { display: grid; min-width: 0; }
+.collection-decks article small { color: var(--binder-accent); font-size: 8px; font-weight: 850; letter-spacing: .1em; }
+.collection-decks article strong { margin-top: 3px; overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.collection-decks article span { margin-top: 3px; color: var(--binder-muted); font-size: 10px; }
+.collection-decks article button { flex: none; min-height: 38px; border: 1px solid var(--binder-accent); border-radius: 8px; background: transparent; color: var(--binder-text); padding: 0 11px; font: 800 10px "Segoe UI", sans-serif; cursor: pointer; }
+.collection-selection-toolbar { position: sticky; z-index: 15; top: 66px; display: flex; min-height: 58px; align-items: center; margin: 0 clamp(18px, 2.4vw, 36px) 18px; border: 1px solid var(--binder-border-strong); border-radius: 11px; background: color-mix(in srgb, var(--binder-panel) 94%, transparent); padding: 8px 10px; box-shadow: 0 12px 30px rgba(0,0,0,.22); backdrop-filter: blur(12px); }
+.collection-selection-toolbar > div { display: flex; width: 100%; align-items: center; gap: 8px; }
+.collection-selection-toolbar > div[hidden], #inventory_move_deck_option[hidden] { display: none; }
+.collection-selection-toolbar strong { margin-right: auto; padding-left: 5px; font-size: 13px; }
+.collection-selection-toolbar button { min-height: 39px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: transparent; color: var(--binder-text); padding: 0 13px; font: 800 11px "Segoe UI", sans-serif; cursor: pointer; }
+.collection-selection-toolbar button.is-primary, .inventory-move-shell button.is-primary { border-color: var(--binder-accent); background: var(--binder-accent); color: #fff; }
+.collection-selection-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+.binder-card-check { position: absolute; z-index: 2; top: 8px; left: 8px; display: none; width: 28px; height: 28px; place-items: center; border: 2px solid rgba(255,255,255,.85); border-radius: 7px; background: rgba(4,7,9,.78); color: #fff; font-size: 17px; box-shadow: 0 3px 10px rgba(0,0,0,.32); }
+.binder-card.is-selecting .binder-card-check { display: grid; }
+.binder-card.is-checked { border-color: #5bd69b; box-shadow: 0 0 0 2px rgba(91,214,155,.34); }
+.binder-card.is-checked .binder-card-check { border-color: #5bd69b; background: #269366; }
+.inventory-move-dialog { width: min(620px, calc(100vw - 30px)); max-width: none; margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--binder-border-strong); border-radius: 15px; background: var(--binder-bg); color: var(--binder-text); box-shadow: 0 35px 100px rgba(0,0,0,.55); }
+.inventory-move-dialog::backdrop { background: rgba(2,4,6,.82); backdrop-filter: blur(8px); }
+.inventory-move-shell > header { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding: 21px 23px 17px; border-bottom: 1px solid var(--binder-border); background: var(--binder-panel); }
+.inventory-move-shell > header small { color: var(--binder-accent); font-size: 9px; font-weight: 850; letter-spacing: .13em; }
+.inventory-move-shell > header h2 { margin: 5px 0 0; font-size: 24px; }
+.inventory-move-shell > header p { margin: 5px 0 0; color: var(--binder-muted); font-size: 12px; }
+.inventory-move-shell > header button { border: 0; background: transparent; color: var(--binder-muted); font: 300 30px/1 "Segoe UI", sans-serif; cursor: pointer; }
+.inventory-move-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; padding: 19px 23px 6px; }
+.inventory-move-fields > label { display: grid; gap: 5px; color: var(--binder-muted); font-size: 10px; font-weight: 800; }
+.inventory-move-fields select { min-height: 42px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 7px 10px; font: 700 13px "Segoe UI", sans-serif; }
+.inventory-move-fields fieldset { grid-column: 1 / -1; display: grid; gap: 9px; margin: 3px 0 0; border: 1px solid var(--binder-border); border-radius: 9px; padding: 12px 14px; }
+.inventory-move-fields legend { color: var(--binder-faint); padding: 0 5px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.inventory-move-fields fieldset label { display: flex; align-items: center; gap: 8px; color: var(--binder-text); font-size: 12px; }
+.inventory-move-fields > p { grid-column: 1 / -1; padding: 0; }
+.inventory-move-shell > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 15px 23px 19px; }
+.inventory-move-shell > footer button { min-height: 40px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: transparent; color: var(--binder-text); padding: 0 14px; font: 800 11px "Segoe UI", sans-serif; cursor: pointer; }
 
 @media (min-width: 1500px) {
   .binder-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
@@ -871,4 +914,12 @@ input { font-size: 20px; }
   .binder-top-navigation a, .binder-top-navigation button { flex: 1 1 140px; min-height: 46px; padding-inline: 12px; font-size: 15px; }
   .binder-top-navigation button { margin-left: 0; }
   .binder-toolbar > .binder-search { width: 100%; justify-self: stretch; }
+  .collection-deck-library > header { align-items: flex-start; flex-direction: column; }
+  .collection-decks article { min-width: 100%; align-items: stretch; flex-direction: column; }
+  .collection-selection-toolbar { top: 8px; }
+  .collection-selection-toolbar > div { align-items: stretch; flex-direction: column; }
+  .collection-selection-toolbar strong { margin: 0; padding: 5px; }
+  .inventory-move-fields { grid-template-columns: 1fr; }
+  .inventory-move-fields fieldset, .inventory-move-fields > p { grid-column: 1; }
+  .inventory-move-shell > footer { align-items: stretch; flex-direction: column; }
 }

@@ -79,7 +79,7 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
-SERVER_API_VERSION = 4
+SERVER_API_VERSION = 5
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -784,6 +784,32 @@ def set_inventory_location_quantity(data: dict) -> InventoryLocationChange:
     )
 
 
+def move_inventory_location_quantities(data: dict) -> tuple:
+    raw_quantities = data.get("quantities")
+    if not isinstance(raw_quantities, dict):
+        raise ValueError("Choose one or more card quantities to move.")
+    quantities: dict[str, int] = {}
+    for card_id, quantity in raw_quantities.items():
+        if isinstance(quantity, bool):
+            raise ValueError("Moved quantities must be whole numbers.")
+        try:
+            quantities[str(card_id)] = int(quantity)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Moved quantities must be whole numbers.") from exc
+    source_value = data.get("source_location_id")
+    source_location_id = None
+    if source_value not in (None, "", "unassigned"):
+        try:
+            source_location_id = int(source_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("A valid source location is required.") from exc
+    return inventory_database().move_location_quantities(
+        quantities,
+        _inventory_location_id({"location_id": data.get("destination_location_id")}),
+        source_location_id=source_location_id,
+    )
+
+
 def inventory_locations_snapshot() -> dict:
     database = inventory_database()
     holdings = database.holdings()
@@ -1485,6 +1511,17 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     {
                         "ok": True,
                         "allocation": asdict(change),
+                        "inventory_changed": False,
+                    }
+                )
+            elif self.path == "/inventory/locations/move":
+                changes = move_inventory_location_quantities(data)
+                self._json(
+                    {
+                        "ok": True,
+                        "moves": [asdict(change) for change in changes],
+                        "moved_unique_cards": len(changes),
+                        "moved_copies": sum(change.quantity for change in changes),
                         "inventory_changed": False,
                     }
                 )

@@ -101,6 +101,17 @@ class InventoryLocationChange:
     unassigned_quantity: int
 
 
+@dataclass(frozen=True)
+class InventoryLocationMove:
+    card_id: str
+    quantity: int
+    source_location_id: int | None
+    destination_location_id: int
+    destination_quantity: int
+    assigned_quantity: int
+    unassigned_quantity: int
+
+
 class InventoryDatabase:
     """Own the mutable collection database and its auditable event history."""
 
@@ -479,6 +490,132 @@ class InventoryDatabase:
             assigned_quantity=assigned,
             unassigned_quantity=total_owned - assigned,
         )
+
+    def move_location_quantities(
+        self,
+        quantities: dict[str, int],
+        destination_location_id: int,
+        *,
+        source_location_id: int | None = None,
+    ) -> tuple[InventoryLocationMove, ...]:
+        """Move owned copies from Unassigned or one location into another location."""
+        if destination_location_id <= 0:
+            raise ValueError("A valid destination location is required.")
+        if source_location_id is not None and source_location_id <= 0:
+            raise ValueError("A valid source location is required.")
+        if source_location_id == destination_location_id:
+            raise ValueError("Choose a different destination location.")
+
+        normalized: dict[str, int] = {}
+        for card_id, quantity in quantities.items():
+            value = str(card_id).strip()
+            if not value:
+                raise ValueError("A canonical card ID is required for inventory.")
+            if isinstance(quantity, bool) or not isinstance(quantity, int) or not 1 <= quantity <= 9999:
+                raise ValueError("Moved quantities must be between 1 and 9999.")
+            normalized[value] = quantity
+        if not normalized:
+            raise ValueError("Select at least one card to move.")
+
+        self.initialize()
+        with self.connect() as connection:
+            destination = connection.execute(
+                "SELECT id FROM inventory_locations WHERE id = ? AND archived_at IS NULL",
+                (destination_location_id,),
+            ).fetchone()
+            source = None
+            if source_location_id is not None:
+                source = connection.execute(
+                    "SELECT id FROM inventory_locations WHERE id = ? AND archived_at IS NULL",
+                    (source_location_id,),
+                ).fetchone()
+            holdings = {
+                str(row["card_id"]): int(row["quantity"])
+                for row in connection.execute(
+                    "SELECT card_id, quantity FROM inventory_holdings WHERE card_id IN ({})".format(
+                        ",".join("?" for _ in normalized)
+                    ),
+                    list(normalized),
+                ).fetchall()
+            }
+            allocations = {
+                (int(row["location_id"]), str(row["card_id"])): int(row["quantity"])
+                for row in connection.execute(
+                    "SELECT location_id, card_id, quantity FROM inventory_location_holdings "
+                    "WHERE card_id IN ({})".format(
+                        ",".join("?" for _ in normalized)
+                    ),
+                    list(normalized),
+                ).fetchall()
+            }
+        if not destination:
+            raise ValueError("That destination location no longer exists.")
+        if source_location_id is not None and not source:
+            raise ValueError("That source location no longer exists.")
+
+        for card_id, quantity in normalized.items():
+            total_owned = holdings.get(card_id, 0)
+            if not total_owned:
+                raise ValueError(f"{card_id} is not currently in the collection.")
+            if source_location_id is None:
+                assigned = sum(
+                    allocated
+                    for (location_id, allocated_card_id), allocated in allocations.items()
+                    if allocated_card_id == card_id
+                )
+                available = total_owned - assigned
+                source_name = "Unassigned"
+            else:
+                available = allocations.get((source_location_id, card_id), 0)
+                source_name = "the selected location"
+            if quantity > available:
+                raise ValueError(
+                    f"Only {available} copies of {card_id} are available in {source_name}."
+                )
+
+        self.create_backup()
+        results: list[InventoryLocationMove] = []
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for card_id in sorted(normalized):
+                quantity = normalized[card_id]
+                if source_location_id is not None:
+                    source_quantity = allocations[(source_location_id, card_id)] - quantity
+                    if source_quantity:
+                        connection.execute(
+                            "UPDATE inventory_location_holdings SET quantity = ?, "
+                            "updated_at = CURRENT_TIMESTAMP WHERE location_id = ? AND card_id = ?",
+                            (source_quantity, source_location_id, card_id),
+                        )
+                    else:
+                        connection.execute(
+                            "DELETE FROM inventory_location_holdings WHERE location_id = ? AND card_id = ?",
+                            (source_location_id, card_id),
+                        )
+                destination_quantity = allocations.get((destination_location_id, card_id), 0) + quantity
+                connection.execute(
+                    """
+                    INSERT INTO inventory_location_holdings(location_id, card_id, quantity)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(location_id, card_id) DO UPDATE SET
+                        quantity = excluded.quantity,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (destination_location_id, card_id, destination_quantity),
+                )
+                assigned = self._allocated_quantity(connection, card_id)
+                results.append(
+                    InventoryLocationMove(
+                        card_id=card_id,
+                        quantity=quantity,
+                        source_location_id=source_location_id,
+                        destination_location_id=destination_location_id,
+                        destination_quantity=destination_quantity,
+                        assigned_quantity=assigned,
+                        unassigned_quantity=holdings[card_id] - assigned,
+                    )
+                )
+        return tuple(results)
 
     def add_cards(
         self,

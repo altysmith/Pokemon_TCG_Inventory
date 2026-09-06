@@ -22,6 +22,7 @@ from app import (
     heartbeat_desktop_session,
     inventory_import_preview,
     inventory_locations_snapshot,
+    move_inventory_location_quantities,
     normalize_desktop_session_token,
     open_desktop_session,
     remove_saved_deck,
@@ -578,6 +579,14 @@ class AppTests(unittest.TestCase):
                 set_inventory_location_quantity(
                     {"card_id": "card-1", "location_id": location.id, "quantity": 2}
                 )
+                second = create_inventory_location({"name": "Deck Box 2"})
+                moves = move_inventory_location_quantities(
+                    {
+                        "quantities": {"card-1": 1},
+                        "source_location_id": location.id,
+                        "destination_location_id": second.id,
+                    }
+                )
                 snapshot = app.inventory_snapshot()
                 locations = inventory_locations_snapshot()
                 renamed = rename_inventory_location(
@@ -586,11 +595,15 @@ class AppTests(unittest.TestCase):
                 released = remove_inventory_location({"location_id": location.id})
 
         self.assertEqual(snapshot["items"][0]["quantity"], 5)
-        self.assertEqual(snapshot["items"][0]["locations"], {str(location.id): 2})
+        self.assertEqual(
+            snapshot["items"][0]["locations"],
+            {str(location.id): 1, str(second.id): 1},
+        )
         self.assertEqual(snapshot["items"][0]["unassigned_quantity"], 3)
+        self.assertEqual(moves[0].quantity, 1)
         self.assertEqual(locations["unassigned"], {"unique_cards": 1, "total_copies": 3})
         self.assertEqual(renamed.name, "Main Deck Box")
-        self.assertEqual(released, 2)
+        self.assertEqual(released, 1)
 
     def test_element_view_keeps_other_card_categories_after_pokemon(self) -> None:
         items = [
@@ -921,6 +934,12 @@ class AppTests(unittest.TestCase):
         self.assertIn("async function createLocation", inventory_javascript)
         self.assertIn("fetch(url", inventory_javascript)
         self.assertIn("'/inventory/locations/set-quantity'", inventory_javascript)
+        self.assertIn("'/inventory/locations/move'", inventory_javascript)
+        self.assertIn('id="collection_selection_all"', inventory_html)
+        self.assertIn('id="collection_decks"', inventory_html)
+        self.assertIn("async function prepareSavedDeck", inventory_javascript)
+        self.assertIn("function openMoveDialog", inventory_javascript)
+        self.assertIn(".collection-selection-toolbar", stylesheet)
         self.assertIn(".inventory-locations-dialog", stylesheet)
         self.assertIn(".card-drawer-location-editor", stylesheet)
         self.assertIn("No cards in your inventory match these filters", inventory_javascript)
