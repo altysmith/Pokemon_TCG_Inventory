@@ -13,6 +13,7 @@ $baseUrl = "http://127.0.0.1:$Port/"
 $url = $baseUrl + "?desktop_session=$sessionToken"
 $serverProcess = $null
 $launcherMutex = $null
+$expectedServerApiVersion = $null
 
 function Show-LauncherMessage {
     param(
@@ -45,10 +46,65 @@ function Get-PythonExecutable {
     throw "Python could not be found. Open this project in Codex once to restore its bundled runtime."
 }
 
+function Get-ExpectedServerApiVersion {
+    $match = Select-String -LiteralPath $appPath -Pattern '^SERVER_API_VERSION\s*=\s*(\d+)\s*$' |
+        Select-Object -First 1
+    if (-not $match) {
+        throw "The collection app version could not be read from app.py."
+    }
+    return [int]$match.Matches[0].Groups[1].Value
+}
+
+function Get-DefaultBrowserExecutable {
+    try {
+        $choice = Get-ItemProperty `
+            -LiteralPath "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" `
+            -ErrorAction Stop
+        $commandKey = Get-Item `
+            -LiteralPath "Registry::HKEY_CLASSES_ROOT\$($choice.ProgId)\shell\open\command" `
+            -ErrorAction Stop
+        $command = [string]$commandKey.GetValue("")
+        $match = [regex]::Match($command, '^\s*(?:"([^"]+\.exe)"|([^\s]+\.exe))', 'IgnoreCase')
+        if ($match.Success) {
+            $path = if ($match.Groups[1].Success) { $match.Groups[1].Value } else { $match.Groups[2].Value }
+            if (Test-Path -LiteralPath $path) {
+                return $path
+            }
+        }
+    }
+    catch {
+        # Windows can still open the URL through its registered default handler.
+    }
+    return $null
+}
+
+function Open-CollectionWindow {
+    param([string]$Url)
+
+    $browserExecutable = Get-DefaultBrowserExecutable
+    if (-not $browserExecutable) {
+        Start-Process -FilePath $Url | Out-Null
+        return
+    }
+    $browserName = [IO.Path]::GetFileName($browserExecutable).ToLowerInvariant()
+    if ($browserName -eq "firefox.exe") {
+        Start-Process -FilePath $browserExecutable -ArgumentList @("-new-window", $Url) | Out-Null
+        return
+    }
+    if ($browserName -in @("chrome.exe", "msedge.exe", "brave.exe", "vivaldi.exe")) {
+        Start-Process -FilePath $browserExecutable -ArgumentList @("--new-window", $Url) | Out-Null
+        return
+    }
+    Start-Process -FilePath $Url | Out-Null
+}
+
 function Test-CollectionServer {
     try {
         $health = Invoke-RestMethod -Uri ($baseUrl + "health") -TimeoutSec 2
-        return ($health.ok -eq $true -and $health.server_api_version -eq 4)
+        return (
+            $health.ok -eq $true -and
+            [int]$health.server_api_version -eq $expectedServerApiVersion
+        )
     }
     catch {
         return $false
@@ -75,6 +131,7 @@ try {
 
     New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
 
+    $expectedServerApiVersion = Get-ExpectedServerApiVersion
     $pythonExecutable = Get-PythonExecutable
     $dependencyCheck = Start-Process -FilePath $dependencyHelper `
         -ArgumentList @("`"$pythonExecutable`"", "`"$requirementsPath`"") `
@@ -111,7 +168,7 @@ try {
         throw "The collection server did not become ready within 15 seconds."
     }
 
-    Start-Process -FilePath $url | Out-Null
+    Open-CollectionWindow -Url $url
 
     $sessionConnected = $false
     for ($attempt = 0; $attempt -lt 80; $attempt++) {
