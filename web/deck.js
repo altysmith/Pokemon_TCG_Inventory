@@ -50,6 +50,42 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.position = 'fixed';
+  field.style.opacity = '0';
+  document.body.append(field);
+  field.select();
+  const copied = document.execCommand('copy');
+  field.remove();
+  if (!copied) throw new Error('The deck list could not be copied.');
+}
+
+async function copyCheckedDeckList(button) {
+  if (!lastCheckedDeckList) return;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  try {
+    await copyTextToClipboard(lastCheckedDeckList);
+    button.textContent = 'Copied!';
+    statusText.textContent = 'The full deck list was copied in import format.';
+  } catch (error) {
+    button.textContent = 'Copy failed';
+    statusText.textContent = error.message;
+  } finally {
+    window.setTimeout(() => {
+      button.textContent = originalLabel;
+      button.disabled = false;
+    }, 1600);
+  }
+}
+
 function savedDeckDate(value) {
   const parsed = new Date(`${String(value).replace(' ', 'T')}Z`);
   if (Number.isNaN(parsed.getTime())) return value || '';
@@ -384,7 +420,10 @@ function renderResults(items, ignoredBasicEnergy = []) {
       <div class="deck-card-gallery deck-owned-gallery">${ownedMarkup}</div>
     </section>
     <section class="deck-result-section is-full-deck">
-      <div class="deck-section-heading"><span>COMPLETE IMPORT</span><h2>Full deck list</h2></div>
+      <div class="deck-section-heading has-actions">
+        <div><span>COMPLETE IMPORT</span><h2>Full deck list</h2></div>
+        <button id="deck_copy_full_list" type="button">Copy deck list</button>
+      </div>
       <div class="deck-full-groups">
         ${deckVisualGroup('Pokémon', pokemonItems)}
         ${deckVisualGroup('Trainer', trainerItems)}
@@ -398,6 +437,7 @@ function renderResults(items, ignoredBasicEnergy = []) {
       if (item?.image_url) window.CardInspector?.open?.(item, card);
     });
   });
+  document.querySelector('#deck_copy_full_list')?.addEventListener('click', (event) => void copyCheckedDeckList(event.currentTarget));
 }
 
 async function checkCurrentDeck() {

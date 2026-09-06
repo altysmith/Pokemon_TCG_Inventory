@@ -17,6 +17,7 @@ const viewTitle = document.querySelector('#view_title');
 const viewCount = document.querySelector('#view_count');
 const binderMain = document.querySelector('#binder_main');
 const deckViewActions = document.querySelector('#deck_view_actions');
+const deckViewCopy = document.querySelector('#deck_view_copy');
 const deckViewEdit = document.querySelector('#deck_view_edit');
 const deckViewCheck = document.querySelector('#deck_view_check');
 const drawer = document.querySelector('#card_drawer');
@@ -240,6 +241,23 @@ async function inventoryRequest(url, payload) {
   const data = await response.json();
   if (!response.ok || !data.ok) throw new Error(data.error || 'The inventory request could not be completed.');
   return data;
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.position = 'fixed';
+  field.style.opacity = '0';
+  document.body.append(field);
+  field.select();
+  const copied = document.execCommand('copy');
+  field.remove();
+  if (!copied) throw new Error('The deck list could not be copied.');
 }
 
 const COLLECTION_EXPORT_FIELDS = [
@@ -785,6 +803,28 @@ function leaveDeckView() {
   state.deckLoading = false;
   state.deckError = '';
   renderCollectionDecks();
+}
+
+async function copySelectedDeckList() {
+  const deck = savedDecks.find((item) => item.id === state.deckId);
+  if (!deck) return;
+  const originalLabel = deckViewCopy.textContent;
+  deckViewCopy.disabled = true;
+  try {
+    await copyTextToClipboard(deck.deck_list);
+    deckViewCopy.textContent = 'Copied!';
+    statusText.textContent = `${deck.name} was copied in deck-list import format.`;
+    statusText.hidden = false;
+  } catch (error) {
+    deckViewCopy.textContent = 'Copy failed';
+    statusText.textContent = error.message;
+    statusText.hidden = false;
+  } finally {
+    window.setTimeout(() => {
+      deckViewCopy.textContent = originalLabel;
+      deckViewCopy.disabled = false;
+    }, 1600);
+  }
 }
 
 function parseDeckEditorEntries(text) {
@@ -1966,6 +2006,7 @@ drawerLocationQuantity.addEventListener('keydown', (event) => {
 });
 locationManage.addEventListener('click', openLocationManager);
 drawerLocationManage.addEventListener('click', openLocationManager);
+deckViewCopy.addEventListener('click', () => void copySelectedDeckList());
 deckViewEdit.addEventListener('click', () => {
   if (state.deckId) void openDeckEditor(state.deckId);
 });
