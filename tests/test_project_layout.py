@@ -31,6 +31,20 @@ class ProjectLayoutTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(r'_ensure_dependencies.bat', app_launcher)
+        self.assertIn("Start-Process -FilePath $url", app_launcher)
+        self.assertIn("desktop-session/status", app_launcher)
+        self.assertNotIn("Get-AppBrowser", app_launcher)
+        self.assertNotIn("msedge.exe", app_launcher)
+
+    def test_all_primary_pages_keep_the_desktop_session_alive(self) -> None:
+        for filename in ("search.html", "inventory.html", "deck.html"):
+            html = (ROOT / "web" / filename).read_text(encoding="utf-8")
+            self.assertIn('src="/desktop-session.js"', html)
+        session_javascript = (ROOT / "web" / "desktop-session.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("new EventSource", session_javascript)
+        self.assertIn("sessionStorage", session_javascript)
 
     def test_legacy_outputs_default_outside_the_active_root(self) -> None:
         evidence = ROOT / "legacy_webcam_scanner" / "evidence"

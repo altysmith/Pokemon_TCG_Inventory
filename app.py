@@ -19,7 +19,7 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from time import perf_counter
+from time import monotonic, perf_counter, sleep
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
@@ -79,10 +79,14 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
-SERVER_API_VERSION = 3
+SERVER_API_VERSION = 4
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
+DESKTOP_SESSION_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
+DESKTOP_SESSION_LOCK = threading.Lock()
+DESKTOP_SESSION_CONNECTIONS: dict[str, set[str]] = {}
+DESKTOP_SESSION_LAST_DISCONNECTED: dict[str, float] = {}
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
 CSV_COLUMNS = [
     "scanned_at",
@@ -1129,8 +1133,64 @@ def undo_inventory_add(data: dict) -> InventoryChange:
     return inventory_database().undo_add(event_id)
 
 
+def normalize_desktop_session_token(value: str) -> str:
+    token = str(value or "").strip().lower()
+    if not DESKTOP_SESSION_TOKEN_RE.fullmatch(token):
+        raise ValueError("A valid desktop session token is required.")
+    return token
+
+
+def open_desktop_session(token: str, page: str) -> dict:
+    token = normalize_desktop_session_token(token)
+    page = normalize_desktop_session_token(page)
+    with DESKTOP_SESSION_LOCK:
+        pages = DESKTOP_SESSION_CONNECTIONS.setdefault(token, set())
+        pages.add(page)
+        DESKTOP_SESSION_LAST_DISCONNECTED.pop(token, None)
+        return {
+            "connected": True,
+            "connections": len(pages),
+            "seconds_since_disconnect": None,
+        }
+
+
+def close_desktop_session(token: str, page: str) -> dict:
+    token = normalize_desktop_session_token(token)
+    page = normalize_desktop_session_token(page)
+    with DESKTOP_SESSION_LOCK:
+        pages = DESKTOP_SESSION_CONNECTIONS.get(token)
+        if pages is not None:
+            pages.discard(page)
+            if not pages:
+                DESKTOP_SESSION_CONNECTIONS.pop(token, None)
+                DESKTOP_SESSION_LAST_DISCONNECTED.setdefault(token, monotonic())
+        remaining = len(DESKTOP_SESSION_CONNECTIONS.get(token, set()))
+        return {
+            "connected": remaining > 0,
+            "connections": remaining,
+            "seconds_since_disconnect": 0.0 if remaining == 0 else None,
+        }
+
+
+def desktop_session_status(token: str) -> dict:
+    token = normalize_desktop_session_token(token)
+    with DESKTOP_SESSION_LOCK:
+        connections = len(DESKTOP_SESSION_CONNECTIONS.get(token, set()))
+        disconnected_at = DESKTOP_SESSION_LAST_DISCONNECTED.get(token)
+    return {
+        "connected": connections > 0,
+        "connections": connections,
+        "seconds_since_disconnect": (
+            round(max(monotonic() - disconnected_at, 0.0), 3)
+            if not connections and disconnected_at is not None
+            else None
+        ),
+    }
+
+
 class ScannerHandler(BaseHTTPRequestHandler):
     server_version = "TinyTextReader/iteration-18"
+    protocol_version = "HTTP/1.1"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format % args}")
@@ -1159,6 +1219,24 @@ class ScannerHandler(BaseHTTPRequestHandler):
             raise ValueError("The image request is empty or too large (30 MB maximum).")
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
+    def _desktop_session_stream(self, token: str, page: str) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        open_desktop_session(token, page)
+        try:
+            while True:
+                self.wfile.write(b": collection-tab-open\n\n")
+                self.wfile.flush()
+                sleep(1.0)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            close_desktop_session(token, page)
+            self.close_connection = True
+
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         parsed = urlparse(self.path)
         route = parsed.path
@@ -1183,6 +1261,18 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     "deck_library_available": DECK_LIBRARY_PATH.is_file(),
                 }
             )
+            return
+        if route in {"/desktop-session/watch", "/desktop-session/status"}:
+            try:
+                query = parse_qs(parsed.query)
+                token = normalize_desktop_session_token(query.get("token", [""])[0])
+                if route.endswith("/watch"):
+                    page = normalize_desktop_session_token(query.get("page", [""])[0])
+                    self._desktop_session_stream(token, page)
+                else:
+                    self._json({"ok": True, **desktop_session_status(token)})
+            except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         if route == "/decks":
             try:
@@ -1256,6 +1346,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             "/deck.js": "deck.js",
             "/card-inspector.js": "card-inspector.js",
             "/theme.js": "theme.js",
+            "/desktop-session.js": "desktop-session.js",
             "/style.css": "style.css",
         }
         if route == "/legacy-webcam-scanner":
@@ -1284,7 +1375,16 @@ class ScannerHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         try:
             data = self._body_json()
-            if self.path == "/scan":
+            if self.path == "/desktop-session/close":
+                self._json(
+                    {
+                        "ok": True,
+                        **close_desktop_session(
+                            data.get("token", ""), data.get("page", "")
+                        ),
+                    }
+                )
+            elif self.path == "/scan":
                 self._scan(data)
             elif self.path == "/lookup":
                 info = lookup_confirmed_fields(data)

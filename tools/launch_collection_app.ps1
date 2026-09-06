@@ -8,10 +8,10 @@ $appPath = Join-Path $projectRoot "app.py"
 $requirementsPath = Join-Path $projectRoot "requirements.txt"
 $dependencyHelper = Join-Path $PSScriptRoot "_ensure_dependencies.bat"
 $runtimeDir = Join-Path $projectRoot "user_data\runtime"
-$browserProfile = Join-Path $runtimeDir ("desktop-browser-" + [Guid]::NewGuid().ToString("N"))
-$url = "http://127.0.0.1:$Port/"
+$sessionToken = [Guid]::NewGuid().ToString("N")
+$baseUrl = "http://127.0.0.1:$Port/"
+$url = $baseUrl + "?desktop_session=$sessionToken"
 $serverProcess = $null
-$browserProcess = $null
 $launcherMutex = $null
 
 function Show-LauncherMessage {
@@ -45,31 +45,24 @@ function Get-PythonExecutable {
     throw "Python could not be found. Open this project in Codex once to restore its bundled runtime."
 }
 
-function Get-AppBrowser {
-    $candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe"),
-        (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
-        (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
-    )
-
-    foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
-            return $candidate
-        }
-    }
-
-    throw "Microsoft Edge or Google Chrome is required for the app-style collection window."
-}
-
 function Test-CollectionServer {
     try {
-        $health = Invoke-RestMethod -Uri ($url + "health") -TimeoutSec 2
-        return ($health.ok -eq $true -and $health.server_api_version -eq 3)
+        $health = Invoke-RestMethod -Uri ($baseUrl + "health") -TimeoutSec 2
+        return ($health.ok -eq $true -and $health.server_api_version -eq 4)
     }
     catch {
         return $false
+    }
+}
+
+function Get-DesktopSessionStatus {
+    try {
+        return Invoke-RestMethod `
+            -Uri ($baseUrl + "desktop-session/status?token=$sessionToken") `
+            -TimeoutSec 2
+    }
+    catch {
+        return $null
     }
 }
 
@@ -81,7 +74,6 @@ try {
     }
 
     New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
-    New-Item -ItemType Directory -Path $browserProfile -Force | Out-Null
 
     $pythonExecutable = Get-PythonExecutable
     $dependencyCheck = Start-Process -FilePath $dependencyHelper `
@@ -95,7 +87,7 @@ try {
     }
 
     if (Test-CollectionServer) {
-        throw "A collection server is already running outside this desktop launcher. Close it, then click the collection icon again."
+        throw "A collection server is already running outside this desktop launcher. Close its browser or command window, then click the collection icon again."
     }
 
     $serverProcess = Start-Process -FilePath $pythonExecutable `
@@ -119,65 +111,32 @@ try {
         throw "The collection server did not become ready within 15 seconds."
     }
 
-    $browserExecutable = Get-AppBrowser
-    $browserArguments = @(
-        "--app=$url",
-        "--user-data-dir=`"$browserProfile`"",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-background-mode",
-        "--disable-default-apps",
-        "--disable-extensions",
-        "--disable-component-extensions-with-background-pages",
-        "--disable-features=msEdgeFirstRunExperience"
-    )
-    $browserProcess = Start-Process -FilePath $browserExecutable `
-        -ArgumentList $browserArguments `
-        -WorkingDirectory $projectRoot `
-        -PassThru
+    Start-Process -FilePath $url | Out-Null
 
-    # Chromium may hand the app window to a second process and let the process
-    # returned by Start-Process exit. Locate the real browser process by the
-    # unique profile created for this launch, then watch its window directly.
-    $browserProcessName = [IO.Path]::GetFileName($browserExecutable)
-    $appBrowserProcess = $null
-    for ($attempt = 0; $attempt -lt 40; $attempt++) {
-        $appBrowserProcess = Get-CimInstance Win32_Process -Filter "Name = '$browserProcessName'" `
-            -ErrorAction SilentlyContinue |
-            Where-Object {
-                $_.CommandLine -and
-                $_.CommandLine.Contains($browserProfile) -and
-                $_.CommandLine -notmatch "\s--type="
-            } |
-            Select-Object -First 1
-        if ($appBrowserProcess) {
+    $sessionConnected = $false
+    for ($attempt = 0; $attempt -lt 80; $attempt++) {
+        if ($serverProcess.HasExited) {
+            throw "The collection server stopped before the browser connected."
+        }
+        $sessionStatus = Get-DesktopSessionStatus
+        if ($sessionStatus -and $sessionStatus.connected) {
+            $sessionConnected = $true
             break
         }
         Start-Sleep -Milliseconds 250
     }
-    if (-not $appBrowserProcess) {
-        throw "The collection browser window could not be tracked after it opened."
-    }
-
-    $windowAppeared = $false
-    for ($attempt = 0; $attempt -lt 40; $attempt++) {
-        $trackedProcess = Get-Process -Id $appBrowserProcess.ProcessId -ErrorAction SilentlyContinue
-        if (-not $trackedProcess) {
-            break
-        }
-        if ($trackedProcess.MainWindowHandle -ne 0) {
-            $windowAppeared = $true
-            break
-        }
-        Start-Sleep -Milliseconds 250
-    }
-    if (-not $windowAppeared) {
-        throw "The collection browser process started, but its app window did not appear."
+    if (-not $sessionConnected) {
+        throw "The default browser opened, but the collection tab did not connect within 20 seconds."
     }
 
     while ($true) {
-        $trackedProcess = Get-Process -Id $appBrowserProcess.ProcessId -ErrorAction SilentlyContinue
-        if (-not $trackedProcess -or $trackedProcess.MainWindowHandle -eq 0) {
+        if ($serverProcess.HasExited) {
+            throw "The collection server stopped unexpectedly."
+        }
+        $sessionStatus = Get-DesktopSessionStatus
+        if ($sessionStatus -and -not $sessionStatus.connected -and
+            $null -ne $sessionStatus.seconds_since_disconnect -and
+            [double]$sessionStatus.seconds_since_disconnect -ge 4.0) {
             break
         }
         Start-Sleep -Milliseconds 500
@@ -190,21 +149,6 @@ finally {
     if ($serverProcess -and -not $serverProcess.HasExited) {
         Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
         $serverProcess.WaitForExit(5000) | Out-Null
-    }
-    if ($browserProfile) {
-        $profileBrowserProcesses = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -and $_.CommandLine.Contains($browserProfile) }
-        foreach ($profileBrowserProcess in $profileBrowserProcesses) {
-            Stop-Process -Id $profileBrowserProcess.ProcessId -Force -ErrorAction SilentlyContinue
-        }
-        if ($profileBrowserProcesses) {
-            Start-Sleep -Milliseconds 250
-        }
-    }
-    if ((Test-Path -LiteralPath $browserProfile) -and
-        $browserProfile.StartsWith($runtimeDir, [StringComparison]::OrdinalIgnoreCase) -and
-        (Split-Path -Leaf $browserProfile).StartsWith("desktop-browser-")) {
-        Remove-Item -LiteralPath $browserProfile -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($launcherMutex) {
         try {

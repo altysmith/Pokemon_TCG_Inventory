@@ -12,13 +12,17 @@ from app import (
     apply_inventory_import,
     catalog_facets,
     catalog_search,
+    close_desktop_session,
     create_inventory_location,
+    desktop_session_status,
     exact_catalog_fields,
     extract_footer_fields,
     extract_footer_fields_from_readings,
     extract_literal_groups,
     inventory_import_preview,
     inventory_locations_snapshot,
+    normalize_desktop_session_token,
+    open_desktop_session,
     remove_saved_deck,
     remove_inventory_location,
     rename_saved_deck,
@@ -46,6 +50,31 @@ from inventory import InventoryDatabase
 
 
 class AppTests(unittest.TestCase):
+    def test_desktop_session_tracks_open_tabs_and_disconnect_time(self) -> None:
+        token = "a" * 32
+        first_page = "b" * 32
+        second_page = "c" * 32
+        with app.DESKTOP_SESSION_LOCK:
+            app.DESKTOP_SESSION_CONNECTIONS.pop(token, None)
+            app.DESKTOP_SESSION_LAST_DISCONNECTED.pop(token, None)
+        try:
+            self.assertEqual(normalize_desktop_session_token(token.upper()), token)
+            self.assertFalse(desktop_session_status(token)["connected"])
+            self.assertEqual(open_desktop_session(token, first_page)["connections"], 1)
+            self.assertEqual(open_desktop_session(token, second_page)["connections"], 2)
+            self.assertEqual(close_desktop_session(token, first_page)["connections"], 1)
+            self.assertEqual(close_desktop_session(token, first_page)["connections"], 1)
+            self.assertEqual(close_desktop_session(token, second_page)["connections"], 0)
+            status = desktop_session_status(token)
+            self.assertFalse(status["connected"])
+            self.assertIsNotNone(status["seconds_since_disconnect"])
+            with self.assertRaisesRegex(ValueError, "valid desktop session token"):
+                normalize_desktop_session_token("not-a-token")
+        finally:
+            with app.DESKTOP_SESSION_LOCK:
+                app.DESKTOP_SESSION_CONNECTIONS.pop(token, None)
+                app.DESKTOP_SESSION_LAST_DISCONNECTED.pop(token, None)
+
     def test_collection_exports_share_a_versioned_import_safe_schema(self) -> None:
         snapshot = {
             "items": [
