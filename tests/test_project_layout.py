@@ -46,6 +46,16 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn("new EventSource", session_javascript)
         self.assertIn("sessionStorage", session_javascript)
 
+    def test_desktop_shortcut_uses_the_current_collection_icon(self) -> None:
+        shortcut_script = (
+            ROOT / "tools" / "create_desktop_shortcut.ps1"
+        ).read_text(encoding="utf-8")
+        self.assertIn(r"assets\pokemon-card-collection.ico", shortcut_script)
+        self.assertTrue((ROOT / "assets" / "pokemon-card-collection.ico").is_file())
+        self.assertTrue((ROOT / "assets" / "pokemon-card-collection.png").is_file())
+        self.assertFalse((ROOT / "assets" / "pokemon-collection.ico").exists())
+        self.assertFalse((ROOT / "assets" / "pokemon-collection.png").exists())
+
     def test_legacy_outputs_default_outside_the_active_root(self) -> None:
         evidence = ROOT / "legacy_webcam_scanner" / "evidence"
         self.assertEqual(app.CSV_PATH.parent, evidence)
