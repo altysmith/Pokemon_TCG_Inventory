@@ -492,4 +492,12 @@ deckName.addEventListener('keydown', event => {
   }
 });
 
-loadSavedDecks();
+async function startDeckPage() {
+  await loadSavedDecks();
+  const requestedDeck = Number(new URLSearchParams(window.location.search).get('deck'));
+  if (requestedDeck > 0 && savedDecks.some((deck) => deck.id === requestedDeck)) {
+    await openSavedDeck(requestedDeck);
+  }
+}
+
+void startDeckPage();
