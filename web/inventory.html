@@ -31,6 +31,15 @@
           <div id="location_navigation"></div>
         </section>
 
+        <section class="binder-location-nav binder-deck-nav" aria-labelledby="deck_navigation_heading">
+          <header>
+            <h2 id="deck_navigation_heading">Deck Lists</h2>
+            <a href="/deck">New</a>
+          </header>
+          <p id="collection_decks_status" class="binder-deck-status" role="status">Loading…</p>
+          <div id="collection_decks" class="binder-deck-navigation"></div>
+        </section>
+
         <nav id="category_navigation" class="binder-category-nav">
           <section>
             <h2>Pokémon</h2>
@@ -100,19 +109,6 @@
             </label>
           </div>
         </div>
-
-        <section class="collection-deck-library" aria-labelledby="collection_decks_heading">
-          <header>
-            <div>
-              <p>SAVED DECKS</p>
-              <h2 id="collection_decks_heading">Deck library</h2>
-              <span>Prepare the owned cards from a saved list, then place them into a deck box.</span>
-            </div>
-            <a href="/deck">Manage deck lists</a>
-          </header>
-          <p id="collection_decks_status" class="collection-decks-status" role="status">Loading saved decks…</p>
-          <div id="collection_decks" class="collection-decks"></div>
-        </section>
 
         <div id="collection_selection_toolbar" class="collection-selection-toolbar">
           <button id="collection_selection_start" class="is-primary" type="button">✓ Select cards to change location</button>
@@ -307,6 +303,58 @@
           <button class="is-primary" type="submit">Move selected cards</button>
         </footer>
       </form>
+    </dialog>
+
+    <dialog id="deck_editor_dialog" class="deck-editor-dialog" aria-labelledby="deck_editor_title">
+      <div class="deck-editor-shell">
+        <header>
+          <div>
+            <small>SAVED DECK LIST</small>
+            <h2 id="deck_editor_title">Deck</h2>
+            <p id="deck_editor_summary">Edit the list without changing your physical collection.</p>
+          </div>
+          <button id="deck_editor_close" type="button" aria-label="Close deck editor">×</button>
+        </header>
+
+        <div class="deck-editor-actions">
+          <a id="deck_editor_full_check" href="/deck">Open full deck check</a>
+          <button id="deck_editor_assign" type="button">Assign owned cards to a deck box</button>
+        </div>
+
+        <p id="deck_editor_status" class="deck-editor-status" role="status" aria-live="polite"></p>
+
+        <div class="deck-editor-columns">
+          <section class="deck-editor-current" aria-labelledby="deck_editor_cards_heading">
+            <div class="deck-editor-section-heading">
+              <div><small>CURRENT LIST</small><h3 id="deck_editor_cards_heading">Cards in this deck</h3></div>
+              <strong id="deck_editor_total">0 cards</strong>
+            </div>
+            <div id="deck_editor_entries" class="deck-editor-entries"></div>
+          </section>
+
+          <section class="deck-editor-catalog" aria-labelledby="deck_editor_search_heading">
+            <div class="deck-editor-section-heading">
+              <div><small>FULL LOCAL CATALOG</small><h3 id="deck_editor_search_heading">Add a card</h3></div>
+            </div>
+            <p>Cards can be added whether or not they are currently in your collection.</p>
+            <form id="deck_editor_search_form" class="deck-editor-search-form">
+              <input id="deck_editor_query" type="search" autocomplete="off" placeholder="Search by card name…" aria-label="Search cards to add">
+              <select id="deck_editor_type" aria-label="Card type">
+                <option value="">All card types</option>
+                <option value="pokemon">Pokémon</option>
+                <option value="supporter">Supporter</option>
+                <option value="item">Item</option>
+                <option value="tool">Pokémon Tool</option>
+                <option value="stadium">Stadium</option>
+                <option value="special-energy">Special Energy</option>
+                <option value="basic-energy">Basic Energy</option>
+              </select>
+              <button type="submit">Search</button>
+            </form>
+            <div id="deck_editor_search_results" class="deck-editor-search-results"></div>
+          </section>
+        </div>
+      </div>
     </dialog>
     <script src="/card-inspector.js"></script>
     <script src="/inventory.js"></script>

@@ -53,6 +53,19 @@ const locationsStatus = document.querySelector('#inventory_locations_status');
 const locationsList = document.querySelector('#inventory_locations_list');
 const collectionDecks = document.querySelector('#collection_decks');
 const collectionDecksStatus = document.querySelector('#collection_decks_status');
+const deckEditorDialog = document.querySelector('#deck_editor_dialog');
+const deckEditorClose = document.querySelector('#deck_editor_close');
+const deckEditorTitle = document.querySelector('#deck_editor_title');
+const deckEditorSummary = document.querySelector('#deck_editor_summary');
+const deckEditorStatus = document.querySelector('#deck_editor_status');
+const deckEditorTotal = document.querySelector('#deck_editor_total');
+const deckEditorEntries = document.querySelector('#deck_editor_entries');
+const deckEditorFullCheck = document.querySelector('#deck_editor_full_check');
+const deckEditorAssign = document.querySelector('#deck_editor_assign');
+const deckEditorSearchForm = document.querySelector('#deck_editor_search_form');
+const deckEditorQuery = document.querySelector('#deck_editor_query');
+const deckEditorType = document.querySelector('#deck_editor_type');
+const deckEditorSearchResults = document.querySelector('#deck_editor_search_results');
 const selectionStart = document.querySelector('#collection_selection_start');
 const selectionActions = document.querySelector('#collection_selection_actions');
 const selectionCount = document.querySelector('#collection_selection_count');
@@ -146,6 +159,7 @@ const selectionState = {
   deckName: '',
 };
 let savedDecks = [];
+const deckEditorState = {deckId: 0, entries: [], searching: false};
 
 function titleCase(value) {
   return String(value || '')
@@ -580,27 +594,27 @@ function toggleCardSelection(card) {
 
 function renderCollectionDecks() {
   if (!savedDecks.length) {
-    collectionDecksStatus.textContent = 'No saved decks yet. Save a checked deck list to make it available here.';
+    collectionDecksStatus.textContent = 'No saved decks yet.';
     collectionDecks.replaceChildren();
     return;
   }
-  collectionDecksStatus.textContent = `${savedDecks.length} saved ${savedDecks.length === 1 ? 'deck' : 'decks'}`;
+  collectionDecksStatus.textContent = '';
   const cards = savedDecks.map((deck) => {
-    const article = document.createElement('article');
-    const copy = document.createElement('div');
-    const eyebrow = document.createElement('small');
-    eyebrow.textContent = 'SAVED DECK';
+    const button = document.createElement('button');
+    button.className = 'binder-nav-item';
+    button.type = 'button';
+    button.dataset.deckId = String(deck.id);
+    const icon = document.createElement('span');
+    icon.className = 'binder-nav-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '▱';
     const name = document.createElement('strong');
     name.textContent = deck.name;
-    const summary = document.createElement('span');
-    summary.textContent = `${deck.card_count} cards · ${deck.unique_entries} unique entries`;
-    copy.append(eyebrow, name, summary);
-    const assign = document.createElement('button');
-    assign.type = 'button';
-    assign.textContent = 'Assign cards to deck box';
-    assign.addEventListener('click', () => void prepareSavedDeck(deck, assign));
-    article.append(copy, assign);
-    return article;
+    const count = document.createElement('b');
+    count.textContent = String(deck.card_count);
+    button.append(icon, name, count);
+    button.addEventListener('click', () => void openDeckEditor(deck.id));
+    return button;
   });
   collectionDecks.replaceChildren(...cards);
 }
@@ -616,6 +630,315 @@ async function loadCollectionDecks() {
     collectionDecksStatus.textContent = error.message;
     collectionDecksStatus.classList.add('is-error');
   }
+}
+
+function parseDeckEditorEntries(text) {
+  const entries = [];
+  let section = 'trainer';
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const heading = line.match(/^(pok[eé]mon|trainer|energy)\s*:?\s*\d*$/i);
+    if (heading) {
+      section = heading[1].toLocaleLowerCase().startsWith('pok') ? 'pokemon' : heading[1].toLocaleLowerCase();
+      continue;
+    }
+    const printed = line.match(/^(\d+)\s+(.+?)\s+([A-Za-z0-9-]{2,12})\s+(\S*\d\S*)$/);
+    const named = line.match(/^(\d+)\s+(.+?)$/);
+    if (!printed && !named) continue;
+    entries.push({
+      quantity: Number((printed || named)[1]),
+      name: (printed || named)[2].trim(),
+      set_code: printed ? printed[3].toUpperCase() : '',
+      number: printed ? printed[4] : '',
+      section,
+      image_url: '',
+    });
+  }
+  return entries;
+}
+
+function deckEntryKey(entry) {
+  const name = String(entry.name || '').trim().toLocaleLowerCase();
+  return entry.section === 'pokemon'
+    ? `pokemon|${name}|${String(entry.set_code || '').toUpperCase()}|${String(entry.number || '').replace(/^0+(?=\d)/, '')}`
+    : `${entry.section}|${name}`;
+}
+
+function serializeDeckEditorEntries(entries) {
+  const groups = [
+    ['pokemon', 'Pokémon'],
+    ['trainer', 'Trainer'],
+    ['energy', 'Energy'],
+  ];
+  return groups.map(([section, label]) => {
+    const rows = entries.filter((entry) => entry.section === section);
+    if (!rows.length) return '';
+    const total = rows.reduce((sum, entry) => sum + entry.quantity, 0);
+    return `${label}: ${total}\n${rows.map((entry) => {
+      const printing = entry.set_code && entry.number ? ` ${entry.set_code} ${entry.number}` : '';
+      return `${entry.quantity} ${entry.name}${printing}`;
+    }).join('\n')}`;
+  }).filter(Boolean).join('\n\n');
+}
+
+function deckEditorCardCount() {
+  return deckEditorState.entries.reduce((sum, entry) => sum + entry.quantity, 0);
+}
+
+function setDeckEditorStatus(message, stateName = '') {
+  deckEditorStatus.textContent = message;
+  deckEditorStatus.className = `deck-editor-status${stateName ? ` is-${stateName}` : ''}`;
+}
+
+function renderDeckEditorEntries() {
+  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
+  if (!deck) return;
+  const total = deckEditorCardCount();
+  deckEditorTotal.textContent = `${total} ${total === 1 ? 'card' : 'cards'}`;
+  deckEditorSummary.textContent = `${deckEditorState.entries.length} unique ${deckEditorState.entries.length === 1 ? 'entry' : 'entries'} · Physical inventory is not changed here.`;
+  const rows = deckEditorState.entries.map((entry, index) => {
+    const article = document.createElement('article');
+    article.className = 'deck-editor-entry';
+    const art = document.createElement('button');
+    art.className = `deck-editor-entry-art${entry.image_url ? '' : ' image-missing'}`;
+    art.type = 'button';
+    art.setAttribute('aria-label', `Inspect ${entry.name}`);
+    if (entry.image_url) {
+      const image = document.createElement('img');
+      image.src = entry.image_url;
+      image.alt = '';
+      image.loading = 'lazy';
+      art.append(image);
+      art.addEventListener('click', () => window.CardInspector?.open?.(entry, art));
+    }
+    const identity = document.createElement('div');
+    identity.className = 'deck-editor-entry-identity';
+    const category = document.createElement('small');
+    category.textContent = entry.section === 'pokemon' ? 'POKÉMON' : entry.section.toUpperCase();
+    const name = document.createElement('strong');
+    name.textContent = entry.name;
+    const printing = document.createElement('span');
+    printing.textContent = entry.set_code && entry.number ? `${entry.set_code} · ${entry.number}` : 'Any printing';
+    identity.append(category, name, printing);
+    const controls = document.createElement('div');
+    controls.className = 'deck-editor-entry-controls';
+    const minus = document.createElement('button');
+    minus.type = 'button';
+    minus.textContent = '−';
+    minus.setAttribute('aria-label', `Remove one ${entry.name}`);
+    const quantity = document.createElement('input');
+    quantity.type = 'number';
+    quantity.inputMode = 'numeric';
+    quantity.min = '0';
+    quantity.max = '60';
+    quantity.value = String(entry.quantity);
+    quantity.setAttribute('aria-label', `${entry.name} deck quantity`);
+    const plus = document.createElement('button');
+    plus.type = 'button';
+    plus.textContent = '+';
+    plus.setAttribute('aria-label', `Add one ${entry.name}`);
+    const update = (value) => void updateDeckEntryQuantity(index, value);
+    minus.addEventListener('click', () => update(Math.max(0, entry.quantity - 1)));
+    plus.addEventListener('click', () => update(Math.min(60, entry.quantity + 1)));
+    quantity.addEventListener('change', () => update(Number(quantity.value)));
+    controls.append(minus, quantity, plus);
+    article.append(art, identity, controls);
+    return article;
+  });
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'deck-editor-empty';
+    empty.textContent = 'This deck has no editable entries.';
+    rows.push(empty);
+  }
+  deckEditorEntries.replaceChildren(...rows);
+}
+
+async function saveDeckEditorEntries(message) {
+  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
+  if (!deck || !deckEditorState.entries.length) {
+    setDeckEditorStatus('A saved deck must contain at least one card.', 'error');
+    return false;
+  }
+  setDeckEditorStatus('Saving deck list…');
+  deckEditorDialog.classList.add('is-saving');
+  try {
+    const data = await inventoryRequest('/decks/save', {
+      id: deck.id,
+      name: deck.name,
+      deck_list: serializeDeckEditorEntries(deckEditorState.entries),
+    });
+    savedDecks = savedDecks.map((item) => item.id === data.deck.id ? data.deck : item);
+    renderCollectionDecks();
+    renderDeckEditorEntries();
+    setDeckEditorStatus(message, 'saved');
+    return true;
+  } catch (error) {
+    setDeckEditorStatus(error.message, 'error');
+    return false;
+  } finally {
+    deckEditorDialog.classList.remove('is-saving');
+  }
+}
+
+async function updateDeckEntryQuantity(index, requested) {
+  const quantity = Number(requested);
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 60) {
+    setDeckEditorStatus('Deck quantities must be whole numbers from 0 to 60.', 'error');
+    renderDeckEditorEntries();
+    return;
+  }
+  if (quantity === 0 && deckEditorState.entries.length === 1) {
+    setDeckEditorStatus('A saved deck must keep at least one card. Remove the deck from the full deck library instead.', 'error');
+    return;
+  }
+  const original = deckEditorState.entries.map((entry) => ({...entry}));
+  const entry = deckEditorState.entries[index];
+  if (!entry) return;
+  if (quantity === 0) deckEditorState.entries.splice(index, 1);
+  else entry.quantity = quantity;
+  renderDeckEditorEntries();
+  const saved = await saveDeckEditorEntries(quantity === 0 ? `${entry.name} was removed from the deck.` : `${entry.name} was updated to ${quantity}.`);
+  if (!saved) {
+    deckEditorState.entries = original;
+    renderDeckEditorEntries();
+  }
+}
+
+function catalogCardSection(card) {
+  if (card.card_type === 'POKEMON') return 'pokemon';
+  if (card.card_type === 'ENERGY') return 'energy';
+  return 'trainer';
+}
+
+async function addCatalogCardToDeck(card) {
+  const entry = {
+    quantity: 1,
+    name: card.name,
+    set_code: card.set_code || '',
+    number: card.number || '',
+    section: catalogCardSection(card),
+    image_url: card.image_url || '',
+  };
+  const key = deckEntryKey(entry);
+  const existing = deckEditorState.entries.find((item) => deckEntryKey(item) === key);
+  if (existing) {
+    if (existing.quantity >= 60) {
+      setDeckEditorStatus(`${existing.name} is already at the maximum deck quantity.`, 'error');
+      return;
+    }
+    existing.quantity += 1;
+    if (!existing.image_url) existing.image_url = entry.image_url;
+  } else {
+    deckEditorState.entries.push(entry);
+  }
+  renderDeckEditorEntries();
+  const saved = await saveDeckEditorEntries(`${card.name} was added to the deck. Ownership was not changed.`);
+  if (!saved) {
+    if (existing) existing.quantity -= 1;
+    else deckEditorState.entries = deckEditorState.entries.filter((item) => item !== entry);
+    renderDeckEditorEntries();
+  }
+}
+
+function renderDeckCatalogResults(cards, total) {
+  if (!cards.length) {
+    const empty = document.createElement('p');
+    empty.className = 'deck-editor-empty';
+    empty.textContent = 'No catalog cards matched that search.';
+    deckEditorSearchResults.replaceChildren(empty);
+    return;
+  }
+  const rows = cards.map((card) => {
+    const article = document.createElement('article');
+    const art = document.createElement('button');
+    art.type = 'button';
+    art.className = `deck-editor-result-art${card.image_url ? '' : ' image-missing'}`;
+    if (card.image_url) {
+      const image = document.createElement('img');
+      image.src = card.image_url;
+      image.alt = '';
+      image.loading = 'lazy';
+      art.append(image);
+      art.addEventListener('click', () => window.CardInspector?.open?.(card, art));
+    }
+    const copy = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = card.name;
+    const printing = document.createElement('span');
+    printing.textContent = `${card.set_code} · ${card.number}${card.printed_total ? `/${card.printed_total}` : ''}`;
+    const owned = document.createElement('small');
+    owned.textContent = `${Number(card.quantity || 0)} owned`;
+    copy.append(name, printing, owned);
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.textContent = 'Add';
+    add.addEventListener('click', () => void addCatalogCardToDeck(card));
+    article.append(art, copy, add);
+    return article;
+  });
+  const notice = document.createElement('p');
+  notice.className = 'deck-editor-result-count';
+  notice.textContent = total > cards.length ? `Showing the first ${cards.length} of ${total}. Refine the search to narrow it down.` : `${total} matching ${total === 1 ? 'card' : 'cards'}.`;
+  deckEditorSearchResults.replaceChildren(notice, ...rows);
+}
+
+async function searchDeckCatalog(event) {
+  event.preventDefault();
+  const query = deckEditorQuery.value.trim();
+  const type = deckEditorType.value;
+  if (!query && !type) {
+    setDeckEditorStatus('Enter a card name or choose a card type before searching.', 'error');
+    deckEditorQuery.focus();
+    return;
+  }
+  setDeckEditorStatus('Searching the full local card catalog…');
+  const parameters = new URLSearchParams({q: query, type, format: 'expanded', limit: '30', offset: '0'});
+  try {
+    const response = await fetch(`/catalog/search?${parameters}`, {cache: 'no-store'});
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Catalog search failed.');
+    renderDeckCatalogResults(data.items || [], data.total || 0);
+    setDeckEditorStatus('Choose Add beside any printing. Unowned cards are allowed.');
+  } catch (error) {
+    deckEditorSearchResults.replaceChildren();
+    setDeckEditorStatus(error.message, 'error');
+  }
+}
+
+async function hydrateDeckEditorArtwork(deck) {
+  try {
+    const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
+    for (const item of [...(data.items || []), ...(data.ignored_basic_energy || [])]) {
+      const match = deckEditorState.entries.find((entry) => deckEntryKey(entry) === deckEntryKey({
+        name: item.name,
+        set_code: item.set_code,
+        number: item.number,
+        section: item.deck_section,
+      }));
+      if (match && item.image_url) match.image_url = item.image_url;
+    }
+    renderDeckEditorEntries();
+  } catch (_error) {
+    // Editing remains available even when a legacy list cannot be fully checked.
+  }
+}
+
+async function openDeckEditor(id) {
+  const deck = savedDecks.find((item) => item.id === id);
+  if (!deck) return;
+  deckEditorState.deckId = id;
+  deckEditorState.entries = parseDeckEditorEntries(deck.deck_list);
+  deckEditorTitle.textContent = deck.name;
+  deckEditorFullCheck.href = `/deck?deck=${deck.id}`;
+  deckEditorSearchResults.replaceChildren();
+  deckEditorQuery.value = '';
+  deckEditorType.value = '';
+  setDeckEditorStatus('Use −, +, or enter a quantity. Changes save immediately.');
+  renderDeckEditorEntries();
+  deckEditorDialog.showModal();
+  await hydrateDeckEditorArtwork(deck);
 }
 
 async function prepareSavedDeck(deck, button) {
@@ -1401,6 +1724,15 @@ drawerLocationQuantity.addEventListener('keydown', (event) => {
 });
 locationManage.addEventListener('click', openLocationManager);
 drawerLocationManage.addEventListener('click', openLocationManager);
+deckEditorClose.addEventListener('click', () => deckEditorDialog.close());
+deckEditorDialog.addEventListener('click', (event) => { if (event.target === deckEditorDialog) deckEditorDialog.close(); });
+deckEditorSearchForm.addEventListener('submit', (event) => void searchDeckCatalog(event));
+deckEditorAssign.addEventListener('click', () => {
+  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
+  if (!deck) return;
+  deckEditorDialog.close();
+  void prepareSavedDeck(deck, deckEditorAssign);
+});
 locationsClose.addEventListener('click', () => locationsDialog.close());
 locationsDialog.addEventListener('click', (event) => { if (event.target === locationsDialog) locationsDialog.close(); });
 locationCreateForm.addEventListener('submit', (event) => void createLocation(event));

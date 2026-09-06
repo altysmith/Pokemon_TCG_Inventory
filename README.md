@@ -154,6 +154,8 @@ Use **Import** beside those export buttons to select either format. Import is al
 
 The **Deck Check** page includes an optional saved deck library. After a clean deck list has been checked, give it a name and select **Save to deck library**. Opening a saved deck restores the original list and immediately checks it against the collection as it exists now, so readiness is never treated as a permanent or potentially stale result. Edit that restored list, check it again, and select **Update saved deck** to replace the existing list without creating a duplicate. **Start a new deck** clears the editor when you do want a separate deck. Saved decks can also be renamed or removed from the library.
 
+Saved decks also appear under **Deck Lists** beside Locations in **My Collection**. Select a deck there to change individual card quantities, remove cards, or search the full local catalog and add another printing. Deck-list changes save to the saved deck only: adding an unowned card is allowed and never changes physical inventory quantities. The same editor can prepare the cards you do own for assignment to a deck-box location.
+
 ### Optional physical locations
 
 The Collection sidebar can organize owned copies into optional locations such as **Deck Box 1**, **Trade Binder**, or **Shelf**. Existing and newly added cards begin in the virtual **Unassigned** location. Open a card's detail drawer to assign any number of its owned copies to one or more locations. **All cards** always shows the complete collection; selecting a location shows only its assigned copies and uses that location's quantities on the card badges.
