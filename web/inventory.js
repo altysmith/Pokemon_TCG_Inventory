@@ -30,6 +30,8 @@ const drawerLocationManage = document.querySelector('#drawer_location_manage');
 const drawerLocationFeedback = document.querySelector('#drawer_location_feedback');
 const drawerLocationAllocations = document.querySelector('#drawer_location_allocations');
 const drawerUnassignedSummary = document.querySelector('#drawer_unassigned_summary');
+const drawerDeckSummary = document.querySelector('#drawer_deck_summary');
+const drawerDeckAssignments = document.querySelector('#drawer_deck_assignments');
 const importOpen = document.querySelector('#inventory_import_open');
 const importDialog = document.querySelector('#inventory_import_dialog');
 const importClose = document.querySelector('#inventory_import_close');
@@ -62,6 +64,7 @@ const deckEditorTotal = document.querySelector('#deck_editor_total');
 const deckEditorEntries = document.querySelector('#deck_editor_entries');
 const deckEditorFullCheck = document.querySelector('#deck_editor_full_check');
 const deckEditorAssign = document.querySelector('#deck_editor_assign');
+const deckEditorUnassign = document.querySelector('#deck_editor_unassign');
 const deckEditorSearchForm = document.querySelector('#deck_editor_search_form');
 const deckEditorQuery = document.querySelector('#deck_editor_query');
 const deckEditorType = document.querySelector('#deck_editor_type');
@@ -79,7 +82,6 @@ const moveClose = document.querySelector('#inventory_move_close');
 const moveSummary = document.querySelector('#inventory_move_summary');
 const moveSource = document.querySelector('#inventory_move_source');
 const moveDestination = document.querySelector('#inventory_move_destination');
-const moveDeckOption = document.querySelector('#inventory_move_deck_option');
 const moveStatus = document.querySelector('#inventory_move_status');
 const moveManage = document.querySelector('#inventory_move_manage');
 
@@ -156,7 +158,6 @@ const state = {
 const selectionState = {
   active: false,
   quantities: new Map(),
-  deckName: '',
 };
 let savedDecks = [];
 const deckEditorState = {deckId: 0, entries: [], searching: false};
@@ -563,14 +564,13 @@ function updateSelectionToolbar() {
   const count = selectionState.quantities.size;
   selectionStart.hidden = selectionState.active;
   selectionActions.hidden = !selectionState.active;
-  selectionCount.textContent = `${count} ${count === 1 ? 'card' : 'cards'} selected${selectionState.deckName ? ` for ${selectionState.deckName}` : ''}`;
+  selectionCount.textContent = `${count} ${count === 1 ? 'card' : 'cards'} selected`;
   selectionMove.disabled = count === 0;
 }
 
-function startSelection(quantities = new Map(), deckName = '') {
+function startSelection(quantities = new Map()) {
   selectionState.active = true;
   selectionState.quantities = new Map(quantities);
-  selectionState.deckName = deckName;
   closeDrawer();
   window.CardInspector?.close?.();
   updateSelectionToolbar();
@@ -580,7 +580,6 @@ function startSelection(quantities = new Map(), deckName = '') {
 function stopSelection() {
   selectionState.active = false;
   selectionState.quantities.clear();
-  selectionState.deckName = '';
   updateSelectionToolbar();
   render();
 }
@@ -696,7 +695,10 @@ function renderDeckEditorEntries() {
   if (!deck) return;
   const total = deckEditorCardCount();
   deckEditorTotal.textContent = `${total} ${total === 1 ? 'card' : 'cards'}`;
-  deckEditorSummary.textContent = `${deckEditorState.entries.length} unique ${deckEditorState.entries.length === 1 ? 'entry' : 'entries'} · Physical inventory is not changed here.`;
+  const assigned = Number(deck.assigned_cards || 0);
+  deckEditorSummary.textContent = `${deckEditorState.entries.length} unique ${deckEditorState.entries.length === 1 ? 'entry' : 'entries'} · ${assigned} owned ${assigned === 1 ? 'card is' : 'cards are'} assigned to this deck · Storage locations are unchanged.`;
+  deckEditorAssign.textContent = assigned ? 'Refresh owned-card assignments' : 'Assign owned cards to this deck';
+  deckEditorUnassign.hidden = assigned === 0;
   const rows = deckEditorState.entries.map((entry, index) => {
     const article = document.createElement('article');
     article.className = 'deck-editor-entry';
@@ -721,6 +723,12 @@ function renderDeckEditorEntries() {
     const printing = document.createElement('span');
     printing.textContent = entry.set_code && entry.number ? `${entry.set_code} · ${entry.number}` : 'Any printing';
     identity.append(category, name, printing);
+    if (entry.assignment_quantity) {
+      const assignedLabel = document.createElement('em');
+      assignedLabel.className = 'deck-editor-assigned-label';
+      assignedLabel.textContent = `${entry.assignment_quantity} assigned to ${deck.name}`;
+      identity.append(assignedLabel);
+    }
     const controls = document.createElement('div');
     controls.className = 'deck-editor-entry-controls';
     const minus = document.createElement('button');
@@ -764,15 +772,24 @@ async function saveDeckEditorEntries(message) {
   setDeckEditorStatus('Saving deck list…');
   deckEditorDialog.classList.add('is-saving');
   try {
+    const refreshAssignments = Number(deck.assigned_cards || 0) > 0;
     const data = await inventoryRequest('/decks/save', {
       id: deck.id,
       name: deck.name,
       deck_list: serializeDeckEditorEntries(deckEditorState.entries),
     });
-    savedDecks = savedDecks.map((item) => item.id === data.deck.id ? data.deck : item);
-    renderCollectionDecks();
+    if (refreshAssignments) {
+      await inventoryRequest('/decks/assign', {id: deck.id});
+      await Promise.all([loadCollectionDecks(), loadInventory()]);
+      const refreshed = savedDecks.find((item) => item.id === deck.id);
+      if (refreshed) await hydrateDeckEditorArtwork(refreshed);
+    } else {
+      const saved = {...data.deck, assignments: [], assignment_entries: [], assigned_cards: 0, assigned_unique_cards: 0};
+      savedDecks = savedDecks.map((item) => item.id === saved.id ? saved : item);
+      renderCollectionDecks();
+    }
     renderDeckEditorEntries();
-    setDeckEditorStatus(message, 'saved');
+    setDeckEditorStatus(`${message}${refreshAssignments ? ' Owned-card assignments were refreshed.' : ''}`, 'saved');
     return true;
   } catch (error) {
     setDeckEditorStatus(error.message, 'error');
@@ -910,6 +927,18 @@ async function searchDeckCatalog(event) {
 async function hydrateDeckEditorArtwork(deck) {
   try {
     const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
+    deckEditorState.entries.forEach((entry) => { entry.assignment_quantity = 0; });
+    for (const assignment of deck.assignment_entries || []) {
+      const match = deckEditorState.entries.find((entry) => deckEntryKey(entry) === deckEntryKey({
+        name: assignment.name,
+        set_code: assignment.set_code,
+        number: assignment.number,
+        section: assignment.deck_section,
+      }));
+      if (match) {
+        match.assignment_quantity += Number(assignment.quantity || 0);
+      }
+    }
     for (const item of [...(data.items || []), ...(data.ignored_basic_energy || [])]) {
       const match = deckEditorState.entries.find((entry) => deckEntryKey(entry) === deckEntryKey({
         name: item.name,
@@ -917,7 +946,9 @@ async function hydrateDeckEditorArtwork(deck) {
         number: item.number,
         section: item.deck_section,
       }));
-      if (match && item.image_url) match.image_url = item.image_url;
+      if (match) {
+        if (item.image_url) match.image_url = item.image_url;
+      }
     }
     renderDeckEditorEntries();
   } catch (_error) {
@@ -941,32 +972,49 @@ async function openDeckEditor(id) {
   await hydrateDeckEditorArtwork(deck);
 }
 
-async function prepareSavedDeck(deck, button) {
-  button.disabled = true;
-  button.textContent = 'Checking inventory…';
-  collectionDecksStatus.textContent = `Matching ${deck.name} to your collection…`;
+async function assignCurrentDeck() {
+  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
+  if (!deck) return;
+  deckEditorAssign.disabled = true;
+  setDeckEditorStatus(`Assigning available owned cards to ${deck.name}…`);
   try {
-    const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
-    const quantities = new Map();
-    for (const item of data.items || []) {
-      for (const fill of item.fills || []) {
-        quantities.set(fill.card_id, (quantities.get(fill.card_id) || 0) + Number(fill.quantity || 0));
-      }
-    }
-    if (!quantities.size) throw new Error('None of this deck’s matched cards are currently available in the collection.');
-    startSelection(quantities, deck.name);
-    openMoveDialog('deck');
-    collectionDecksStatus.textContent = `${quantities.size} owned card printings prepared for ${deck.name}.`;
+    const data = await inventoryRequest('/decks/assign', {id: deck.id});
+    await Promise.all([loadCollectionDecks(), loadInventory()]);
+    const refreshed = savedDecks.find((item) => item.id === deck.id);
+    renderDeckEditorEntries();
+    if (refreshed) await hydrateDeckEditorArtwork(refreshed);
+    const unavailable = Number(data.unavailable_cards || 0);
+    const elsewhere = Number(data.reserved_by_other_decks || 0);
+    setDeckEditorStatus(
+      `${data.assigned_cards} owned ${data.assigned_cards === 1 ? 'card was' : 'cards were'} assigned to ${deck.name}.${unavailable ? ` ${unavailable} deck ${unavailable === 1 ? 'card is' : 'cards are'} not currently assignable.` : ''}${elsewhere ? ` ${elsewhere} ${elsewhere === 1 ? 'copy is' : 'copies are'} assigned to another deck.` : ''} Storage locations did not change.`,
+      'saved',
+    );
   } catch (error) {
-    collectionDecksStatus.textContent = error.message;
-    collectionDecksStatus.classList.add('is-error');
+    setDeckEditorStatus(error.message, 'error');
   } finally {
-    button.disabled = false;
-    button.textContent = 'Assign cards to deck box';
+    deckEditorAssign.disabled = false;
   }
 }
 
-function openMoveDialog(preferredAmount = 'one') {
+async function clearCurrentDeckAssignments() {
+  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
+  if (!deck || !window.confirm(`Clear all owned-card assignments from ${deck.name}? Storage locations and the deck list will not change.`)) return;
+  deckEditorUnassign.disabled = true;
+  setDeckEditorStatus(`Clearing assignments from ${deck.name}…`);
+  try {
+    await inventoryRequest('/decks/unassign', {id: deck.id});
+    await Promise.all([loadCollectionDecks(), loadInventory()]);
+    deckEditorState.entries.forEach((entry) => { entry.assignment_quantity = 0; });
+    renderDeckEditorEntries();
+    setDeckEditorStatus(`Deck assignments were cleared from ${deck.name}. Storage locations did not change.`, 'saved');
+  } catch (error) {
+    setDeckEditorStatus(error.message, 'error');
+  } finally {
+    deckEditorUnassign.disabled = false;
+  }
+}
+
+function openMoveDialog() {
   if (!selectionState.quantities.size) return;
   const source = selectionSource();
   const sourceOptions = [
@@ -988,11 +1036,9 @@ function openMoveDialog(preferredAmount = 'one') {
   }));
   const firstDestination = state.locations.find((location) => String(location.id) !== source);
   if (firstDestination) moveDestination.value = String(firstDestination.id);
-  moveDeckOption.hidden = !selectionState.deckName;
-  const amount = moveForm.querySelector(`input[name="move_amount"][value="${preferredAmount}"]`)
-    || moveForm.querySelector('input[name="move_amount"][value="one"]');
+  const amount = moveForm.querySelector('input[name="move_amount"][value="one"]');
   amount.checked = true;
-  moveSummary.textContent = `${selectionState.quantities.size} selected card printings${selectionState.deckName ? ` for ${selectionState.deckName}` : ''}. Your total ownership will not change.`;
+  moveSummary.textContent = `${selectionState.quantities.size} selected card printings. Your total ownership will not change.`;
   moveStatus.textContent = state.locations.length ? '' : 'Create a location before moving cards.';
   moveForm.querySelector('button[type="submit"]').disabled = !state.locations.length;
   moveDialog.showModal();
@@ -1012,16 +1058,13 @@ async function moveSelectedCards(event) {
   }
   const mode = new FormData(moveForm).get('move_amount');
   const quantities = {};
-  for (const [cardId, requested] of selectionState.quantities) {
+  for (const [cardId] of selectionState.quantities) {
     const card = state.items.find((item) => item.id === cardId);
     if (!card) continue;
     const available = availableAtSource(card, source);
-    const alreadyAtDestination = Number(card.locations?.[String(destination)] || 0);
     const quantity = mode === 'all'
       ? available
-      : mode === 'deck'
-        ? Math.min(Math.max(0, requested - alreadyAtDestination), available)
-        : Math.min(1, available);
+      : Math.min(1, available);
     if (quantity > 0) quantities[cardId] = quantity;
   }
   if (!Object.keys(quantities).length) {
@@ -1040,7 +1083,6 @@ async function moveSelectedCards(event) {
     moveDialog.close();
     selectionState.active = false;
     selectionState.quantities.clear();
-    selectionState.deckName = '';
     await loadInventory();
     statusText.hidden = false;
     statusText.textContent = `Moved ${data.moved_copies} ${data.moved_copies === 1 ? 'copy' : 'copies'} across ${data.moved_unique_cards} selected cards.`;
@@ -1085,6 +1127,16 @@ function cardElement(card, prioritizeImage = false) {
   const identity = document.createElement('small');
   identity.textContent = `${card.set_code}  •  ${collectorNumber(card)}`;
   tile.append(art, name, identity);
+  if (card.deck_assignments?.length) {
+    const assignments = document.createElement('span');
+    assignments.className = 'binder-card-deck-assignments';
+    for (const assignment of card.deck_assignments) {
+      const badge = document.createElement('span');
+      badge.textContent = `${assignment.deck_name} ×${assignment.quantity}`;
+      assignments.append(badge);
+    }
+    tile.append(assignments);
+  }
   tile.addEventListener('click', (event) => {
     if (selectionState.active) {
       toggleCardSelection(card);
@@ -1194,6 +1246,7 @@ function openDrawer(card) {
   drawerQuantityFeedback.className = 'card-drawer-save-feedback';
   drawerQuantitySave.disabled = false;
   renderDrawerLocations(card);
+  renderDrawerDeckAssignments(card);
   document.querySelector('#drawer_set').textContent = `${card.set_name} (${card.set_code})`;
   document.querySelector('#drawer_number').textContent = collectorNumber(card);
   document.querySelector('#drawer_type').textContent = categoryLabel(card);
@@ -1204,6 +1257,27 @@ function openDrawer(card) {
     : 'Not recorded';
   drawer.setAttribute('aria-hidden', 'false');
   document.querySelector('.binder-app').classList.add('has-drawer');
+}
+
+function renderDrawerDeckAssignments(card) {
+  const assignments = card.deck_assignments || [];
+  const total = assignments.reduce((sum, assignment) => sum + Number(assignment.quantity || 0), 0);
+  drawerDeckSummary.textContent = total ? `${total} assigned` : 'Not assigned';
+  const rows = assignments.map((assignment) => {
+    const row = document.createElement('div');
+    const name = document.createElement('span');
+    name.textContent = assignment.deck_name;
+    const count = document.createElement('strong');
+    count.textContent = `×${assignment.quantity}`;
+    row.append(name, count);
+    return row;
+  });
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'This card is not assigned to a saved deck.';
+    rows.push(empty);
+  }
+  drawerDeckAssignments.replaceChildren(...rows);
 }
 
 function setDrawerLocationFeedback(message, stateName = '') {
@@ -1727,12 +1801,8 @@ drawerLocationManage.addEventListener('click', openLocationManager);
 deckEditorClose.addEventListener('click', () => deckEditorDialog.close());
 deckEditorDialog.addEventListener('click', (event) => { if (event.target === deckEditorDialog) deckEditorDialog.close(); });
 deckEditorSearchForm.addEventListener('submit', (event) => void searchDeckCatalog(event));
-deckEditorAssign.addEventListener('click', () => {
-  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
-  if (!deck) return;
-  deckEditorDialog.close();
-  void prepareSavedDeck(deck, deckEditorAssign);
-});
+deckEditorAssign.addEventListener('click', () => void assignCurrentDeck());
+deckEditorUnassign.addEventListener('click', () => void clearCurrentDeckAssignments());
 locationsClose.addEventListener('click', () => locationsDialog.close());
 locationsDialog.addEventListener('click', (event) => { if (event.target === locationsDialog) locationsDialog.close(); });
 locationCreateForm.addEventListener('submit', (event) => void createLocation(event));

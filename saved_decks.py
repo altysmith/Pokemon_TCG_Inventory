@@ -27,6 +27,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_decks_active_name
     ON saved_decks(lower(name)) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_saved_decks_updated
     ON saved_decks(archived_at, updated_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS saved_deck_assignments (
+    deck_id INTEGER NOT NULL,
+    card_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(deck_id, card_id),
+    FOREIGN KEY(deck_id) REFERENCES saved_decks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_deck_assignments_card
+    ON saved_deck_assignments(card_id, deck_id);
 """
 
 
@@ -37,6 +50,15 @@ class SavedDeck:
     deck_list: str
     card_count: int
     unique_entries: int
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class SavedDeckAssignment:
+    deck_id: int
+    card_id: str
+    quantity: int
     created_at: str
     updated_at: str
 
@@ -57,6 +79,7 @@ class SavedDeckDatabase:
         connection = sqlite3.connect(self.path, timeout=15)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout = 15000")
+        connection.execute("PRAGMA foreign_keys = ON")
         try:
             yield connection
             connection.commit()
@@ -91,6 +114,81 @@ class SavedDeckDatabase:
                 """
             ).fetchall()
         return tuple(self._deck(row) for row in rows)
+
+    def assignments(self, deck_id: int = 0) -> tuple[SavedDeckAssignment, ...]:
+        self.initialize()
+        query = """
+            SELECT a.deck_id, a.card_id, a.quantity, a.created_at, a.updated_at
+            FROM saved_deck_assignments a
+            JOIN saved_decks d ON d.id = a.deck_id
+            WHERE d.archived_at IS NULL
+        """
+        parameters: tuple[int, ...] = ()
+        if deck_id:
+            query += " AND a.deck_id = ?"
+            parameters = (deck_id,)
+        query += " ORDER BY a.deck_id, a.card_id"
+        with self.connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return tuple(
+            SavedDeckAssignment(
+                deck_id=int(row["deck_id"]),
+                card_id=str(row["card_id"]),
+                quantity=int(row["quantity"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+            for row in rows
+        )
+
+    def replace_assignments(
+        self, deck_id: int, quantities: dict[str, int]
+    ) -> tuple[SavedDeckAssignment, ...]:
+        """Replace one deck's owned-card assignments without touching inventory."""
+        if deck_id <= 0:
+            raise ValueError("A valid saved deck is required.")
+        normalized: dict[str, int] = {}
+        for card_id, quantity in quantities.items():
+            card = str(card_id).strip()
+            amount = int(quantity)
+            if not card or amount <= 0:
+                continue
+            normalized[card] = amount
+        self.initialize()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            exists = connection.execute(
+                "SELECT 1 FROM saved_decks WHERE id = ? AND archived_at IS NULL",
+                (deck_id,),
+            ).fetchone()
+            if not exists:
+                raise ValueError("That saved deck no longer exists.")
+            connection.execute(
+                "DELETE FROM saved_deck_assignments WHERE deck_id = ?", (deck_id,)
+            )
+            connection.executemany(
+                """
+                INSERT INTO saved_deck_assignments(deck_id, card_id, quantity)
+                VALUES (?, ?, ?)
+                """,
+                [(deck_id, card_id, quantity) for card_id, quantity in normalized.items()],
+            )
+        return self.assignments(deck_id)
+
+    def clear_assignments(self, deck_id: int) -> int:
+        self.initialize()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            exists = connection.execute(
+                "SELECT 1 FROM saved_decks WHERE id = ? AND archived_at IS NULL",
+                (deck_id,),
+            ).fetchone()
+            if not exists:
+                raise ValueError("That saved deck no longer exists.")
+            cursor = connection.execute(
+                "DELETE FROM saved_deck_assignments WHERE deck_id = ?", (deck_id,)
+            )
+        return int(cursor.rowcount)
 
     def save(
         self,
@@ -185,3 +283,6 @@ class SavedDeckDatabase:
             )
             if not cursor.rowcount:
                 raise ValueError("That saved deck no longer exists.")
+            connection.execute(
+                "DELETE FROM saved_deck_assignments WHERE deck_id = ?", (deck_id,)
+            )

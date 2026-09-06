@@ -166,6 +166,14 @@
             <p id="drawer_location_feedback" class="card-drawer-save-feedback" role="status" aria-live="polite"></p>
             <div id="drawer_location_allocations" class="card-drawer-location-allocations"></div>
           </section>
+          <section class="card-drawer-deck-editor" aria-labelledby="drawer_deck_label">
+            <div>
+              <span id="drawer_deck_label">Assigned decks</span>
+              <strong id="drawer_deck_summary">Not assigned</strong>
+            </div>
+            <p>Deck assignments are labels only. They do not change this card's storage location.</p>
+            <div id="drawer_deck_assignments" class="card-drawer-location-allocations"></div>
+          </section>
           <dl class="card-drawer-details">
             <div><dt>Quantity</dt><dd id="drawer_quantity">—</dd></div>
             <div><dt>Set</dt><dd id="drawer_set">—</dd></div>
@@ -294,7 +302,6 @@
             <legend>Copies to move</legend>
             <label><input type="radio" name="move_amount" value="one" checked> One available copy of each selected card</label>
             <label><input type="radio" name="move_amount" value="all"> Every available copy of each selected card</label>
-            <label id="inventory_move_deck_option" hidden><input type="radio" name="move_amount" value="deck"> Quantities required by the saved deck</label>
           </fieldset>
           <p id="inventory_move_status" class="inventory-locations-status" role="status" aria-live="polite"></p>
         </div>
@@ -318,7 +325,8 @@
 
         <div class="deck-editor-actions">
           <a id="deck_editor_full_check" href="/deck">Open full deck check</a>
-          <button id="deck_editor_assign" type="button">Assign owned cards to a deck box</button>
+          <button id="deck_editor_assign" type="button">Assign owned cards to this deck</button>
+          <button id="deck_editor_unassign" type="button" hidden>Clear deck assignments</button>
         </div>
 
         <p id="deck_editor_status" class="deck-editor-status" role="status" aria-live="polite"></p>

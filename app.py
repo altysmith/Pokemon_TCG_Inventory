@@ -519,7 +519,59 @@ def saved_deck_database() -> SavedDeckDatabase:
 
 
 def saved_decks_snapshot() -> dict:
-    decks = [asdict(deck) for deck in saved_deck_database().decks()]
+    database = saved_deck_database()
+    all_assignments = database.assignments()
+    assignment_details: dict[str, dict] = {}
+    card_ids = sorted({assignment.card_id for assignment in all_assignments})
+    if card_ids and CARD_CATALOG_PATH.is_file():
+        placeholders = ",".join("?" for _ in card_ids)
+        with CatalogDatabase(CARD_CATALOG_PATH).connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT c.id, c.name, c.card_type,
+                       COALESCE(c.card_subtype, '') AS card_subtype,
+                       c.number, COALESCE(c.primary_image_url, '') AS image_url,
+                       s.name AS set_name, s.code AS set_code
+                FROM cards c JOIN sets s ON s.id = c.set_id
+                WHERE c.id IN ({placeholders})
+                """,
+                card_ids,
+            ).fetchall()
+        assignment_details = {str(row["id"]): dict(row) for row in rows}
+    assignments_by_deck: dict[int, list[dict]] = {}
+    for assignment in all_assignments:
+        payload = asdict(assignment)
+        payload.update(assignment_details.get(assignment.card_id, {}))
+        assignments_by_deck.setdefault(assignment.deck_id, []).append(payload)
+    decks = []
+    for saved_deck in database.decks():
+        deck = asdict(saved_deck)
+        assignments = assignments_by_deck.get(saved_deck.id, [])
+        deck["assignments"] = assignments
+        deck["assigned_cards"] = sum(item["quantity"] for item in assignments)
+        deck["assigned_unique_cards"] = len(assignments)
+        deck["assignment_entries"] = []
+        if assignments:
+            assigned_check = check_deck_list(
+                saved_deck.deck_list,
+                catalog_path=CARD_CATALOG_PATH,
+                inventory_path=INVENTORY_PATH,
+                inventory_quantities={
+                    item["card_id"]: item["quantity"] for item in assignments
+                },
+            )
+            deck["assignment_entries"] = [
+                {
+                    "name": item["name"],
+                    "set_code": item["set_code"],
+                    "number": item["number"],
+                    "deck_section": item["deck_section"],
+                    "quantity": sum(fill["quantity"] for fill in item["fills"]),
+                }
+                for item in assigned_check["items"]
+                if item["fills"]
+            ]
+        decks.append(deck)
     return {"decks": decks, "count": len(decks), "inventory_changed": False}
 
 
@@ -575,6 +627,69 @@ def rename_saved_deck(data: dict) -> SavedDeck:
 
 def remove_saved_deck(data: dict) -> None:
     saved_deck_database().remove(_saved_deck_id(data))
+
+
+def assign_saved_deck_cards(data: dict) -> dict:
+    """Assign available owned copies to a deck without changing storage locations."""
+    deck_id = _saved_deck_id(data)
+    database = saved_deck_database()
+    deck = next((item for item in database.decks() if item.id == deck_id), None)
+    if deck is None:
+        raise ValueError("That saved deck no longer exists.")
+    owned = {holding.card_id: holding.quantity for holding in inventory_database().holdings()}
+    assigned_elsewhere: dict[str, int] = {}
+    for assignment in database.assignments():
+        if assignment.deck_id != deck_id:
+            assigned_elsewhere[assignment.card_id] = (
+                assigned_elsewhere.get(assignment.card_id, 0) + assignment.quantity
+            )
+    available = {
+        card_id: max(0, quantity - assigned_elsewhere.get(card_id, 0))
+        for card_id, quantity in owned.items()
+    }
+    checked = check_deck_list(
+        deck.deck_list,
+        catalog_path=CARD_CATALOG_PATH,
+        inventory_path=INVENTORY_PATH,
+        inventory_quantities=available,
+    )
+    wanted: dict[str, int] = {}
+    for item in checked.get("items", []):
+        for fill in item.get("fills", []):
+            card_id = str(fill.get("card_id", ""))
+            if card_id:
+                wanted[card_id] = wanted.get(card_id, 0) + int(fill.get("quantity", 0))
+    saved = database.replace_assignments(deck_id, wanted)
+    assigned_cards = sum(item.quantity for item in saved)
+    normally_covered = check_deck_list(
+        deck.deck_list,
+        catalog_path=CARD_CATALOG_PATH,
+        inventory_path=INVENTORY_PATH,
+    )["summary"]["covered_cards"]
+    return {
+        "deck_id": deck_id,
+        "deck_name": deck.name,
+        "assignments": [asdict(item) for item in saved],
+        "assigned_cards": assigned_cards,
+        "assigned_unique_cards": len(saved),
+        "unavailable_cards": max(
+            0, int(checked["summary"]["checked_cards"]) - assigned_cards
+        ),
+        "reserved_by_other_decks": max(0, normally_covered - assigned_cards),
+        "inventory_changed": False,
+        "locations_changed": False,
+    }
+
+
+def clear_saved_deck_assignments(data: dict) -> dict:
+    deck_id = _saved_deck_id(data)
+    cleared = saved_deck_database().clear_assignments(deck_id)
+    return {
+        "deck_id": deck_id,
+        "cleared_unique_cards": cleared,
+        "inventory_changed": False,
+        "locations_changed": False,
+    }
 
 
 STANDARD_REGULATION_MARKS = ("H", "I", "J")
@@ -885,6 +1000,17 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
     selected_sort = sort_by if sort_by in INVENTORY_SORTS else "name"
     database = inventory_database()
     holdings = database.holdings()
+    deck_database = saved_deck_database()
+    deck_names = {deck.id: deck.name for deck in deck_database.decks()}
+    deck_assignments_by_card: dict[str, list[dict]] = {}
+    for assignment in deck_database.assignments():
+        deck_assignments_by_card.setdefault(assignment.card_id, []).append(
+            {
+                "deck_id": assignment.deck_id,
+                "deck_name": deck_names.get(assignment.deck_id, "Saved deck"),
+                "quantity": assignment.quantity,
+            }
+        )
     locations = database.locations()
     allocations = database.location_allocations()
     allocations_by_card: dict[str, dict[str, int]] = {}
@@ -954,6 +1080,10 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
         types_by_card[row["card_id"]].append(row["type"])
     for item in items:
         item["quantity"] = quantities[item["id"]]
+        item["deck_assignments"] = deck_assignments_by_card.get(item["id"], [])
+        item["deck_assigned_quantity"] = sum(
+            assignment["quantity"] for assignment in item["deck_assignments"]
+        )
         item["locations"] = allocations_by_card.get(item["id"], {})
         item["assigned_quantity"] = assigned_by_card.get(item["id"], 0)
         item["unassigned_quantity"] = item["quantity"] - item["assigned_quantity"]
@@ -1545,6 +1675,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
             elif self.path == "/decks/remove":
                 remove_saved_deck(data)
                 self._json({"ok": True, "removed": True, "inventory_changed": False})
+            elif self.path == "/decks/assign":
+                self._json({"ok": True, **assign_saved_deck_cards(data)})
+            elif self.path == "/decks/unassign":
+                self._json({"ok": True, **clear_saved_deck_assignments(data)})
             elif self.path == "/scan/timing":
                 row = save_scan_performance(data)
                 self._json(
