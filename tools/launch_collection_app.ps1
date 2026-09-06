@@ -134,9 +134,19 @@ try {
             throw "The collection server stopped unexpectedly."
         }
         $sessionStatus = Get-DesktopSessionStatus
-        if ($sessionStatus -and -not $sessionStatus.connected -and
+        $disconnectedTooLong = (
+            $sessionStatus -and
+            -not $sessionStatus.connected -and
             $null -ne $sessionStatus.seconds_since_disconnect -and
-            [double]$sessionStatus.seconds_since_disconnect -ge 4.0) {
+            [double]$sessionStatus.seconds_since_disconnect -ge 4.0
+        )
+        $heartbeatStopped = (
+            $sessionStatus -and
+            $sessionStatus.connected -and
+            $null -ne $sessionStatus.seconds_since_heartbeat -and
+            [double]$sessionStatus.seconds_since_heartbeat -ge 4.0
+        )
+        if ($disconnectedTooLong -or $heartbeatStopped) {
             break
         }
         Start-Sleep -Milliseconds 500

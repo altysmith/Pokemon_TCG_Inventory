@@ -85,7 +85,7 @@ LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
 DESKTOP_SESSION_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
 DESKTOP_SESSION_LOCK = threading.Lock()
-DESKTOP_SESSION_CONNECTIONS: dict[str, set[str]] = {}
+DESKTOP_SESSION_CONNECTIONS: dict[str, dict[str, float]] = {}
 DESKTOP_SESSION_LAST_DISCONNECTED: dict[str, float] = {}
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
 CSV_COLUMNS = [
@@ -1144,8 +1144,8 @@ def open_desktop_session(token: str, page: str) -> dict:
     token = normalize_desktop_session_token(token)
     page = normalize_desktop_session_token(page)
     with DESKTOP_SESSION_LOCK:
-        pages = DESKTOP_SESSION_CONNECTIONS.setdefault(token, set())
-        pages.add(page)
+        pages = DESKTOP_SESSION_CONNECTIONS.setdefault(token, {})
+        pages[page] = monotonic()
         DESKTOP_SESSION_LAST_DISCONNECTED.pop(token, None)
         return {
             "connected": True,
@@ -1160,28 +1160,55 @@ def close_desktop_session(token: str, page: str) -> dict:
     with DESKTOP_SESSION_LOCK:
         pages = DESKTOP_SESSION_CONNECTIONS.get(token)
         if pages is not None:
-            pages.discard(page)
+            pages.pop(page, None)
             if not pages:
                 DESKTOP_SESSION_CONNECTIONS.pop(token, None)
                 DESKTOP_SESSION_LAST_DISCONNECTED.setdefault(token, monotonic())
-        remaining = len(DESKTOP_SESSION_CONNECTIONS.get(token, set()))
+        remaining = len(DESKTOP_SESSION_CONNECTIONS.get(token, {}))
         return {
             "connected": remaining > 0,
             "connections": remaining,
             "seconds_since_disconnect": 0.0 if remaining == 0 else None,
+    }
+
+
+def heartbeat_desktop_session(token: str, page: str) -> dict:
+    token = normalize_desktop_session_token(token)
+    page = normalize_desktop_session_token(page)
+    with DESKTOP_SESSION_LOCK:
+        pages = DESKTOP_SESSION_CONNECTIONS.get(token)
+        if pages is None or page not in pages:
+            return {
+                "connected": False,
+                "connections": len(pages or {}),
+                "seconds_since_heartbeat": None,
+            }
+        pages[page] = monotonic()
+        return {
+            "connected": True,
+            "connections": len(pages),
+            "seconds_since_heartbeat": 0.0,
         }
 
 
 def desktop_session_status(token: str) -> dict:
     token = normalize_desktop_session_token(token)
     with DESKTOP_SESSION_LOCK:
-        connections = len(DESKTOP_SESSION_CONNECTIONS.get(token, set()))
+        pages = DESKTOP_SESSION_CONNECTIONS.get(token, {})
+        connections = len(pages)
+        latest_heartbeat = max(pages.values()) if pages else None
         disconnected_at = DESKTOP_SESSION_LAST_DISCONNECTED.get(token)
+    now = monotonic()
     return {
         "connected": connections > 0,
         "connections": connections,
+        "seconds_since_heartbeat": (
+            round(max(now - latest_heartbeat, 0.0), 3)
+            if latest_heartbeat is not None
+            else None
+        ),
         "seconds_since_disconnect": (
-            round(max(monotonic() - disconnected_at, 0.0), 3)
+            round(max(now - disconnected_at, 0.0), 3)
             if not connections and disconnected_at is not None
             else None
         ),
@@ -1228,7 +1255,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
         open_desktop_session(token, page)
         try:
             while True:
-                self.wfile.write(b": collection-tab-open\n\n")
+                self.wfile.write(b"data: collection-tab-open\n\n")
                 self.wfile.flush()
                 sleep(1.0)
         except (BrokenPipeError, ConnectionResetError, OSError):
@@ -1380,6 +1407,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     {
                         "ok": True,
                         **close_desktop_session(
+                            data.get("token", ""), data.get("page", "")
+                        ),
+                    }
+                )
+            elif self.path == "/desktop-session/heartbeat":
+                self._json(
+                    {
+                        "ok": True,
+                        **heartbeat_desktop_session(
                             data.get("token", ""), data.get("page", "")
                         ),
                     }
