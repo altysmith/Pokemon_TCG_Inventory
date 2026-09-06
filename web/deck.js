@@ -280,55 +280,31 @@ function deckItemState(item) {
   return `Need ${item.missing}`;
 }
 
-function deckBuilderRow(item, index) {
-  const group = deckGroup(item);
-  const printing = group === 'pokemon' ? item.set_code : '';
+function deckVisualCard(item, index) {
+  const statusClass = item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed';
   return `
-    <button class="deck-builder-row ${item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed'}" type="button" data-deck-index="${index}" aria-pressed="false">
-      <strong>${item.requested}×</strong>
-      <span><em>${escapeHtml(item.name)}</em>${printing ? `<small>${escapeHtml(printing)}</small>` : ''}</span>
-      <b>${deckItemState(item)}</b>
+    <button class="binder-card deck-full-card ${statusClass}" type="button" data-deck-index="${index}" aria-label="Inspect ${escapeHtml(item.name)}, ${item.requested} in deck, ${escapeHtml(deckItemState(item))}">
+      <span class="binder-card-art ${item.image_url ? '' : 'image-missing'}">
+        ${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)} card" loading="lazy">` : ''}
+        <b class="binder-card-quantity">× ${item.requested}</b>
+      </span>
+      <strong>${escapeHtml(item.name)}</strong>
+      <small>${escapeHtml(printingLabel(item))}</small>
+      <span class="deck-view-card-status">${escapeHtml(deckItemState(item))}</span>
     </button>`;
 }
 
-function deckBuilderGroup(title, indexedItems) {
+function deckVisualGroup(title, indexedItems) {
   if (!indexedItems.length) return '';
   const count = indexedItems.reduce((total, entry) => total + entry.item.requested, 0);
   return `
-    <section class="deck-builder-group">
-      <header><h3>${title} <span>(${count})</span></h3></header>
-      <div>${indexedItems.map(entry => deckBuilderRow(entry.item, entry.index)).join('')}</div>
+    <section class="binder-group deck-full-group">
+      <div class="binder-group-heading">
+        <h2>${title}</h2>
+        <span>${indexedItems.length} ${indexedItems.length === 1 ? 'entry' : 'entries'} · ${count} cards</span>
+      </div>
+      <div class="binder-grid deck-full-grid">${indexedItems.map(entry => deckVisualCard(entry.item, entry.index)).join('')}</div>
     </section>`;
-}
-
-function selectDeckItem(index) {
-  const item = renderedDeckItems[index];
-  const preview = document.querySelector('#deck_builder_preview');
-  if (!item || !preview) return;
-  document.querySelectorAll('.deck-builder-row').forEach(row => {
-    const selected = Number(row.dataset.deckIndex) === index;
-    row.classList.toggle('is-selected', selected);
-    row.setAttribute('aria-pressed', String(selected));
-  });
-  const group = deckGroup(item);
-  const printing = group === 'pokemon'
-    ? printingLabel(item)
-    : item.status === 'ignored'
-      ? 'Not checked against inventory'
-      : 'Any printing may be used';
-  preview.innerHTML = `
-    <div class="deck-builder-preview-heading">
-      <small>${escapeHtml(item.category)}</small>
-      <h3>${escapeHtml(item.name)}</h3>
-    </div>
-    <div class="deck-builder-preview-art ${item.image_url ? '' : 'image-missing'}">
-      ${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}">` : ''}
-    </div>
-    <dl>
-      <div><dt>Deck quantity</dt><dd>${item.requested}</dd></div>
-      <div><dt>Printing</dt><dd>${escapeHtml(printing)}</dd></div>
-      <div><dt>Inventory</dt><dd class="${item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed'}">${escapeHtml(deckItemState(item))}</dd></div>
-    </dl>`;
 }
 
 function renderResults(items, ignoredBasicEnergy = []) {
@@ -409,23 +385,19 @@ function renderResults(items, ignoredBasicEnergy = []) {
     </section>
     <section class="deck-result-section is-full-deck">
       <div class="deck-section-heading"><span>COMPLETE IMPORT</span><h2>Full deck list</h2></div>
-      <div class="deck-builder-layout">
-        <div class="deck-builder-column">
-          ${deckBuilderGroup('Pokémon', pokemonItems)}
-          ${deckBuilderGroup('Energy', energyItems)}
-        </div>
-        <div class="deck-builder-column">
-          ${deckBuilderGroup('Trainer', trainerItems)}
-        </div>
-        <aside id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></aside>
+      <div class="deck-full-groups">
+        ${deckVisualGroup('Pokémon', pokemonItems)}
+        ${deckVisualGroup('Trainer', trainerItems)}
+        ${deckVisualGroup('Energy', energyItems)}
       </div>
     </section>`;
 
-  document.querySelectorAll('.deck-builder-row').forEach(row => {
-    row.addEventListener('click', () => selectDeckItem(Number(row.dataset.deckIndex)));
+  document.querySelectorAll('.deck-full-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const item = renderedDeckItems[Number(card.dataset.deckIndex)];
+      if (item?.image_url) window.CardInspector?.open?.(item, card);
+    });
   });
-  const firstMissing = renderedDeckItems.findIndex(item => item.missing > 0 || item.status === 'unresolved');
-  selectDeckItem(firstMissing >= 0 ? firstMissing : 0);
 }
 
 async function checkCurrentDeck() {

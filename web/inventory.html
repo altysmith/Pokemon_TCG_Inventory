@@ -65,7 +65,7 @@
 
       </aside>
 
-      <section class="binder-main">
+      <section id="binder_main" class="binder-main">
         <header class="binder-toolbar">
           <nav class="binder-top-navigation" aria-label="Main card tools">
             <a class="is-active" href="/inventory">My Collection</a>
@@ -93,6 +93,10 @@
             <p id="view_count">Loading your collection…</p>
           </div>
           <div class="binder-controls">
+            <div id="deck_view_actions" class="deck-view-actions" hidden>
+              <button id="deck_view_edit" type="button">Edit deck list</button>
+              <a id="deck_view_check" href="/deck">Open full deck check</a>
+            </div>
             <div class="binder-export-actions" aria-label="Export collection">
               <span>Export collection</span>
               <div>

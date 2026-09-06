@@ -15,6 +15,10 @@ const alphabetNavigation = document.querySelector('#alphabet_navigation');
 const viewEyebrow = document.querySelector('#view_eyebrow');
 const viewTitle = document.querySelector('#view_title');
 const viewCount = document.querySelector('#view_count');
+const binderMain = document.querySelector('#binder_main');
+const deckViewActions = document.querySelector('#deck_view_actions');
+const deckViewEdit = document.querySelector('#deck_view_edit');
+const deckViewCheck = document.querySelector('#deck_view_check');
 const drawer = document.querySelector('#card_drawer');
 const drawerClose = document.querySelector('#drawer_close');
 const drawerQuantitySummary = document.querySelector('#drawer_quantity_summary');
@@ -154,6 +158,10 @@ const state = {
   set: 'all',
   sort: 'name_az',
   selectedId: null,
+  deckId: 0,
+  deckData: null,
+  deckLoading: false,
+  deckError: '',
 };
 const selectionState = {
   active: false,
@@ -399,10 +407,13 @@ function updateActiveControls() {
   modeButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.mode === state.mode));
   document.querySelectorAll('[data-category]').forEach((button) => {
     const active = state.recent ? button.dataset.category === 'recent' : button.dataset.category === state.category;
-    button.classList.toggle('is-active', active && (button !== allButton || state.location === 'all'));
+    button.classList.toggle('is-active', !state.deckId && active && (button !== allButton || state.location === 'all'));
   });
   document.querySelectorAll('[data-location]').forEach((button) => {
-    button.classList.toggle('is-active', String(button.dataset.location) === String(state.location));
+    button.classList.toggle('is-active', !state.deckId && String(button.dataset.location) === String(state.location));
+  });
+  document.querySelectorAll('[data-deck-id]').forEach((button) => {
+    button.classList.toggle('is-active', Number(button.dataset.deckId) === state.deckId);
   });
 }
 
@@ -612,7 +623,8 @@ function renderCollectionDecks() {
     const count = document.createElement('b');
     count.textContent = String(deck.card_count);
     button.append(icon, name, count);
-    button.addEventListener('click', () => void openDeckEditor(deck.id));
+    button.classList.toggle('is-active', deck.id === state.deckId);
+    button.addEventListener('click', () => void openDeckView(deck.id));
     return button;
   });
   collectionDecks.replaceChildren(...cards);
@@ -624,11 +636,155 @@ async function loadCollectionDecks() {
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Saved decks could not be loaded.');
     savedDecks = data.decks || [];
+    if (state.deckId && !savedDecks.some((deck) => deck.id === state.deckId)) {
+      state.deckId = 0;
+      state.deckData = null;
+    }
     renderCollectionDecks();
   } catch (error) {
     collectionDecksStatus.textContent = error.message;
     collectionDecksStatus.classList.add('is-error');
   }
+}
+
+function deckViewGroup(item) {
+  if (['pokemon', 'trainer', 'energy'].includes(item.deck_section)) return item.deck_section;
+  if (item.category === 'Pokémon') return 'pokemon';
+  if (item.status === 'ignored' || String(item.category || '').includes('Energy')) return 'energy';
+  return 'trainer';
+}
+
+function deckViewStatus(item) {
+  if (item.status === 'ignored') return 'Basic Energy · not checked';
+  if (item.status === 'unresolved') return 'Needs review';
+  if (Number(item.missing || 0) > 0) return `${item.covered || 0} owned · need ${item.missing}`;
+  return `${item.covered || 0} owned`;
+}
+
+function deckViewCard(item, prioritizeImage = false) {
+  const tile = document.createElement('button');
+  tile.className = `binder-card deck-view-card${item.status === 'ready' ? ' is-ready' : item.status === 'ignored' ? ' is-ignored' : ' is-needed'}`;
+  tile.type = 'button';
+  tile.setAttribute('aria-label', `Inspect ${item.name}, ${item.requested} in deck, ${deckViewStatus(item)}`);
+  const art = document.createElement('span');
+  art.className = 'binder-card-art';
+  art.title = item.image_url ? 'Click artwork to enlarge' : 'Artwork unavailable';
+  const image = document.createElement('img');
+  image.decoding = 'async';
+  image.alt = `${item.name} card`;
+  observeCardImage(image, art, item.image_url, prioritizeImage);
+  const quantity = document.createElement('b');
+  quantity.className = 'binder-card-quantity';
+  quantity.textContent = `× ${item.requested}`;
+  art.append(image, quantity);
+  const name = document.createElement('strong');
+  name.textContent = item.name;
+  const identity = document.createElement('small');
+  identity.textContent = item.set_code && item.number ? `${item.set_code}  •  ${item.number}` : item.category;
+  const status = document.createElement('span');
+  status.className = 'deck-view-card-status';
+  status.textContent = deckViewStatus(item);
+  tile.append(art, name, identity, status);
+  if (item.image_url) tile.addEventListener('click', () => window.CardInspector?.open?.(item, tile));
+  return tile;
+}
+
+function renderDeckView(deck) {
+  viewEyebrow.textContent = 'Saved deck list';
+  viewTitle.textContent = deck.name;
+  viewCount.textContent = `${deck.card_count} cards  •  ${deck.unique_entries} unique entries`;
+  groupsContainer.replaceChildren();
+  alphabetNavigation.hidden = true;
+  alphabetNavigation.replaceChildren();
+  if (state.deckLoading) {
+    statusText.textContent = `Loading ${deck.name}…`;
+    statusText.hidden = false;
+    return;
+  }
+  if (state.deckError) {
+    statusText.textContent = state.deckError;
+    statusText.hidden = false;
+    return;
+  }
+  const items = [...(state.deckData?.items || []), ...(state.deckData?.ignored_basic_energy || [])];
+  if (!items.length) {
+    statusText.textContent = 'This saved deck has no card entries to display.';
+    statusText.hidden = false;
+    return;
+  }
+  statusText.hidden = true;
+  const sections = [
+    ['pokemon', 'Pokémon'],
+    ['trainer', 'Trainer'],
+    ['energy', 'Energy'],
+  ];
+  const fragment = document.createDocumentFragment();
+  let imageIndex = 0;
+  for (const [key, label] of sections) {
+    const cards = items.filter((item) => deckViewGroup(item) === key);
+    if (!cards.length) continue;
+    const section = document.createElement('section');
+    section.className = 'binder-group deck-view-group';
+    section.id = `deck_group_${key}`;
+    const heading = document.createElement('div');
+    heading.className = 'binder-group-heading';
+    const title = document.createElement('h2');
+    title.textContent = label;
+    const count = document.createElement('span');
+    const copies = cards.reduce((sum, card) => sum + Number(card.requested || 0), 0);
+    count.textContent = `${cards.length} ${cards.length === 1 ? 'entry' : 'entries'}  •  ${copies} cards`;
+    heading.append(title, count);
+    const grid = document.createElement('div');
+    grid.className = 'binder-grid deck-view-grid';
+    grid.append(...cards.map((card) => deckViewCard(card, imageIndex++ < CARD_IMAGE_PRIORITY_COUNT)));
+    section.append(heading, grid);
+    fragment.append(section);
+  }
+  groupsContainer.append(fragment);
+}
+
+async function refreshDeckView(deckId = state.deckId) {
+  const deck = savedDecks.find((item) => item.id === deckId);
+  if (!deck) return;
+  state.deckLoading = true;
+  state.deckError = '';
+  render();
+  try {
+    const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
+    if (state.deckId !== deckId) return;
+    state.deckData = data;
+  } catch (error) {
+    if (state.deckId !== deckId) return;
+    state.deckError = error.message;
+  } finally {
+    if (state.deckId === deckId) {
+      state.deckLoading = false;
+      render();
+    }
+  }
+}
+
+async function openDeckView(deckId) {
+  const deck = savedDecks.find((item) => item.id === deckId);
+  if (!deck) return;
+  state.deckId = deckId;
+  state.deckData = null;
+  state.deckError = '';
+  closeDrawer();
+  if (selectionState.active) {
+    selectionState.active = false;
+    selectionState.quantities.clear();
+  }
+  renderCollectionDecks();
+  await refreshDeckView(deckId);
+}
+
+function leaveDeckView() {
+  state.deckId = 0;
+  state.deckData = null;
+  state.deckLoading = false;
+  state.deckError = '';
+  renderCollectionDecks();
 }
 
 function parseDeckEditorEntries(text) {
@@ -788,6 +944,7 @@ async function saveDeckEditorEntries(message) {
       savedDecks = savedDecks.map((item) => item.id === saved.id ? saved : item);
       renderCollectionDecks();
     }
+    if (state.deckId === deck.id) await refreshDeckView(deck.id);
     renderDeckEditorEntries();
     setDeckEditorStatus(`${message}${refreshAssignments ? ' Owned-card assignments were refreshed.' : ''}`, 'saved');
     return true;
@@ -1175,6 +1332,14 @@ function render() {
   resetCardImageLoading();
   updateActiveControls();
   updateSelectionToolbar();
+  const selectedDeck = savedDecks.find((deck) => deck.id === state.deckId) || null;
+  binderMain.classList.toggle('is-deck-view', Boolean(selectedDeck));
+  deckViewActions.hidden = !selectedDeck;
+  if (selectedDeck) {
+    deckViewCheck.href = `/deck?deck=${selectedDeck.id}`;
+    renderDeckView(selectedDeck);
+    return;
+  }
   const cards = visibleCards();
   const copies = cards.reduce((sum, card) => sum + cardLocationQuantity(card), 0);
   const groups = orderedGroups(cards);
@@ -1464,6 +1629,7 @@ function closeDrawer() {
 }
 
 function chooseCategory(value) {
+  leaveDeckView();
   state.recent = value === 'recent';
   state.category = state.recent ? 'all' : value;
   if (state.recent) {
@@ -1474,6 +1640,7 @@ function chooseCategory(value) {
 }
 
 function chooseLocation(value) {
+  leaveDeckView();
   state.location = String(value);
   state.recent = false;
   state.category = 'all';
@@ -1757,6 +1924,7 @@ locationNavigation.addEventListener('click', (event) => {
 recentButton.addEventListener('click', () => chooseCategory('recent'));
 
 modeButtons.forEach((button) => button.addEventListener('click', () => {
+  leaveDeckView();
   state.mode = button.dataset.mode;
   state.recent = false;
   state.sort = state.mode === 'set' ? 'number' : 'name_az';
@@ -1798,6 +1966,9 @@ drawerLocationQuantity.addEventListener('keydown', (event) => {
 });
 locationManage.addEventListener('click', openLocationManager);
 drawerLocationManage.addEventListener('click', openLocationManager);
+deckViewEdit.addEventListener('click', () => {
+  if (state.deckId) void openDeckEditor(state.deckId);
+});
 deckEditorClose.addEventListener('click', () => deckEditorDialog.close());
 deckEditorDialog.addEventListener('click', (event) => { if (event.target === deckEditorDialog) deckEditorDialog.close(); });
 deckEditorSearchForm.addEventListener('submit', (event) => void searchDeckCatalog(event));
