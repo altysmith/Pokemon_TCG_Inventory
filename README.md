@@ -6,7 +6,7 @@ This local browser app provides catalog search, quantity-based collection manage
 
 ## Run it
 
-Double-click the **Pokemon Card Collection** desktop icon. It starts the private local server without a terminal window and opens the collection in the computer's default web browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Closing the collection tab automatically stops the local server after a brief four-to-five-second navigation grace period.
+Double-click the **Pokemon Card Collection** desktop icon. It starts the private local server without a terminal window and opens a dedicated collection window in the computer's default web browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Closing that window or its collection tab automatically stops the local server after a brief four-to-five-second navigation grace period.
 
 The tab actively acknowledges local presence checks while it is open. A browser-retained background connection by itself cannot keep the collection server running after the page is gone.
 

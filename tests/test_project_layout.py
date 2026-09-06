@@ -31,11 +31,15 @@ class ProjectLayoutTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(r'_ensure_dependencies.bat', app_launcher)
-        self.assertIn("Start-Process -FilePath $url", app_launcher)
+        self.assertIn("Open-CollectionWindow -Url $url", app_launcher)
+        self.assertIn("Get-DefaultBrowserExecutable", app_launcher)
+        self.assertIn('"-new-window"', app_launcher)
+        self.assertIn('"--new-window"', app_launcher)
         self.assertIn("desktop-session/status", app_launcher)
         self.assertIn("seconds_since_heartbeat", app_launcher)
+        self.assertIn("Get-ExpectedServerApiVersion", app_launcher)
+        self.assertNotIn("server_api_version -eq 4", app_launcher)
         self.assertNotIn("Get-AppBrowser", app_launcher)
-        self.assertNotIn("msedge.exe", app_launcher)
 
     def test_all_primary_pages_keep_the_desktop_session_alive(self) -> None:
         for filename in ("search.html", "inventory.html", "deck.html"):
