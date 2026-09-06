@@ -45,15 +45,35 @@ class SavedDeckDatabaseTests(unittest.TestCase):
     def test_remove_archives_without_affecting_other_decks(self) -> None:
         removed = self.database.save("Old Deck", "1 Budew PRE 004", 1, 1)
         kept = self.database.save("Current Deck", "1 Raging Bolt ex TEF 123", 1, 1)
+        self.database.replace_assignments(removed.id, {"card-1": 2})
 
         self.database.remove(removed.id)
 
         self.assertEqual([deck.id for deck in self.database.decks()], [kept.id])
+        self.assertEqual(self.database.assignments(removed.id), ())
         with self.database.connect() as connection:
             archived = connection.execute(
                 "SELECT archived_at FROM saved_decks WHERE id = ?", (removed.id,)
             ).fetchone()
         self.assertTrue(archived["archived_at"])
+
+    def test_replace_and_clear_assignments_do_not_change_deck_list(self) -> None:
+        deck = self.database.save("Excadrill", "2 Drilbur PBL 046", 2, 1)
+
+        assigned = self.database.replace_assignments(
+            deck.id, {"card-1": 2, "card-2": 1}
+        )
+        replaced = self.database.replace_assignments(deck.id, {"card-1": 1})
+        cleared = self.database.clear_assignments(deck.id)
+
+        self.assertEqual(
+            {(item.card_id, item.quantity) for item in assigned},
+            {("card-1", 2), ("card-2", 1)},
+        )
+        self.assertEqual([(item.card_id, item.quantity) for item in replaced], [("card-1", 1)])
+        self.assertEqual(cleared, 1)
+        self.assertEqual(self.database.assignments(deck.id), ())
+        self.assertEqual(self.database.decks()[0].deck_list, "2 Drilbur PBL 046")
 
 
 if __name__ == "__main__":

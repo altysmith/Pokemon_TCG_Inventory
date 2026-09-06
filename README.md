@@ -154,15 +154,13 @@ Use **Import** beside those export buttons to select either format. Import is al
 
 The **Deck Check** page includes an optional saved deck library. After a clean deck list has been checked, give it a name and select **Save to deck library**. Opening a saved deck restores the original list and immediately checks it against the collection as it exists now, so readiness is never treated as a permanent or potentially stale result. Edit that restored list, check it again, and select **Update saved deck** to replace the existing list without creating a duplicate. **Start a new deck** clears the editor when you do want a separate deck. Saved decks can also be renamed or removed from the library.
 
-Saved decks also appear under **Deck Lists** beside Locations in **My Collection**. Select a deck there to change individual card quantities, remove cards, or search the full local catalog and add another printing. Deck-list changes save to the saved deck only: adding an unowned card is allowed and never changes physical inventory quantities. The same editor can prepare the cards you do own for assignment to a deck-box location.
+Saved decks also appear under **Deck Lists** beside Locations in **My Collection**. Select a deck there to change individual card quantities, remove cards, or search the full local catalog and add another printing. Deck-list changes save to the saved deck only: adding an unowned card is allowed and never changes physical inventory quantities. **Assign owned cards to this deck** marks the available physical copies with the saved deck's name without moving them out of Main Box, a binder, or any other storage location. Refreshing assignments rechecks the current list; clearing assignments removes only those deck labels.
 
 ### Optional physical locations
 
 The Collection sidebar can organize owned copies into optional locations such as **Deck Box 1**, **Trade Binder**, or **Shelf**. Existing and newly added cards begin in the virtual **Unassigned** location. Open a card's detail drawer to assign any number of its owned copies to one or more locations. **All cards** always shows the complete collection; selecting a location shows only its assigned copies and uses that location's quantities on the card badges.
 
 For faster organization, use **Select cards to change location** above the binder. Check individual cards or choose **Select all shown**, then move one copy or every available copy of each selection from Unassigned or another location into a destination. The operation is validated and applied together, creates one automatic backup, and never changes total ownership.
-
-Saved deck lists also appear at the top of Collection. **Assign cards to deck box** rechecks the saved list, selects the exact owned printings the deck checker can use, and offers the deck quantities as a location-move option. The saved list remains a plan; the chosen location records where those physical copies are stored.
 
 Location assignments never create, remove, or reserve collection records. The combined quantity assigned across locations cannot exceed the card's total owned quantity, and the total owned quantity cannot be lowered below the number already assigned. Removing a location returns all of its assigned copies to **Unassigned** without changing collection totals. Location edits create the same automatic SQLite backups as other collection edits.
 
@@ -173,12 +171,14 @@ Location assignments never create, remove, or reserve collection records. The co
 - `POST /inventory/locations/set-quantity` changes one card's quantity in one location.
 - `POST /inventory/locations/move` moves selected quantities between Unassigned or an existing location and a destination in one transaction.
 
-Decks are stored separately in `user_data/decks.sqlite3`. Saving, opening, renaming, or removing a deck never changes, reserves, or moves inventory quantities. Removed decks are archived internally instead of having their stored list immediately destroyed. Both personal SQLite databases remain local and are ignored by Git.
+Decks are stored separately in `user_data/decks.sqlite3`. Saving, opening, renaming, or removing a deck never changes or moves inventory quantities. Deck assignments are also stored there as an independent label over owned cards, and the same physical copy is not automatically assigned to two decks. Storage locations remain unchanged. Removed decks are archived internally instead of having their stored list immediately destroyed. Both personal SQLite databases remain local and are ignored by Git.
 
 - `GET /decks` lists active saved decks.
 - `POST /decks/save` saves a validated deck list.
 - `POST /decks/rename` changes only the saved deck name.
 - `POST /decks/remove` archives a saved deck without changing inventory.
+- `POST /decks/assign` refreshes the owned-card assignments for one saved deck without changing locations.
+- `POST /decks/unassign` clears one saved deck's assignments without changing the list, inventory, or locations.
 
 The 26 saved webcam crops were re-run offline after installing RapidOCR and adding joined-language cleanup. Exact set-code reads improved from 1/26 to 21/26, card-number reads from 3/26 to 25/26, and set-total reads from 4/25 to 23/25. Regulation marks remained unreliable at 1/20, so that field stays editable and must not be used for automatic card identity or sorting.
 

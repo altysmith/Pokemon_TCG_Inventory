@@ -272,7 +272,11 @@ def _display_category(card: dict) -> str:
 
 
 def check_deck_list(
-    text: str, *, catalog_path: Path | str, inventory_path: Path | str
+    text: str,
+    *,
+    catalog_path: Path | str,
+    inventory_path: Path | str,
+    inventory_quantities: dict[str, int] | None = None,
 ) -> dict:
     """Compare a pasted deck list to inventory without changing either database."""
     if not text.strip():
@@ -284,10 +288,18 @@ def check_deck_list(
     if not entries:
         raise ValueError("No card lines were found in that deck list.")
 
-    holdings = {
-        holding.card_id: holding.quantity
-        for holding in InventoryDatabase(inventory_path).holdings()
-    }
+    holdings = (
+        {
+            str(card_id): max(0, int(quantity))
+            for card_id, quantity in inventory_quantities.items()
+            if int(quantity) > 0
+        }
+        if inventory_quantities is not None
+        else {
+            holding.card_id: holding.quantity
+            for holding in InventoryDatabase(inventory_path).holdings()
+        }
+    )
     remaining = dict(holdings)
     resolved: list[dict] = []
     with closing(sqlite3.connect(catalog_path)) as connection:

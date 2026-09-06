@@ -10,8 +10,10 @@ import app
 from app import (
     add_inventory_card,
     apply_inventory_import,
+    assign_saved_deck_cards,
     catalog_facets,
     catalog_search,
+    clear_saved_deck_assignments,
     close_desktop_session,
     create_inventory_location,
     desktop_session_status,
@@ -22,6 +24,7 @@ from app import (
     heartbeat_desktop_session,
     inventory_import_preview,
     inventory_locations_snapshot,
+    inventory_snapshot,
     move_inventory_location_quantities,
     normalize_desktop_session_token,
     open_desktop_session,
@@ -210,6 +213,57 @@ class AppTests(unittest.TestCase):
                     save_saved_deck({"name": "", "deck_list": "1 Budew PRE 004"})
                 with self.assertRaisesRegex(ValueError, "lines needing review"):
                     save_saved_deck({"name": "Broken", "deck_list": "not a deck line"})
+
+    def test_deck_assignments_label_owned_cards_without_moving_locations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            decks_path = root / "decks.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES ('set-1', 'Test Set', 'TST', 'en-US')"
+                )
+                connection.execute(
+                    "INSERT INTO set_codes(set_id, code, code_type) VALUES ('set-1', 'TST', 'primary')"
+                )
+                connection.execute(
+                    """
+                    INSERT INTO cards(
+                        id, set_id, language, name, number, number_numeric,
+                        card_type, primary_image_url
+                    ) VALUES ('card-1', 'set-1', 'en-US', 'Testmon', '001', 1, 'POKEMON', '')
+                    """
+                )
+            inventory = InventoryDatabase(inventory_path)
+            inventory.set_quantity("card-1", 2)
+            location = inventory.create_location("Main Box")
+            inventory.set_location_quantity("card-1", location.id, 2)
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+                patch.object(app, "DECK_LIBRARY_PATH", decks_path),
+            ):
+                deck = save_saved_deck(
+                    {"name": "Test Deck", "deck_list": "Pokémon: 2\n2 Testmon TST 001"}
+                )
+                before_locations = inventory_locations_snapshot()
+                assignment = assign_saved_deck_cards({"id": deck.id})
+                deck_snapshot = saved_decks_snapshot()
+                snapshot = inventory_snapshot()
+                after_locations = inventory_locations_snapshot()
+                cleared = clear_saved_deck_assignments({"id": deck.id})
+
+        self.assertEqual(assignment["assigned_cards"], 2)
+        self.assertFalse(assignment["inventory_changed"])
+        self.assertFalse(assignment["locations_changed"])
+        self.assertEqual(before_locations, after_locations)
+        self.assertEqual(snapshot["items"][0]["deck_assigned_quantity"], 2)
+        self.assertEqual(snapshot["items"][0]["deck_assignments"][0]["deck_name"], "Test Deck")
+        self.assertEqual(deck_snapshot["decks"][0]["assignment_entries"][0]["quantity"], 2)
+        self.assertEqual(cleared["cleared_unique_cards"], 1)
 
     def test_collection_import_preview_and_apply_support_update_and_replace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -949,7 +1003,12 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="deck_editor_dialog"', inventory_html)
         self.assertIn('id="deck_editor_search_form"', inventory_html)
         self.assertIn('id="deck_editor_entries"', inventory_html)
-        self.assertIn("async function prepareSavedDeck", inventory_javascript)
+        self.assertIn("async function assignCurrentDeck", inventory_javascript)
+        self.assertIn("'/decks/assign'", inventory_javascript)
+        self.assertIn("'/decks/unassign'", inventory_javascript)
+        self.assertIn("deck.assignment_entries || []", inventory_javascript)
+        self.assertIn('id="drawer_deck_assignments"', inventory_html)
+        self.assertNotIn("Assign cards to deck box", inventory_html)
         self.assertIn("async function openDeckEditor", inventory_javascript)
         self.assertIn("async function addCatalogCardToDeck", inventory_javascript)
         self.assertIn("async function updateDeckEntryQuantity", inventory_javascript)
