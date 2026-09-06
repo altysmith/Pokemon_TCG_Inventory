@@ -12,6 +12,7 @@ const savePanel = document.querySelector('#deck_save_panel');
 const deckName = document.querySelector('#deck_name');
 const saveButton = document.querySelector('#deck_save');
 const saveStatus = document.querySelector('#deck_save_status');
+const newDeckButton = document.querySelector('#deck_new');
 
 let savedDecks = [];
 let renamingDeckId = 0;
@@ -87,7 +88,7 @@ function renderDeckLibrary() {
           <small>SAVED DECK</small>
           <strong>${escapeHtml(deck.name)}</strong>
           <span>${deck.card_count} cards · ${deck.unique_entries} unique entries</span>
-          <em>Updated ${escapeHtml(savedDeckDate(deck.updated_at))}</em>
+          <em>Open, check, and edit · Updated ${escapeHtml(savedDeckDate(deck.updated_at))}</em>
         </button>
         <div class="deck-library-card-actions">
           <button type="button" data-rename-deck="${deck.id}">Rename</button>
@@ -178,9 +179,12 @@ function configureSavePanel(data) {
   if (saved) {
     deckName.value = saved.name;
     deckName.disabled = true;
-    saveButton.disabled = true;
-    saveButton.textContent = 'Saved in library';
-    saveStatus.textContent = 'This saved list was rechecked against your current inventory.';
+    const changed = lastCheckedDeckList !== saved.deck_list.trim();
+    saveButton.disabled = !changed;
+    saveButton.textContent = changed ? 'Update saved deck' : 'Saved in library';
+    saveStatus.textContent = changed
+      ? 'This will replace the saved list after the edited deck has been checked.'
+      : 'This saved list was rechecked against your current inventory. Edit it and check again to update it.';
     return;
   }
   deckName.disabled = false;
@@ -200,16 +204,35 @@ async function saveCheckedDeck() {
     const data = await requestJson('/decks/save', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name: deckName.value, deck_list: lastCheckedDeckList}),
+      body: JSON.stringify({
+        id: currentSavedDeckId || 0,
+        name: deckName.value,
+        deck_list: lastCheckedDeckList,
+      }),
     });
     currentSavedDeckId = data.deck.id;
     await loadSavedDecks(`${data.deck.name} was saved.`);
     configureSavePanel({errors: []});
   } catch (error) {
     saveButton.disabled = false;
-    saveButton.textContent = 'Save to deck library';
+    saveButton.textContent = currentSavedDeckId ? 'Update saved deck' : 'Save to deck library';
     saveStatus.textContent = error.message;
   }
+}
+
+function startNewDeck() {
+  currentSavedDeckId = 0;
+  lastCheckedDeckList = '';
+  deckList.value = '';
+  deckName.value = '';
+  deckName.disabled = false;
+  savePanel.hidden = true;
+  summary.hidden = true;
+  errorsContainer.hidden = true;
+  resultsContainer.replaceChildren();
+  statusText.textContent = 'Paste a new deck list when you are ready.';
+  renderDeckLibrary();
+  deckList.focus();
 }
 
 function renderSummary(data) {
@@ -454,12 +477,14 @@ form.addEventListener('submit', async event => {
 
 deckList.addEventListener('input', () => {
   if (deckList.value.trim() === lastCheckedDeckList) return;
-  currentSavedDeckId = 0;
   savePanel.hidden = true;
-  renderDeckLibrary();
+  statusText.textContent = currentSavedDeckId
+    ? 'Deck list changed. Check it again before updating the saved deck.'
+    : 'Deck list changed. Check it before saving.';
 });
 
 saveButton.addEventListener('click', saveCheckedDeck);
+newDeckButton.addEventListener('click', startNewDeck);
 deckName.addEventListener('keydown', event => {
   if (event.key === 'Enter') {
     event.preventDefault();

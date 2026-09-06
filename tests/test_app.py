@@ -181,6 +181,13 @@ class AppTests(unittest.TestCase):
                         "deck_list": "Pokémon: 2\n2 Raging Bolt ex TEF 123",
                     }
                 )
+                updated = save_saved_deck(
+                    {
+                        "id": deck.id,
+                        "name": "Test Deck",
+                        "deck_list": "Pokémon: 3\n3 Raging Bolt ex TEF 123",
+                    }
+                )
                 renamed = rename_saved_deck({"id": deck.id, "name": "Deck Box Candidate"})
                 snapshot = saved_decks_snapshot()
                 remove_saved_deck({"id": deck.id})
@@ -189,8 +196,10 @@ class AppTests(unittest.TestCase):
             after = InventoryDatabase(inventory_path).holdings()
 
         self.assertEqual(renamed.name, "Deck Box Candidate")
+        self.assertEqual(updated.id, deck.id)
+        self.assertEqual(updated.card_count, 3)
         self.assertEqual(snapshot["count"], 1)
-        self.assertEqual(snapshot["decks"][0]["deck_list"], "Pokémon: 2\n2 Raging Bolt ex TEF 123")
+        self.assertEqual(snapshot["decks"][0]["deck_list"], "Pokémon: 3\n3 Raging Bolt ex TEF 123")
         self.assertEqual(empty_snapshot["count"], 0)
         self.assertEqual(after, before)
 
@@ -987,11 +996,15 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="deck_list"', deck_html)
         self.assertIn('id="deck_library_cards"', deck_html)
         self.assertIn('id="deck_save_panel"', deck_html)
+        self.assertIn('id="deck_new"', deck_html)
         self.assertIn("requestJson('/decks'", deck_javascript)
         self.assertIn("requestJson('/decks/save'", deck_javascript)
         self.assertIn("requestJson('/decks/rename'", deck_javascript)
         self.assertIn("requestJson('/decks/remove'", deck_javascript)
         self.assertIn("This saved list was rechecked against your current inventory", deck_javascript)
+        self.assertIn("Update saved deck", deck_javascript)
+        self.assertIn("id: currentSavedDeckId || 0", deck_javascript)
+        self.assertIn("function startNewDeck", deck_javascript)
         self.assertIn(".deck-library-cards", stylesheet)
         self.assertIn("deck-missing-gallery", deck_javascript)
         self.assertIn("deck-owned-gallery", deck_javascript)

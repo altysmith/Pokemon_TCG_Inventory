@@ -689,6 +689,9 @@ body.card-inspector-open { overflow: hidden; }
 .deck-library-rename button.is-secondary { border-color: var(--binder-border-strong); background: transparent; color: var(--binder-muted); }
 .deck-import-panel { padding: 28px clamp(18px, 5vw, 72px); border-bottom: 1px solid var(--binder-border); background: var(--binder-panel); }
 .deck-import-panel form { max-width: 1080px; }
+.deck-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.deck-editor-heading button { min-height: 38px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: transparent; color: var(--binder-text); padding: 0 12px; font: 800 11px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-editor-heading button:hover { border-color: var(--binder-accent); background: var(--binder-panel-raised); }
 .deck-import-panel label { color: var(--binder-muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .deck-import-panel textarea { display: block; width: 100%; min-height: 250px; margin-top: 8px; resize: vertical; border: 1px solid var(--binder-border-strong); border-radius: 12px; background: var(--binder-panel-raised); color: var(--binder-text); padding: 18px 20px; font: 600 13px/1.55 Consolas, "SFMono-Regular", monospace; }
 .deck-import-panel textarea:focus { outline: 3px solid rgba(124, 142, 157, .13); border-color: var(--binder-accent); }
@@ -697,6 +700,7 @@ body.card-inspector-open { overflow: hidden; }
 .deck-import-actions button { flex: 0 0 190px; }
 .deck-status { margin: 0; padding: 14px clamp(18px, 4vw, 52px); border-bottom: 1px solid var(--binder-border); color: var(--binder-muted); font-size: 11px; }
 .deck-summary { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin: 26px clamp(18px, 4vw, 52px) 0; padding: 22px 24px; border: 1px solid var(--binder-border-strong); border-radius: 13px; background: var(--binder-panel); box-shadow: 0 13px 32px rgba(0,0,0,.14); }
+.deck-summary[hidden], .deck-save-panel[hidden], .deck-errors[hidden] { display: none; }
 .deck-summary.is-complete { border-color: rgba(74, 203, 145, .42); background: rgba(39, 114, 80, .1); }
 .deck-summary.has-missing { border-color: rgba(220, 76, 68, .4); background: var(--binder-accent-soft); }
 .deck-summary-verdict span { display: block; color: var(--binder-accent); font-size: 9px; font-weight: 850; letter-spacing: .14em; }
