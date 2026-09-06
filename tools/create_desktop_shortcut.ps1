@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $launcherPath = Join-Path $PSScriptRoot "launch_collection_app.ps1"
-$iconPath = Join-Path $projectRoot "assets\pokemon-collection.ico"
+$iconPath = Join-Path $projectRoot "assets\pokemon-card-collection.ico"
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 $shortcutPath = Join-Path $desktopPath "Pokemon Card Collection.lnk"
 $powershellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
