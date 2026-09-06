@@ -51,6 +51,24 @@ const locationCreateForm = document.querySelector('#inventory_location_create');
 const locationNameInput = document.querySelector('#inventory_location_name');
 const locationsStatus = document.querySelector('#inventory_locations_status');
 const locationsList = document.querySelector('#inventory_locations_list');
+const collectionDecks = document.querySelector('#collection_decks');
+const collectionDecksStatus = document.querySelector('#collection_decks_status');
+const selectionStart = document.querySelector('#collection_selection_start');
+const selectionActions = document.querySelector('#collection_selection_actions');
+const selectionCount = document.querySelector('#collection_selection_count');
+const selectionAll = document.querySelector('#collection_selection_all');
+const selectionClear = document.querySelector('#collection_selection_clear');
+const selectionMove = document.querySelector('#collection_selection_move');
+const selectionCancel = document.querySelector('#collection_selection_cancel');
+const moveDialog = document.querySelector('#inventory_move_dialog');
+const moveForm = document.querySelector('#inventory_move_form');
+const moveClose = document.querySelector('#inventory_move_close');
+const moveSummary = document.querySelector('#inventory_move_summary');
+const moveSource = document.querySelector('#inventory_move_source');
+const moveDestination = document.querySelector('#inventory_move_destination');
+const moveDeckOption = document.querySelector('#inventory_move_deck_option');
+const moveStatus = document.querySelector('#inventory_move_status');
+const moveManage = document.querySelector('#inventory_move_manage');
 
 const CARD_IMAGE_MAX_CONCURRENT = 6;
 const CARD_IMAGE_MAX_RETRIES = 2;
@@ -122,6 +140,12 @@ const state = {
   sort: 'name_az',
   selectedId: null,
 };
+const selectionState = {
+  active: false,
+  quantities: new Map(),
+  deckName: '',
+};
+let savedDecks = [];
 
 function titleCase(value) {
   return String(value || '')
@@ -509,6 +533,202 @@ function resetCardImageLoading() {
   cardImageObserver = null;
 }
 
+function selectionSource() {
+  return state.location !== 'all' && state.location !== 'unassigned'
+    ? String(state.location)
+    : 'unassigned';
+}
+
+function availableAtSource(card, source = selectionSource()) {
+  return source === 'unassigned'
+    ? Number(card.unassigned_quantity || 0)
+    : Number(card.locations?.[String(source)] || 0);
+}
+
+function updateSelectionToolbar() {
+  const count = selectionState.quantities.size;
+  selectionStart.hidden = selectionState.active;
+  selectionActions.hidden = !selectionState.active;
+  selectionCount.textContent = `${count} ${count === 1 ? 'card' : 'cards'} selected${selectionState.deckName ? ` for ${selectionState.deckName}` : ''}`;
+  selectionMove.disabled = count === 0;
+}
+
+function startSelection(quantities = new Map(), deckName = '') {
+  selectionState.active = true;
+  selectionState.quantities = new Map(quantities);
+  selectionState.deckName = deckName;
+  closeDrawer();
+  window.CardInspector?.close?.();
+  updateSelectionToolbar();
+  render();
+}
+
+function stopSelection() {
+  selectionState.active = false;
+  selectionState.quantities.clear();
+  selectionState.deckName = '';
+  updateSelectionToolbar();
+  render();
+}
+
+function toggleCardSelection(card) {
+  if (selectionState.quantities.has(card.id)) selectionState.quantities.delete(card.id);
+  else selectionState.quantities.set(card.id, 1);
+  updateSelectionToolbar();
+  render();
+}
+
+function renderCollectionDecks() {
+  if (!savedDecks.length) {
+    collectionDecksStatus.textContent = 'No saved decks yet. Save a checked deck list to make it available here.';
+    collectionDecks.replaceChildren();
+    return;
+  }
+  collectionDecksStatus.textContent = `${savedDecks.length} saved ${savedDecks.length === 1 ? 'deck' : 'decks'}`;
+  const cards = savedDecks.map((deck) => {
+    const article = document.createElement('article');
+    const copy = document.createElement('div');
+    const eyebrow = document.createElement('small');
+    eyebrow.textContent = 'SAVED DECK';
+    const name = document.createElement('strong');
+    name.textContent = deck.name;
+    const summary = document.createElement('span');
+    summary.textContent = `${deck.card_count} cards · ${deck.unique_entries} unique entries`;
+    copy.append(eyebrow, name, summary);
+    const assign = document.createElement('button');
+    assign.type = 'button';
+    assign.textContent = 'Assign cards to deck box';
+    assign.addEventListener('click', () => void prepareSavedDeck(deck, assign));
+    article.append(copy, assign);
+    return article;
+  });
+  collectionDecks.replaceChildren(...cards);
+}
+
+async function loadCollectionDecks() {
+  try {
+    const response = await fetch('/decks', {cache: 'no-store'});
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Saved decks could not be loaded.');
+    savedDecks = data.decks || [];
+    renderCollectionDecks();
+  } catch (error) {
+    collectionDecksStatus.textContent = error.message;
+    collectionDecksStatus.classList.add('is-error');
+  }
+}
+
+async function prepareSavedDeck(deck, button) {
+  button.disabled = true;
+  button.textContent = 'Checking inventory…';
+  collectionDecksStatus.textContent = `Matching ${deck.name} to your collection…`;
+  try {
+    const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
+    const quantities = new Map();
+    for (const item of data.items || []) {
+      for (const fill of item.fills || []) {
+        quantities.set(fill.card_id, (quantities.get(fill.card_id) || 0) + Number(fill.quantity || 0));
+      }
+    }
+    if (!quantities.size) throw new Error('None of this deck’s matched cards are currently available in the collection.');
+    startSelection(quantities, deck.name);
+    openMoveDialog('deck');
+    collectionDecksStatus.textContent = `${quantities.size} owned card printings prepared for ${deck.name}.`;
+  } catch (error) {
+    collectionDecksStatus.textContent = error.message;
+    collectionDecksStatus.classList.add('is-error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Assign cards to deck box';
+  }
+}
+
+function openMoveDialog(preferredAmount = 'one') {
+  if (!selectionState.quantities.size) return;
+  const source = selectionSource();
+  const sourceOptions = [
+    ['unassigned', 'Unassigned'],
+    ...state.locations.map((location) => [String(location.id), location.name]),
+  ];
+  moveSource.replaceChildren(...sourceOptions.map(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  moveSource.value = source;
+  moveDestination.replaceChildren(...state.locations.map((location) => {
+    const option = document.createElement('option');
+    option.value = String(location.id);
+    option.textContent = location.name;
+    return option;
+  }));
+  const firstDestination = state.locations.find((location) => String(location.id) !== source);
+  if (firstDestination) moveDestination.value = String(firstDestination.id);
+  moveDeckOption.hidden = !selectionState.deckName;
+  const amount = moveForm.querySelector(`input[name="move_amount"][value="${preferredAmount}"]`)
+    || moveForm.querySelector('input[name="move_amount"][value="one"]');
+  amount.checked = true;
+  moveSummary.textContent = `${selectionState.quantities.size} selected card printings${selectionState.deckName ? ` for ${selectionState.deckName}` : ''}. Your total ownership will not change.`;
+  moveStatus.textContent = state.locations.length ? '' : 'Create a location before moving cards.';
+  moveForm.querySelector('button[type="submit"]').disabled = !state.locations.length;
+  moveDialog.showModal();
+}
+
+async function moveSelectedCards(event) {
+  event.preventDefault();
+  const source = moveSource.value;
+  const destination = moveDestination.value;
+  if (!destination) {
+    moveStatus.textContent = 'Create and choose a destination location first.';
+    return;
+  }
+  if (source === destination) {
+    moveStatus.textContent = 'Choose a different destination location.';
+    return;
+  }
+  const mode = new FormData(moveForm).get('move_amount');
+  const quantities = {};
+  for (const [cardId, requested] of selectionState.quantities) {
+    const card = state.items.find((item) => item.id === cardId);
+    if (!card) continue;
+    const available = availableAtSource(card, source);
+    const alreadyAtDestination = Number(card.locations?.[String(destination)] || 0);
+    const quantity = mode === 'all'
+      ? available
+      : mode === 'deck'
+        ? Math.min(Math.max(0, requested - alreadyAtDestination), available)
+        : Math.min(1, available);
+    if (quantity > 0) quantities[cardId] = quantity;
+  }
+  if (!Object.keys(quantities).length) {
+    moveStatus.textContent = 'None of the selected cards have copies available in that source.';
+    return;
+  }
+  const submit = moveForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  moveStatus.textContent = 'Moving cards…';
+  try {
+    const data = await inventoryRequest('/inventory/locations/move', {
+      quantities,
+      source_location_id: source,
+      destination_location_id: destination,
+    });
+    moveDialog.close();
+    selectionState.active = false;
+    selectionState.quantities.clear();
+    selectionState.deckName = '';
+    await loadInventory();
+    statusText.hidden = false;
+    statusText.textContent = `Moved ${data.moved_copies} ${data.moved_copies === 1 ? 'copy' : 'copies'} across ${data.moved_unique_cards} selected cards.`;
+  } catch (error) {
+    moveStatus.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    updateSelectionToolbar();
+  }
+}
+
 function cardElement(card, prioritizeImage = false) {
   const tile = document.createElement('button');
   tile.className = 'binder-card';
@@ -517,6 +737,9 @@ function cardElement(card, prioritizeImage = false) {
   const visibleQuantity = cardLocationQuantity(card);
   tile.setAttribute('aria-label', `Open ${card.name}, ${collectorNumber(card)}, quantity ${visibleQuantity}`);
   tile.classList.toggle('is-selected', state.selectedId === card.id);
+  tile.classList.toggle('is-selecting', selectionState.active);
+  tile.classList.toggle('is-checked', selectionState.quantities.has(card.id));
+  if (selectionState.active) tile.setAttribute('aria-pressed', String(selectionState.quantities.has(card.id)));
 
   const art = document.createElement('span');
   art.className = 'binder-card-art';
@@ -528,7 +751,11 @@ function cardElement(card, prioritizeImage = false) {
   const quantity = document.createElement('b');
   quantity.className = 'binder-card-quantity';
   quantity.textContent = `× ${visibleQuantity}`;
-  art.append(image, quantity);
+  const check = document.createElement('span');
+  check.className = 'binder-card-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = selectionState.quantities.has(card.id) ? '✓' : '';
+  art.append(image, quantity, check);
 
   const name = document.createElement('strong');
   name.textContent = card.name;
@@ -536,6 +763,10 @@ function cardElement(card, prioritizeImage = false) {
   identity.textContent = `${card.set_code}  •  ${collectorNumber(card)}`;
   tile.append(art, name, identity);
   tile.addEventListener('click', (event) => {
+    if (selectionState.active) {
+      toggleCardSelection(card);
+      return;
+    }
     if (event.target.closest('.binder-card-art')) {
       window.CardInspector.open(card, tile);
       return;
@@ -568,6 +799,7 @@ function renderAlphabet(groups) {
 function render() {
   resetCardImageLoading();
   updateActiveControls();
+  updateSelectionToolbar();
   const cards = visibleCards();
   const copies = cards.reduce((sum, card) => sum + cardLocationQuantity(card), 0);
   const groups = orderedGroups(cards);
@@ -1172,6 +1404,28 @@ drawerLocationManage.addEventListener('click', openLocationManager);
 locationsClose.addEventListener('click', () => locationsDialog.close());
 locationsDialog.addEventListener('click', (event) => { if (event.target === locationsDialog) locationsDialog.close(); });
 locationCreateForm.addEventListener('submit', (event) => void createLocation(event));
+selectionStart.addEventListener('click', () => startSelection());
+selectionAll.addEventListener('click', () => {
+  for (const card of visibleCards()) {
+    if (availableAtSource(card) > 0) selectionState.quantities.set(card.id, 1);
+  }
+  updateSelectionToolbar();
+  render();
+});
+selectionClear.addEventListener('click', () => {
+  selectionState.quantities.clear();
+  updateSelectionToolbar();
+  render();
+});
+selectionMove.addEventListener('click', () => openMoveDialog());
+selectionCancel.addEventListener('click', stopSelection);
+moveClose.addEventListener('click', () => moveDialog.close());
+moveDialog.addEventListener('click', (event) => { if (event.target === moveDialog) moveDialog.close(); });
+moveForm.addEventListener('submit', (event) => void moveSelectedCards(event));
+moveManage.addEventListener('click', () => {
+  moveDialog.close();
+  openLocationManager();
+});
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDrawer(); });
 importOpen.addEventListener('click', () => importDialog.showModal());
 importClose.addEventListener('click', () => importDialog.close());
@@ -1215,4 +1469,4 @@ async function loadInventory({reopenDrawer = false} = {}) {
   }
 }
 
-loadInventory();
+void Promise.all([loadInventory(), loadCollectionDecks()]);

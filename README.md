@@ -158,6 +158,10 @@ The **Deck Check** page includes an optional saved deck library. After a clean d
 
 The Collection sidebar can organize owned copies into optional locations such as **Deck Box 1**, **Trade Binder**, or **Shelf**. Existing and newly added cards begin in the virtual **Unassigned** location. Open a card's detail drawer to assign any number of its owned copies to one or more locations. **All cards** always shows the complete collection; selecting a location shows only its assigned copies and uses that location's quantities on the card badges.
 
+For faster organization, use **Select cards to change location** above the binder. Check individual cards or choose **Select all shown**, then move one copy or every available copy of each selection from Unassigned or another location into a destination. The operation is validated and applied together, creates one automatic backup, and never changes total ownership.
+
+Saved deck lists also appear at the top of Collection. **Assign cards to deck box** rechecks the saved list, selects the exact owned printings the deck checker can use, and offers the deck quantities as a location-move option. The saved list remains a plan; the chosen location records where those physical copies are stored.
+
 Location assignments never create, remove, or reserve collection records. The combined quantity assigned across locations cannot exceed the card's total owned quantity, and the total owned quantity cannot be lowered below the number already assigned. Removing a location returns all of its assigned copies to **Unassigned** without changing collection totals. Location edits create the same automatic SQLite backups as other collection edits.
 
 - `GET /inventory/locations` lists active locations and aggregate counts.
@@ -165,6 +169,7 @@ Location assignments never create, remove, or reserve collection records. The co
 - `POST /inventory/locations/rename` renames a location.
 - `POST /inventory/locations/remove` archives a location and releases its assignments.
 - `POST /inventory/locations/set-quantity` changes one card's quantity in one location.
+- `POST /inventory/locations/move` moves selected quantities between Unassigned or an existing location and a destination in one transaction.
 
 Decks are stored separately in `user_data/decks.sqlite3`. Saving, opening, renaming, or removing a deck never changes, reserves, or moves inventory quantities. Removed decks are archived internally instead of having their stored list immediately destroyed. Both personal SQLite databases remain local and are ignored by Git.
 

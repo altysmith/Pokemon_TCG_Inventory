@@ -156,6 +156,41 @@ class InventoryDatabaseTests(unittest.TestCase):
         self.assertEqual(self.database.locations(), ())
         self.assertEqual(self.database.location_allocations(), ())
 
+    def test_bulk_move_transfers_selected_copies_between_unassigned_and_locations(self) -> None:
+        self.database.set_quantity("card-1", 4)
+        self.database.set_quantity("card-2", 2)
+        first = self.database.create_location("Main Box")
+        second = self.database.create_location("Deck Box")
+
+        from_unassigned = self.database.move_location_quantities(
+            {"card-1": 2, "card-2": 1}, first.id
+        )
+        between_locations = self.database.move_location_quantities(
+            {"card-1": 1}, second.id, source_location_id=first.id
+        )
+
+        self.assertEqual(sum(change.quantity for change in from_unassigned), 3)
+        self.assertEqual(between_locations[0].unassigned_quantity, 2)
+        self.assertEqual(
+            sorted(
+                (item.location_id, item.card_id, item.quantity)
+                for item in self.database.location_allocations()
+            ),
+            [(first.id, "card-1", 1), (first.id, "card-2", 1), (second.id, "card-1", 1)],
+        )
+
+    def test_bulk_move_is_atomic_when_any_selected_card_is_unavailable(self) -> None:
+        self.database.set_quantity("card-1", 2)
+        self.database.set_quantity("card-2", 1)
+        destination = self.database.create_location("Deck Box")
+
+        with self.assertRaisesRegex(ValueError, "Only 1 copies"):
+            self.database.move_location_quantities(
+                {"card-1": 1, "card-2": 2}, destination.id
+            )
+
+        self.assertEqual(self.database.location_allocations(), ())
+
     def test_database_is_independent_of_catalog_tables(self) -> None:
         connection = sqlite3.connect(self.path)
         try:

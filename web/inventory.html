@@ -101,6 +101,30 @@
           </div>
         </div>
 
+        <section class="collection-deck-library" aria-labelledby="collection_decks_heading">
+          <header>
+            <div>
+              <p>SAVED DECKS</p>
+              <h2 id="collection_decks_heading">Deck library</h2>
+              <span>Prepare the owned cards from a saved list, then place them into a deck box.</span>
+            </div>
+            <a href="/deck">Manage deck lists</a>
+          </header>
+          <p id="collection_decks_status" class="collection-decks-status" role="status">Loading saved decks…</p>
+          <div id="collection_decks" class="collection-decks"></div>
+        </section>
+
+        <div id="collection_selection_toolbar" class="collection-selection-toolbar">
+          <button id="collection_selection_start" class="is-primary" type="button">✓ Select cards to change location</button>
+          <div id="collection_selection_actions" hidden>
+            <strong id="collection_selection_count">0 cards selected</strong>
+            <button id="collection_selection_all" type="button">Select all shown</button>
+            <button id="collection_selection_clear" type="button">Clear</button>
+            <button id="collection_selection_move" class="is-primary" type="button" disabled>Change location</button>
+            <button id="collection_selection_cancel" type="button">Cancel</button>
+          </div>
+        </div>
+
         <nav id="alphabet_navigation" class="binder-alphabet" aria-label="Alphabet navigation" hidden></nav>
         <p id="inventory_status" class="binder-status" role="status">Loading your local collection…</p>
         <div id="inventory_groups" class="binder-groups" aria-live="polite"></div>
@@ -251,6 +275,38 @@
         <div id="inventory_locations_list" class="inventory-locations-list"></div>
         <footer>Removing a location returns its allocated copies to Unassigned. Your collection totals never change.</footer>
       </div>
+    </dialog>
+
+    <dialog id="inventory_move_dialog" class="inventory-move-dialog" aria-labelledby="inventory_move_title">
+      <form id="inventory_move_form" class="inventory-move-shell">
+        <header>
+          <div>
+            <small>PHYSICAL ORGANIZATION</small>
+            <h2 id="inventory_move_title">Change card location</h2>
+            <p id="inventory_move_summary">Move selected copies without changing how many you own.</p>
+          </div>
+          <button id="inventory_move_close" type="button" aria-label="Close change location">×</button>
+        </header>
+        <div class="inventory-move-fields">
+          <label>Move from
+            <select id="inventory_move_source"></select>
+          </label>
+          <label>Move to
+            <select id="inventory_move_destination" required></select>
+          </label>
+          <fieldset id="inventory_move_amounts">
+            <legend>Copies to move</legend>
+            <label><input type="radio" name="move_amount" value="one" checked> One available copy of each selected card</label>
+            <label><input type="radio" name="move_amount" value="all"> Every available copy of each selected card</label>
+            <label id="inventory_move_deck_option" hidden><input type="radio" name="move_amount" value="deck"> Quantities required by the saved deck</label>
+          </fieldset>
+          <p id="inventory_move_status" class="inventory-locations-status" role="status" aria-live="polite"></p>
+        </div>
+        <footer>
+          <button id="inventory_move_manage" type="button">Manage locations</button>
+          <button class="is-primary" type="submit">Move selected cards</button>
+        </footer>
+      </form>
     </dialog>
     <script src="/card-inspector.js"></script>
     <script src="/inventory.js"></script>
