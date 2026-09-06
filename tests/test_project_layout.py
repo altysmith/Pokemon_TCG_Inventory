@@ -33,6 +33,7 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn(r'_ensure_dependencies.bat', app_launcher)
         self.assertIn("Start-Process -FilePath $url", app_launcher)
         self.assertIn("desktop-session/status", app_launcher)
+        self.assertIn("seconds_since_heartbeat", app_launcher)
         self.assertNotIn("Get-AppBrowser", app_launcher)
         self.assertNotIn("msedge.exe", app_launcher)
 
@@ -45,6 +46,8 @@ class ProjectLayoutTests(unittest.TestCase):
         )
         self.assertIn("new EventSource", session_javascript)
         self.assertIn("sessionStorage", session_javascript)
+        self.assertIn("/desktop-session/heartbeat", session_javascript)
+        self.assertIn("addEventListener('message'", session_javascript)
 
     def test_desktop_shortcut_uses_the_current_collection_icon(self) -> None:
         shortcut_script = (

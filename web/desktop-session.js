@@ -20,6 +20,16 @@
   const pageToken = window.crypto.randomUUID().replaceAll('-', '');
   let sessionStream = null;
 
+  const acknowledge = () => {
+    void window.fetch('/desktop-session/heartbeat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token, page: pageToken}),
+      cache: 'no-store',
+      keepalive: true,
+    }).catch(() => {});
+  };
+
   const connect = () => {
     if (sessionStream && sessionStream.readyState !== EventSource.CLOSED) {
       return;
@@ -27,6 +37,7 @@
     sessionStream = new EventSource(
       `/desktop-session/watch?token=${encodeURIComponent(token)}&page=${encodeURIComponent(pageToken)}`,
     );
+    sessionStream.addEventListener('message', acknowledge);
   };
 
   connect();

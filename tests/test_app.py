@@ -19,6 +19,7 @@ from app import (
     extract_footer_fields,
     extract_footer_fields_from_readings,
     extract_literal_groups,
+    heartbeat_desktop_session,
     inventory_import_preview,
     inventory_locations_snapshot,
     normalize_desktop_session_token,
@@ -50,6 +51,24 @@ from inventory import InventoryDatabase
 
 
 class AppTests(unittest.TestCase):
+    def test_desktop_session_reports_a_stale_browser_heartbeat(self) -> None:
+        token = "d" * 32
+        page = "e" * 32
+        with app.DESKTOP_SESSION_LOCK:
+            app.DESKTOP_SESSION_CONNECTIONS.pop(token, None)
+            app.DESKTOP_SESSION_LAST_DISCONNECTED.pop(token, None)
+        try:
+            with patch("app.monotonic", return_value=100.0):
+                open_desktop_session(token, page)
+            with patch("app.monotonic", return_value=104.25):
+                status = desktop_session_status(token)
+            self.assertTrue(status["connected"])
+            self.assertEqual(status["seconds_since_heartbeat"], 4.25)
+        finally:
+            with app.DESKTOP_SESSION_LOCK:
+                app.DESKTOP_SESSION_CONNECTIONS.pop(token, None)
+                app.DESKTOP_SESSION_LAST_DISCONNECTED.pop(token, None)
+
     def test_desktop_session_tracks_open_tabs_and_disconnect_time(self) -> None:
         token = "a" * 32
         first_page = "b" * 32
@@ -62,12 +81,21 @@ class AppTests(unittest.TestCase):
             self.assertFalse(desktop_session_status(token)["connected"])
             self.assertEqual(open_desktop_session(token, first_page)["connections"], 1)
             self.assertEqual(open_desktop_session(token, second_page)["connections"], 2)
+            heartbeat = heartbeat_desktop_session(token, first_page)
+            self.assertTrue(heartbeat["connected"])
+            self.assertEqual(heartbeat["seconds_since_heartbeat"], 0.0)
+            self.assertIsNotNone(
+                desktop_session_status(token)["seconds_since_heartbeat"]
+            )
             self.assertEqual(close_desktop_session(token, first_page)["connections"], 1)
             self.assertEqual(close_desktop_session(token, first_page)["connections"], 1)
             self.assertEqual(close_desktop_session(token, second_page)["connections"], 0)
             status = desktop_session_status(token)
             self.assertFalse(status["connected"])
             self.assertIsNotNone(status["seconds_since_disconnect"])
+            self.assertFalse(
+                heartbeat_desktop_session(token, first_page)["connected"]
+            )
             with self.assertRaisesRegex(ValueError, "valid desktop session token"):
                 normalize_desktop_session_token("not-a-token")
         finally:
