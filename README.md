@@ -152,7 +152,7 @@ Use **Import** beside those export buttons to select either format. Import is al
 
 ### Saved deck library
 
-The **Deck Check** page includes an optional saved deck library. After a clean deck list has been checked, give it a name and select **Save to deck library**. Opening a saved deck restores the original list and immediately checks it against the collection as it exists now, so readiness is never treated as a permanent or potentially stale result. Saved decks can be renamed or removed from the library.
+The **Deck Check** page includes an optional saved deck library. After a clean deck list has been checked, give it a name and select **Save to deck library**. Opening a saved deck restores the original list and immediately checks it against the collection as it exists now, so readiness is never treated as a permanent or potentially stale result. Edit that restored list, check it again, and select **Update saved deck** to replace the existing list without creating a duplicate. **Start a new deck** clears the editor when you do want a separate deck. Saved decks can also be renamed or removed from the library.
 
 ### Optional physical locations
 
