@@ -584,6 +584,7 @@ class AppTests(unittest.TestCase):
             root = Path(temp_dir)
             catalog_path = root / "catalog.sqlite3"
             inventory_path = root / "inventory.sqlite3"
+            decks_path = root / "decks.sqlite3"
             catalog = CatalogDatabase(catalog_path)
             catalog.initialize()
             with catalog.connect() as connection:
@@ -609,6 +610,7 @@ class AppTests(unittest.TestCase):
             with (
                 patch.object(app, "CARD_CATALOG_PATH", catalog_path),
                 patch.object(app, "INVENTORY_PATH", inventory_path),
+                patch.object(app, "DECK_LIBRARY_PATH", decks_path),
             ):
                 snapshot = app.inventory_snapshot()
 
@@ -623,6 +625,7 @@ class AppTests(unittest.TestCase):
             root = Path(temp_dir)
             catalog_path = root / "catalog.sqlite3"
             inventory_path = root / "inventory.sqlite3"
+            decks_path = root / "decks.sqlite3"
             catalog = CatalogDatabase(catalog_path)
             catalog.initialize()
             with catalog.connect() as connection:
@@ -637,6 +640,7 @@ class AppTests(unittest.TestCase):
             with (
                 patch.object(app, "CARD_CATALOG_PATH", catalog_path),
                 patch.object(app, "INVENTORY_PATH", inventory_path),
+                patch.object(app, "DECK_LIBRARY_PATH", decks_path),
             ):
                 location = create_inventory_location({"name": "Deck Box 1"})
                 set_inventory_location_quantity(
