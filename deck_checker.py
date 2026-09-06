@@ -314,8 +314,10 @@ def check_deck_list(
                     if len(printing_candidates) == 1
                     else None
                 )
-                if printing is not None and printing["card_type"] == "POKEMON":
-                    # Pokémon must match the exact set and collector number.
+                if printing is not None:
+                    # Keep the imported printing as the visual/requested card.
+                    # Non-Pokémon inventory allocation may still use any printing
+                    # with the same name below.
                     exact = printing
 
             if exact is None:

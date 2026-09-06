@@ -1004,6 +1004,19 @@ class AppTests(unittest.TestCase):
         self.assertIn("'/inventory/locations/move'", inventory_javascript)
         self.assertIn('id="collection_selection_all"', inventory_html)
         self.assertIn('id="collection_decks"', inventory_html)
+        self.assertIn('id="deck_view_actions"', inventory_html)
+        self.assertIn('id="deck_view_edit"', inventory_html)
+        self.assertIn("async function openDeckView", inventory_javascript)
+        self.assertIn("function renderDeckView", inventory_javascript)
+        self.assertIn("binder-grid deck-view-grid", inventory_javascript)
+        self.assertLess(
+            inventory_javascript.index("['pokemon', 'Pokémon']"),
+            inventory_javascript.index("['trainer', 'Trainer']"),
+        )
+        self.assertLess(
+            inventory_javascript.index("['trainer', 'Trainer']"),
+            inventory_javascript.index("['energy', 'Energy']"),
+        )
         self.assertIn('id="deck_editor_dialog"', inventory_html)
         self.assertIn('id="deck_editor_search_form"', inventory_html)
         self.assertIn('id="deck_editor_entries"', inventory_html)
@@ -1081,6 +1094,17 @@ class AppTests(unittest.TestCase):
         self.assertIn("deck-missing-gallery", deck_javascript)
         self.assertIn("deck-owned-gallery", deck_javascript)
         self.assertIn("Full deck list", deck_javascript)
+        self.assertIn('src="/card-inspector.js"', deck_html)
+        self.assertIn("binder-grid deck-full-grid", deck_javascript)
+        self.assertIn("window.CardInspector?.open?.(item, card)", deck_javascript)
+        self.assertLess(
+            deck_javascript.index("deckVisualGroup('Pokémon'"),
+            deck_javascript.index("deckVisualGroup('Trainer'"),
+        )
+        self.assertLess(
+            deck_javascript.index("deckVisualGroup('Trainer'"),
+            deck_javascript.index("deckVisualGroup('Energy'"),
+        )
         self.assertLess(
             deck_javascript.index("Missing cards"),
             deck_javascript.index("Cards you already have"),

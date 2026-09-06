@@ -47,6 +47,14 @@ class DeckCheckerTests(unittest.TestCase):
                 """,
                 cards,
             )
+            connection.execute(
+                "UPDATE cards SET primary_image_url = 'https://example.test/research-svi.png' "
+                "WHERE id = 'research-svi'"
+            )
+            connection.execute(
+                "UPDATE cards SET primary_image_url = 'https://example.test/research-pre.png' "
+                "WHERE id = 'research-pre'"
+            )
             for card_id in ("bolt-regular", "bolt-alt", "bolt-reprint"):
                 connection.execute(
                     """
@@ -110,6 +118,7 @@ Total Cards: 5""",
             ],
         )
         trainer = result["items"][1]
+        self.assertEqual(trainer["image_url"], "https://example.test/research-svi.png")
         self.assertEqual(trainer["fills"][0]["card_id"], "research-pre")
         self.assertEqual(trainer["fills"][0]["match"], "name match")
 
