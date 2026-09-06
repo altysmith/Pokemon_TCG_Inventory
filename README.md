@@ -6,9 +6,9 @@ This local browser app provides catalog search, quantity-based collection manage
 
 ## Run it
 
-Double-click the **Pokemon Card Collection** desktop icon. It starts the private local server without a terminal window and opens the collection in its own Edge or Chrome app window. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Closing that app window automatically stops the local server.
+Double-click the **Pokemon Card Collection** desktop icon. It starts the private local server without a terminal window and opens the collection in the computer's default web browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Closing the collection tab automatically stops the local server after a brief four-to-five-second navigation grace period.
 
-The project-folder fallback is **`Start Pokemon Collection.bat`**. It launches the same app-style window and has the same automatic shutdown behavior. The desktop shortcut points to the project files, so keep the project in its current Desktop location.
+The project-folder fallback is **`Start Pokemon Collection.bat`**. It launches the same default-browser experience and has the same automatic shutdown behavior. The desktop shortcut points to the project files, so keep the project in its current Desktop location.
 
 The launcher uses an operating-system-level single-instance lock plus a server API version check. Double-clicking it again reports that the collection is already open instead of starting another server. If a manually started or older server already owns the port, startup stops with a clear instruction to close it; it never shares the port with incompatible code.
 
