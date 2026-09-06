@@ -333,6 +333,8 @@ input:focus { border-color: var(--ink); }
 .deck-view-actions[hidden] { display: none; }
 .deck-view-actions button, .deck-view-actions a { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 0 13px; font: 800 12px "Segoe UI", sans-serif; text-decoration: none; cursor: pointer; }
 .deck-view-actions button { border-color: var(--binder-accent); background: var(--binder-accent); color: #fff; }
+.deck-view-actions button.is-secondary { border-color: var(--binder-border-strong); background: var(--binder-panel); color: var(--binder-text); }
+.deck-view-actions button:disabled { opacity: .68; cursor: default; }
 .binder-main.is-deck-view .binder-organize, .binder-main.is-deck-view .binder-search, .binder-main.is-deck-view .binder-export-actions, .binder-main.is-deck-view .binder-controls > label, .binder-main.is-deck-view .collection-selection-toolbar { display: none; }
 .binder-main.is-deck-view .binder-toolbar { min-height: 82px; }
 .binder-main.is-deck-view .binder-content-toolbar { align-items: center; }
@@ -807,6 +809,10 @@ body.card-inspector-open { overflow: hidden; }
 .deck-empty-check p { margin: 8px 0 0; color: var(--binder-muted); font-size: 16px; }
 .deck-result-section { padding: 28px 0 34px; border-bottom: 1px solid var(--binder-border); }
 .deck-section-heading { margin-bottom: 18px; }
+.deck-section-heading.has-actions { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.deck-section-heading.has-actions button { min-height: 40px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 0 14px; font: 800 12px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-section-heading.has-actions button:hover { border-color: var(--binder-accent); background: var(--binder-panel-raised); }
+.deck-section-heading.has-actions button:disabled { opacity: .68; cursor: default; }
 .deck-section-heading span { display: block; color: #65d6a2; font-size: 11px; font-weight: 850; letter-spacing: .13em; }
 .deck-result-section.is-missing .deck-section-heading span { color: #ff625b; }
 .deck-section-heading h2 { margin: 5px 0 0; font-size: 26px; letter-spacing: -.025em; }
