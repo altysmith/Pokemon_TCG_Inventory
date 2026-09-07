@@ -6,6 +6,21 @@ This local browser app provides catalog search, quantity-based collection manage
 
 ## Run it
 
+### macOS
+
+The repository now includes the portable catalog plus the current collection and saved-deck databases. After cloning or pulling `main`, open Terminal in the repository and run:
+
+```bash
+chmod +x "Start Pokemon Collection.command"
+./"Start Pokemon Collection.command"
+```
+
+You can double-click **Start Pokemon Collection.command** on later launches. The first run creates a project-local `.venv` and installs the Python packages from `requirements.txt`; later launches reuse it. If `python3` is unavailable, install the current Python 3 release from [python.org](https://www.python.org/downloads/macos/) and run the launcher again.
+
+The launcher opens the app at `http://127.0.0.1:8766/`. Keep its Terminal window open while using the app and press **Control-C** there to stop it. Personal data is stored in `user_data/inventory.sqlite3` and `user_data/decks.sqlite3`; the searchable card catalog is `data/card_catalog.sqlite3`.
+
+### Windows
+
 Double-click the **Pokemon Card Collection** desktop icon. It starts the private local server without a terminal window and opens a dedicated collection window in the computer's default web browser. Use the navigation to switch between **Search**, **Collection**, and **Deck Check**. Closing that window or its collection tab automatically stops the local server after a brief four-to-five-second navigation grace period.
 
 The tab actively acknowledges local presence checks while it is open. A browser-retained background connection by itself cannot keep the collection server running after the page is gone.
@@ -18,8 +33,8 @@ The launcher uses an operating-system-level single-instance lock plus a server A
 
 - `web/` — the active Search, Collection, and Deck Check interface.
 - `app.py`, `inventory.py`, `deck_checker.py`, `saved_decks.py` — active application code.
-- `card_api/` and `data/` — rebuildable canonical card catalog and preserved Malie source data.
-- `user_data/` — personal inventory, saved decks, backups, and ignored runtime lock files.
+- `card_api/` and `data/` — canonical card catalog code plus the portable `card_catalog.sqlite3` snapshot; raw Malie downloads remain rebuildable and ignored.
+- `user_data/` — the current portable inventory and saved-deck databases; generated backups and runtime lock files remain ignored.
 - `tests/` — portable automated tests and their small tracked fixtures.
 - `tools/` — optional catalog update/API launchers and their dependency helper.
 - `legacy_webcam_scanner/` — dormant webcam UI plus ignored historical OCR evidence.
@@ -43,9 +58,9 @@ Malie index and set exports
     -> private FastAPI service on 127.0.0.1:8770
 ```
 
-The downloaded raw files and generated database intentionally stay local and are ignored by Git. Every imported card retains its source URL, source record ID, raw-record position, source-file hash, download time, and import time, so the catalog can be audited and rebuilt. Malie's alternate-art/finish records become variants of one canonical set-and-number card instead of duplicate cards.
+The downloaded raw source files stay local and are ignored by Git. The generated `data/card_catalog.sqlite3` snapshot is tracked so a fresh Windows or macOS clone is immediately usable. Every imported card retains its source URL, source record ID, raw-record position, source-file hash, download time, and import time, so the catalog can be audited and rebuilt. Malie's alternate-art/finish records become variants of one canonical set-and-number card instead of duplicate cards.
 
-The canonical catalog contains no user quantities or collection records. Personal quantities are stored separately in `user_data/inventory.sqlite3` and reference stable canonical card IDs, keeping permanent inventory separate from rebuildable reference data.
+The canonical catalog contains no user quantities or collection records. Personal quantities are stored separately in `user_data/inventory.sqlite3` and reference stable canonical card IDs, keeping permanent inventory separate from rebuildable reference data. The current `inventory.sqlite3` and `decks.sqlite3` snapshots are deliberately tracked for cross-device transfer; using the app will modify them locally.
 
 ### Update and run
 
@@ -137,7 +152,7 @@ When OCR reads both a set code and card number, the scanner immediately checks `
 
 Inventory is never changed merely because OCR found a card. **Add copies to collection** is enabled only for one exact, conflict-free local catalog match. Choose a whole-number quantity from 1 to 99; pressing the button makes the server validate both the card and quantity again before recording the canonical card ID. No-match, ambiguous, review, and invalid-quantity requests are rejected by the server even if a browser request is sent manually.
 
-The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuildable Malie catalog. Each batch records one immutable history event with the optional originating scan ID. **Undo last batch** removes that entire batch but retains a compensating history event, so mistakes remain auditable. Before any real quantity change, the app creates and integrity-checks a timestamped SQLite snapshot in `user_data/backups/`. Git intentionally ignores both the personal database and these backups.
+The mutable database lives at `user_data/inventory.sqlite3`, outside the rebuildable Malie catalog. Each batch records one immutable history event with the optional originating scan ID. **Undo last batch** removes that entire batch but retains a compensating history event, so mistakes remain auditable. Before any real quantity change, the app creates and integrity-checks a timestamped SQLite snapshot in `user_data/backups/`. The current personal database snapshot is tracked for cross-device transfer; Git continues to ignore automatic backups and runtime sidecar files.
 
 Open **My Collection** to view the digital binder. The persistent sidebar filters the same owned records by Pokemon type, Trainer subtype, Energy kind, or ACE SPEC status, while **Typing**, **A–Z**, and **Set** independently determine how those records are organized. Search matches card names, set names/codes, collector numbers, categories, and ACE SPEC. Set and sort controls narrow or reorder the current view. **Recently added** uses the permanent inventory timestamp. Click card artwork for the full-screen inspection view, or click its name/details to open the quantity drawer without losing the binder position. The detail drawer can set an exact quantity, confirms before removing the final copy, and saves through the same audited inventory endpoint used by catalog search.
 
