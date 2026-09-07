@@ -216,10 +216,13 @@ function configureSavePanel(data) {
     deckName.value = saved.name;
     deckName.disabled = true;
     const changed = lastCheckedDeckList !== saved.deck_list.trim();
+    const hasAssignments = Number(saved.assigned_cards || 0) > 0;
     saveButton.disabled = !changed;
     saveButton.textContent = changed ? 'Update saved deck' : 'Saved in library';
     saveStatus.textContent = changed
-      ? 'This will replace the saved list after the edited deck has been checked.'
+      ? hasAssignments
+        ? 'This will replace the saved list and refresh its owned-card assignments.'
+        : 'This will replace the saved list after the edited deck has been checked.'
       : 'This saved list was rechecked against your current inventory. Edit it and check again to update it.';
     return;
   }
@@ -237,6 +240,8 @@ async function saveCheckedDeck() {
   saveButton.disabled = true;
   saveButton.textContent = 'Saving…';
   try {
+    const existingDeck = savedDecks.find(deck => deck.id === currentSavedDeckId);
+    const refreshAssignments = Number(existingDeck?.assigned_cards || 0) > 0;
     const data = await requestJson('/decks/save', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -247,8 +252,22 @@ async function saveCheckedDeck() {
       }),
     });
     currentSavedDeckId = data.deck.id;
-    await loadSavedDecks(`${data.deck.name} was saved.`);
+    if (refreshAssignments) {
+      await requestJson('/decks/assign', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: data.deck.id}),
+      });
+    }
+    await loadSavedDecks(
+      refreshAssignments
+        ? `${data.deck.name} was saved and its owned-card assignments were refreshed.`
+        : `${data.deck.name} was saved.`,
+    );
     configureSavePanel({errors: []});
+    if (refreshAssignments) {
+      saveStatus.textContent = 'The saved list and its owned-card assignments now match. Inventory quantities and storage locations were unchanged.';
+    }
   } catch (error) {
     saveButton.disabled = false;
     saveButton.textContent = currentSavedDeckId ? 'Update saved deck' : 'Save to deck library';
