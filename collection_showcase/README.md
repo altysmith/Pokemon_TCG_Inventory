@@ -10,13 +10,6 @@ Double-click `Open Collection - Windows.bat`.
 
 You can also double-click `index.html` directly.
 
-## Open on macOS
-
-Double-click `Open Collection - macOS.command`.
-
-If macOS blocks the launcher after downloading it, Control-click it, choose
-**Open**, and confirm once. You can also double-click `index.html` directly.
-
 ## Notes
 
 - An internet connection is needed to display card artwork from the existing
