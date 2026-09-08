@@ -38,7 +38,12 @@ from collection_transfer import (
     render_collection_csv,
     render_collection_json,
 )
-from deck_checker import check_deck_list, format_deck_list_for_clipboard, parse_deck_list
+from deck_checker import (
+    check_deck_list,
+    compatible_assignment_cards,
+    format_deck_list_for_clipboard,
+    parse_deck_list,
+)
 from inventory import InventoryChange, InventoryDatabase, InventoryLocation, InventoryLocationChange
 from runtime_guard import RuntimeLock
 from saved_decks import SavedDeck, SavedDeckDatabase
@@ -79,7 +84,7 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
-SERVER_API_VERSION = 5
+SERVER_API_VERSION = 6
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -568,6 +573,7 @@ def saved_decks_snapshot() -> dict:
                     "number": item["number"],
                     "deck_section": item["deck_section"],
                     "quantity": sum(fill["quantity"] for fill in item["fills"]),
+                    "fills": item["fills"],
                 }
                 for item in assigned_check["items"]
                 if item["fills"]
@@ -637,6 +643,7 @@ def assign_saved_deck_cards(data: dict) -> dict:
     deck = next((item for item in database.decks() if item.id == deck_id), None)
     if deck is None:
         raise ValueError("That saved deck no longer exists.")
+    current_assignments = database.assignments(deck_id)
     owned = {holding.card_id: holding.quantity for holding in inventory_database().holdings()}
     assigned_elsewhere: dict[str, int] = {}
     for assignment in database.assignments():
@@ -653,6 +660,9 @@ def assign_saved_deck_cards(data: dict) -> dict:
         catalog_path=CARD_CATALOG_PATH,
         inventory_path=INVENTORY_PATH,
         inventory_quantities=available,
+        preferred_card_quantities={
+            assignment.card_id: assignment.quantity for assignment in current_assignments
+        },
     )
     wanted: dict[str, int] = {}
     for item in checked.get("items", []):
@@ -680,6 +690,73 @@ def assign_saved_deck_cards(data: dict) -> dict:
         "inventory_changed": False,
         "locations_changed": False,
     }
+
+
+def refresh_saved_deck_assignments() -> None:
+    """Keep every active saved deck assigned without changing physical inventory."""
+    if not CARD_CATALOG_PATH.is_file():
+        return
+    for deck in saved_deck_database().decks():
+        assign_saved_deck_cards({"id": deck.id})
+
+
+def saved_deck_assignment_options(data: dict) -> dict:
+    deck_id = _saved_deck_id(data)
+    source_card_id = str(data.get("card_id", "")).strip()
+    database = saved_deck_database()
+    current = {item.card_id: item.quantity for item in database.assignments(deck_id)}
+    if not source_card_id or current.get(source_card_id, 0) <= 0:
+        raise ValueError("Choose a card currently assigned to this deck.")
+    owned = {holding.card_id: holding.quantity for holding in inventory_database().holdings()}
+    totals: dict[str, int] = {}
+    for assignment in database.assignments():
+        totals[assignment.card_id] = totals.get(assignment.card_id, 0) + assignment.quantity
+    cards = compatible_assignment_cards(CARD_CATALOG_PATH, source_card_id, set(owned))
+    for card in cards:
+        card_id = str(card["id"])
+        card["owned_quantity"] = owned.get(card_id, 0)
+        card["assigned_to_deck"] = current.get(card_id, 0)
+        card["assigned_elsewhere"] = max(0, totals.get(card_id, 0) - current.get(card_id, 0))
+        card["available_quantity"] = max(0, owned.get(card_id, 0) - totals.get(card_id, 0))
+    return {
+        "deck_id": deck_id,
+        "source_card_id": source_card_id,
+        "options": cards,
+        "inventory_changed": False,
+        "locations_changed": False,
+    }
+
+
+def swap_saved_deck_assignment(data: dict) -> dict:
+    deck_id = _saved_deck_id(data)
+    source_card_id = str(data.get("source_card_id", "")).strip()
+    target_card_id = str(data.get("target_card_id", "")).strip()
+    try:
+        quantity = int(data.get("quantity", 1))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Choose a valid number of copies to swap.") from exc
+    if quantity <= 0:
+        raise ValueError("Choose at least one copy to swap.")
+    if not source_card_id or not target_card_id or source_card_id == target_card_id:
+        raise ValueError("Choose a different compatible printing.")
+
+    database = saved_deck_database()
+    current = {item.card_id: item.quantity for item in database.assignments(deck_id)}
+    if current.get(source_card_id, 0) < quantity:
+        raise ValueError("That many copies are not assigned from the selected printing.")
+    options = saved_deck_assignment_options({"id": deck_id, "card_id": source_card_id})
+    target = next((item for item in options["options"] if item["id"] == target_card_id), None)
+    if target is None:
+        raise ValueError("The selected printing is not interchangeable with this card.")
+    if int(target["available_quantity"]) < quantity:
+        raise ValueError("That printing does not have enough unassigned owned copies.")
+
+    current[source_card_id] -= quantity
+    if current[source_card_id] <= 0:
+        current.pop(source_card_id)
+    current[target_card_id] = current.get(target_card_id, 0) + quantity
+    database.replace_assignments(deck_id, current)
+    return assign_saved_deck_cards({"id": deck_id})
 
 
 def clear_saved_deck_assignments(data: dict) -> dict:
@@ -1460,6 +1537,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             return
         if route == "/decks":
             try:
+                refresh_saved_deck_assignments()
                 self._json({"ok": True, **saved_decks_snapshot()})
             except (ValueError, OSError) as exc:
                 self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -1467,6 +1545,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
         if route == "/inventory/cards":
             sort_by = parse_qs(parsed.query).get("sort", ["name"])[0]
             try:
+                refresh_saved_deck_assignments()
                 self._json({"ok": True, **inventory_snapshot(sort_by)})
             except (ValueError, OSError) as exc:
                 self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -1669,7 +1748,15 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, **result})
             elif self.path == "/decks/save":
                 deck = save_saved_deck(data)
-                self._json({"ok": True, "deck": asdict(deck), "inventory_changed": False})
+                assignment = assign_saved_deck_cards({"id": deck.id})
+                self._json(
+                    {
+                        "ok": True,
+                        "deck": asdict(deck),
+                        "assignment": assignment,
+                        "inventory_changed": False,
+                    }
+                )
             elif self.path == "/decks/rename":
                 deck = rename_saved_deck(data)
                 self._json({"ok": True, "deck": asdict(deck), "inventory_changed": False})
@@ -1678,6 +1765,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "removed": True, "inventory_changed": False})
             elif self.path == "/decks/assign":
                 self._json({"ok": True, **assign_saved_deck_cards(data)})
+            elif self.path == "/decks/assignment-options":
+                self._json({"ok": True, **saved_deck_assignment_options(data)})
+            elif self.path == "/decks/assign/swap":
+                self._json({"ok": True, **swap_saved_deck_assignment(data)})
             elif self.path == "/decks/unassign":
                 self._json({"ok": True, **clear_saved_deck_assignments(data)})
             elif self.path == "/scan/timing":
@@ -1868,6 +1959,7 @@ def main() -> None:
     try:
         inventory_database()
         saved_deck_database()
+        refresh_saved_deck_assignments()
         server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
     except BaseException:
         runtime_lock.release()

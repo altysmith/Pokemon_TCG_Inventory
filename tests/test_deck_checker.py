@@ -150,6 +150,36 @@ Total Cards: 5""",
         self.assertEqual(trainer["fills"][0]["card_id"], "research-pre")
         self.assertEqual(trainer["fills"][0]["match"], "name match")
 
+    def test_preferred_compatible_printing_is_allocated_first(self) -> None:
+        inventory = InventoryDatabase(self.inventory_path)
+        inventory.set_quantity("bolt-regular", 1)
+        inventory.set_quantity("bolt-alt", 1)
+
+        result = check_deck_list(
+            "1 Raging Bolt ex TEF 123",
+            catalog_path=self.catalog_path,
+            inventory_path=self.inventory_path,
+            preferred_card_quantities={"bolt-alt": 1},
+        )
+
+        self.assertEqual(result["items"][0]["fills"][0]["card_id"], "bolt-alt")
+        self.assertEqual(result["items"][0]["fills"][0]["match"], "preferred printing")
+
+    def test_different_gameplay_pokemon_cannot_be_preferred(self) -> None:
+        inventory = InventoryDatabase(self.inventory_path)
+        inventory.set_quantity("bolt-regular", 1)
+        inventory.set_quantity("bolt-different", 1)
+
+        result = check_deck_list(
+            "1 Raging Bolt ex TEF 123",
+            catalog_path=self.catalog_path,
+            inventory_path=self.inventory_path,
+            preferred_card_quantities={"bolt-different": 1},
+        )
+
+        self.assertEqual(result["items"][0]["fills"][0]["card_id"], "bolt-regular")
+        self.assertEqual(result["items"][0]["fills"][0]["match"], "exact printing")
+
     def test_trainers_and_special_energy_ignore_requested_printing(self) -> None:
         inventory = InventoryDatabase(self.inventory_path)
         inventory.set_quantity("research-pre", 2)

@@ -68,12 +68,16 @@ const deckEditorStatus = document.querySelector('#deck_editor_status');
 const deckEditorTotal = document.querySelector('#deck_editor_total');
 const deckEditorEntries = document.querySelector('#deck_editor_entries');
 const deckEditorFullCheck = document.querySelector('#deck_editor_full_check');
-const deckEditorAssign = document.querySelector('#deck_editor_assign');
-const deckEditorUnassign = document.querySelector('#deck_editor_unassign');
 const deckEditorSearchForm = document.querySelector('#deck_editor_search_form');
 const deckEditorQuery = document.querySelector('#deck_editor_query');
 const deckEditorType = document.querySelector('#deck_editor_type');
 const deckEditorSearchResults = document.querySelector('#deck_editor_search_results');
+const deckAssignmentDialog = document.querySelector('#deck_assignment_dialog');
+const deckAssignmentClose = document.querySelector('#deck_assignment_close');
+const deckAssignmentTitle = document.querySelector('#deck_assignment_title');
+const deckAssignmentCurrent = document.querySelector('#deck_assignment_current');
+const deckAssignmentOptions = document.querySelector('#deck_assignment_options');
+const deckAssignmentStatus = document.querySelector('#deck_assignment_status');
 const selectionStart = document.querySelector('#collection_selection_start');
 const selectionActions = document.querySelector('#collection_selection_actions');
 const selectionCount = document.querySelector('#collection_selection_count');
@@ -170,6 +174,7 @@ const selectionState = {
 };
 let savedDecks = [];
 const deckEditorState = {deckId: 0, entries: [], searching: false};
+const deckAssignmentState = {deckId: 0, sourceCardId: ''};
 
 function titleCase(value) {
   return String(value || '')
@@ -893,8 +898,6 @@ function renderDeckEditorEntries() {
   deckEditorTotal.textContent = `${total} ${total === 1 ? 'card' : 'cards'}`;
   const assigned = Number(deck.assigned_cards || 0);
   deckEditorSummary.textContent = `${deckEditorState.entries.length} unique ${deckEditorState.entries.length === 1 ? 'entry' : 'entries'} · ${assigned} owned ${assigned === 1 ? 'card is' : 'cards are'} assigned to this deck · Storage locations are unchanged.`;
-  deckEditorAssign.textContent = assigned ? 'Refresh owned-card assignments' : 'Assign owned cards to this deck';
-  deckEditorUnassign.hidden = assigned === 0;
   const rows = deckEditorState.entries.map((entry, index) => {
     const article = document.createElement('article');
     article.className = 'deck-editor-entry';
@@ -919,11 +922,18 @@ function renderDeckEditorEntries() {
     const printing = document.createElement('span');
     printing.textContent = entry.set_code && entry.number ? `${entry.set_code} · ${entry.number}` : 'Any printing';
     identity.append(category, name, printing);
-    if (entry.assignment_quantity) {
-      const assignedLabel = document.createElement('em');
-      assignedLabel.className = 'deck-editor-assigned-label';
-      assignedLabel.textContent = `${entry.assignment_quantity} assigned to ${deck.name}`;
-      identity.append(assignedLabel);
+    if (entry.assignment_fills?.length) {
+      const printings = document.createElement('div');
+      printings.className = 'deck-editor-assigned-printings';
+      for (const fill of entry.assignment_fills) {
+        const assignedPrinting = document.createElement('button');
+        assignedPrinting.type = 'button';
+        assignedPrinting.textContent = `${fill.quantity}× ${fill.set_code} · ${fill.number}`;
+        assignedPrinting.setAttribute('aria-label', `Change assigned ${entry.name} printing from ${fill.set_code} ${fill.number}`);
+        assignedPrinting.addEventListener('click', () => void openAssignmentSwap(entry, fill));
+        printings.append(assignedPrinting);
+      }
+      identity.append(printings);
     }
     const controls = document.createElement('div');
     controls.className = 'deck-editor-entry-controls';
@@ -968,25 +978,17 @@ async function saveDeckEditorEntries(message) {
   setDeckEditorStatus('Saving deck list…');
   deckEditorDialog.classList.add('is-saving');
   try {
-    const refreshAssignments = Number(deck.assigned_cards || 0) > 0;
     const data = await inventoryRequest('/decks/save', {
       id: deck.id,
       name: deck.name,
       deck_list: serializeDeckEditorEntries(deckEditorState.entries),
     });
-    if (refreshAssignments) {
-      await inventoryRequest('/decks/assign', {id: deck.id});
-      await Promise.all([loadCollectionDecks(), loadInventory()]);
-      const refreshed = savedDecks.find((item) => item.id === deck.id);
-      if (refreshed) await hydrateDeckEditorArtwork(refreshed);
-    } else {
-      const saved = {...data.deck, assignments: [], assignment_entries: [], assigned_cards: 0, assigned_unique_cards: 0};
-      savedDecks = savedDecks.map((item) => item.id === saved.id ? saved : item);
-      renderCollectionDecks();
-    }
+    await Promise.all([loadCollectionDecks(), loadInventory()]);
+    const refreshed = savedDecks.find((item) => item.id === data.deck.id);
+    if (refreshed) await hydrateDeckEditorArtwork(refreshed);
     if (state.deckId === deck.id) await refreshDeckView(deck.id);
     renderDeckEditorEntries();
-    setDeckEditorStatus(`${message}${refreshAssignments ? ' Owned-card assignments were refreshed.' : ''}`, 'saved');
+    setDeckEditorStatus(`${message} Owned-card assignments were updated automatically.`, 'saved');
     return true;
   } catch (error) {
     setDeckEditorStatus(error.message, 'error');
@@ -1124,7 +1126,10 @@ async function searchDeckCatalog(event) {
 async function hydrateDeckEditorArtwork(deck) {
   try {
     const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
-    deckEditorState.entries.forEach((entry) => { entry.assignment_quantity = 0; });
+    deckEditorState.entries.forEach((entry) => {
+      entry.assignment_quantity = 0;
+      entry.assignment_fills = [];
+    });
     for (const assignment of deck.assignment_entries || []) {
       const match = deckEditorState.entries.find((entry) => deckEntryKey(entry) === deckEntryKey({
         name: assignment.name,
@@ -1134,6 +1139,7 @@ async function hydrateDeckEditorArtwork(deck) {
       }));
       if (match) {
         match.assignment_quantity += Number(assignment.quantity || 0);
+        match.assignment_fills.push(...(assignment.fills || []));
       }
     }
     for (const item of [...(data.items || []), ...(data.ignored_basic_energy || [])]) {
@@ -1169,45 +1175,80 @@ async function openDeckEditor(id) {
   await hydrateDeckEditorArtwork(deck);
 }
 
-async function assignCurrentDeck() {
-  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
-  if (!deck) return;
-  deckEditorAssign.disabled = true;
-  setDeckEditorStatus(`Assigning available owned cards to ${deck.name}…`);
+async function openAssignmentSwap(entry, fill) {
+  deckAssignmentState.deckId = deckEditorState.deckId;
+  deckAssignmentState.sourceCardId = fill.card_id;
+  deckAssignmentTitle.textContent = `Choose ${entry.name} printing`;
+  deckAssignmentCurrent.textContent = `Currently changing one copy of ${fill.set_code} · ${fill.number}.`;
+  deckAssignmentOptions.replaceChildren();
+  deckAssignmentStatus.textContent = 'Loading compatible owned printings…';
+  deckAssignmentStatus.className = 'deck-editor-status';
+  deckAssignmentDialog.showModal();
   try {
-    const data = await inventoryRequest('/decks/assign', {id: deck.id});
-    await Promise.all([loadCollectionDecks(), loadInventory()]);
-    const refreshed = savedDecks.find((item) => item.id === deck.id);
-    renderDeckEditorEntries();
-    if (refreshed) await hydrateDeckEditorArtwork(refreshed);
-    const unavailable = Number(data.unavailable_cards || 0);
-    const elsewhere = Number(data.reserved_by_other_decks || 0);
-    setDeckEditorStatus(
-      `${data.assigned_cards} owned ${data.assigned_cards === 1 ? 'card was' : 'cards were'} assigned to ${deck.name}.${unavailable ? ` ${unavailable} deck ${unavailable === 1 ? 'card is' : 'cards are'} not currently assignable.` : ''}${elsewhere ? ` ${elsewhere} ${elsewhere === 1 ? 'copy is' : 'copies are'} assigned to another deck.` : ''} Storage locations did not change.`,
-      'saved',
-    );
+    const data = await inventoryRequest('/decks/assignment-options', {
+      id: deckAssignmentState.deckId,
+      card_id: deckAssignmentState.sourceCardId,
+    });
+    const alternatives = (data.options || []).filter((card) => card.id !== deckAssignmentState.sourceCardId);
+    if (!alternatives.length) {
+      deckAssignmentOptions.innerHTML = '<p class="deck-editor-empty">No other compatible owned printings were found.</p>';
+      deckAssignmentStatus.textContent = '';
+      return;
+    }
+    const rows = alternatives.map((card) => {
+      const option = document.createElement('article');
+      option.className = 'deck-assignment-option';
+      const image = document.createElement('div');
+      image.className = `deck-assignment-option-art${card.image_url ? '' : ' image-missing'}`;
+      if (card.image_url) {
+        const cardImage = document.createElement('img');
+        cardImage.src = card.image_url;
+        cardImage.alt = '';
+        image.append(cardImage);
+      }
+      const copy = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = card.name;
+      const printing = document.createElement('span');
+      printing.textContent = `${card.set_code} · ${card.number}`;
+      const availability = document.createElement('small');
+      availability.textContent = `${card.owned_quantity} owned · ${card.available_quantity} available`;
+      copy.append(name, printing, availability);
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.textContent = card.available_quantity > 0 ? 'Assign one copy' : 'Unavailable';
+      choose.disabled = card.available_quantity <= 0;
+      choose.addEventListener('click', () => void swapAssignedPrinting(card, choose));
+      option.append(image, copy, choose);
+      return option;
+    });
+    deckAssignmentOptions.replaceChildren(...rows);
+    deckAssignmentStatus.textContent = 'Only compatible same-name printings are shown.';
   } catch (error) {
-    setDeckEditorStatus(error.message, 'error');
-  } finally {
-    deckEditorAssign.disabled = false;
+    deckAssignmentStatus.textContent = error.message;
+    deckAssignmentStatus.className = 'deck-editor-status is-error';
   }
 }
 
-async function clearCurrentDeckAssignments() {
-  const deck = savedDecks.find((item) => item.id === deckEditorState.deckId);
-  if (!deck || !window.confirm(`Clear all owned-card assignments from ${deck.name}? Storage locations and the deck list will not change.`)) return;
-  deckEditorUnassign.disabled = true;
-  setDeckEditorStatus(`Clearing assignments from ${deck.name}…`);
+async function swapAssignedPrinting(card, button) {
+  button.disabled = true;
+  deckAssignmentStatus.textContent = `Assigning one ${card.set_code} · ${card.number}…`;
   try {
-    await inventoryRequest('/decks/unassign', {id: deck.id});
+    await inventoryRequest('/decks/assign/swap', {
+      id: deckAssignmentState.deckId,
+      source_card_id: deckAssignmentState.sourceCardId,
+      target_card_id: card.id,
+      quantity: 1,
+    });
     await Promise.all([loadCollectionDecks(), loadInventory()]);
-    deckEditorState.entries.forEach((entry) => { entry.assignment_quantity = 0; });
-    renderDeckEditorEntries();
-    setDeckEditorStatus(`Deck assignments were cleared from ${deck.name}. Storage locations did not change.`, 'saved');
+    const refreshed = savedDecks.find((item) => item.id === deckAssignmentState.deckId);
+    if (refreshed) await hydrateDeckEditorArtwork(refreshed);
+    deckAssignmentDialog.close();
+    setDeckEditorStatus(`${card.name} ${card.set_code} · ${card.number} was assigned and saved. Storage locations did not change.`, 'saved');
   } catch (error) {
-    setDeckEditorStatus(error.message, 'error');
-  } finally {
-    deckEditorUnassign.disabled = false;
+    button.disabled = false;
+    deckAssignmentStatus.textContent = error.message;
+    deckAssignmentStatus.className = 'deck-editor-status is-error';
   }
 }
 
@@ -2013,8 +2054,8 @@ deckViewEdit.addEventListener('click', () => {
 deckEditorClose.addEventListener('click', () => deckEditorDialog.close());
 deckEditorDialog.addEventListener('click', (event) => { if (event.target === deckEditorDialog) deckEditorDialog.close(); });
 deckEditorSearchForm.addEventListener('submit', (event) => void searchDeckCatalog(event));
-deckEditorAssign.addEventListener('click', () => void assignCurrentDeck());
-deckEditorUnassign.addEventListener('click', () => void clearCurrentDeckAssignments());
+deckAssignmentClose.addEventListener('click', () => deckAssignmentDialog.close());
+deckAssignmentDialog.addEventListener('click', (event) => { if (event.target === deckAssignmentDialog) deckAssignmentDialog.close(); });
 locationsClose.addEventListener('click', () => locationsDialog.close());
 locationsDialog.addEventListener('click', (event) => { if (event.target === locationsDialog) locationsDialog.close(); });
 locationCreateForm.addEventListener('submit', (event) => void createLocation(event));

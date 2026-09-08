@@ -32,12 +32,15 @@ from app import (
     remove_inventory_location,
     rename_saved_deck,
     rename_inventory_location,
+    refresh_saved_deck_assignments,
     save_benchmark_label,
     save_saved_deck,
     save_scan_performance,
     saved_decks_snapshot,
+    saved_deck_assignment_options,
     set_catalog_inventory_quantity,
     set_inventory_location_quantity,
+    swap_saved_deck_assignment,
 )
 from card_scanner.ocr import LiteralReading
 from card_scanner.lookup import CardInfo
@@ -229,16 +232,18 @@ class AppTests(unittest.TestCase):
                 connection.execute(
                     "INSERT INTO set_codes(set_id, code, code_type) VALUES ('set-1', 'TST', 'primary')"
                 )
-                connection.execute(
+                connection.executemany(
                     """
                     INSERT INTO cards(
                         id, set_id, language, name, number, number_numeric,
                         card_type, primary_image_url
-                    ) VALUES ('card-1', 'set-1', 'en-US', 'Testmon', '001', 1, 'POKEMON', '')
-                    """
+                    ) VALUES (?, 'set-1', 'en-US', 'Testmon', ?, ?, 'POKEMON', '')
+                    """,
+                    [("card-1", "001", 1), ("card-2", "002", 2)],
                 )
             inventory = InventoryDatabase(inventory_path)
             inventory.set_quantity("card-1", 2)
+            inventory.set_quantity("card-2", 1)
             location = inventory.create_location("Main Box")
             inventory.set_location_quantity("card-1", location.id, 2)
             with (
@@ -250,7 +255,17 @@ class AppTests(unittest.TestCase):
                     {"name": "Test Deck", "deck_list": "Pokémon: 2\n2 Testmon TST 001"}
                 )
                 before_locations = inventory_locations_snapshot()
-                assignment = assign_saved_deck_cards({"id": deck.id})
+                refresh_saved_deck_assignments()
+                automatic_snapshot = saved_decks_snapshot()
+                options = saved_deck_assignment_options({"id": deck.id, "card_id": "card-1"})
+                assignment = swap_saved_deck_assignment(
+                    {
+                        "id": deck.id,
+                        "source_card_id": "card-1",
+                        "target_card_id": "card-2",
+                        "quantity": 1,
+                    }
+                )
                 deck_snapshot = saved_decks_snapshot()
                 snapshot = inventory_snapshot()
                 after_locations = inventory_locations_snapshot()
@@ -260,10 +275,22 @@ class AppTests(unittest.TestCase):
         self.assertFalse(assignment["inventory_changed"])
         self.assertFalse(assignment["locations_changed"])
         self.assertEqual(before_locations, after_locations)
-        self.assertEqual(snapshot["items"][0]["deck_assigned_quantity"], 2)
-        self.assertEqual(snapshot["items"][0]["deck_assignments"][0]["deck_name"], "Test Deck")
+        self.assertEqual(automatic_snapshot["decks"][0]["assigned_cards"], 2)
+        self.assertEqual(next(item for item in options["options"] if item["id"] == "card-2")["available_quantity"], 1)
+        self.assertEqual(sum(item["deck_assigned_quantity"] for item in snapshot["items"]), 2)
+        self.assertTrue(
+            all(
+                item["deck_assignments"][0]["deck_name"] == "Test Deck"
+                for item in snapshot["items"]
+                if item["deck_assignments"]
+            )
+        )
         self.assertEqual(deck_snapshot["decks"][0]["assignment_entries"][0]["quantity"], 2)
-        self.assertEqual(cleared["cleared_unique_cards"], 1)
+        self.assertEqual(
+            {item["card_id"]: item["quantity"] for item in deck_snapshot["decks"][0]["assignments"]},
+            {"card-1": 1, "card-2": 1},
+        )
+        self.assertEqual(cleared["cleared_unique_cards"], 2)
 
     def test_collection_import_preview_and_apply_support_update_and_replace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1024,9 +1051,11 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="deck_editor_dialog"', inventory_html)
         self.assertIn('id="deck_editor_search_form"', inventory_html)
         self.assertIn('id="deck_editor_entries"', inventory_html)
-        self.assertIn("async function assignCurrentDeck", inventory_javascript)
-        self.assertIn("'/decks/assign'", inventory_javascript)
-        self.assertIn("'/decks/unassign'", inventory_javascript)
+        self.assertIn('id="deck_assignment_dialog"', inventory_html)
+        self.assertIn("async function openAssignmentSwap", inventory_javascript)
+        self.assertIn("'/decks/assignment-options'", inventory_javascript)
+        self.assertIn("'/decks/assign/swap'", inventory_javascript)
+        self.assertIn("Owned cards assign automatically", inventory_html)
         self.assertIn("deck.assignment_entries || []", inventory_javascript)
         self.assertIn('id="drawer_deck_assignments"', inventory_html)
         self.assertNotIn("Assign cards to deck box", inventory_html)
@@ -1088,8 +1117,6 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="deck_new"', deck_html)
         self.assertIn("requestJson('/decks'", deck_javascript)
         self.assertIn("requestJson('/decks/save'", deck_javascript)
-        self.assertIn("const refreshAssignments = Number(existingDeck?.assigned_cards || 0) > 0", deck_javascript)
-        self.assertIn("requestJson('/decks/assign'", deck_javascript)
         self.assertIn("replace the saved list and refresh its owned-card assignments", deck_javascript)
         self.assertIn("owned-card assignments were refreshed", deck_javascript)
         self.assertIn("requestJson('/decks/rename'", deck_javascript)

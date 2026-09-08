@@ -251,6 +251,37 @@ def _all_card_details(connection: sqlite3.Connection, card_ids: set[str]) -> dic
     return details
 
 
+def compatible_assignment_cards(
+    catalog_path: Path | str,
+    source_card_id: str,
+    candidate_card_ids: set[str],
+) -> list[dict]:
+    """Return same-name printings that can represent the same deck entry."""
+    catalog_path = Path(catalog_path)
+    if not catalog_path.is_file():
+        raise ValueError("Local card catalog is unavailable.")
+    card_ids = {str(card_id) for card_id in candidate_card_ids if str(card_id)}
+    card_ids.add(str(source_card_id))
+    with closing(sqlite3.connect(catalog_path)) as connection:
+        connection.row_factory = sqlite3.Row
+        details = _all_card_details(connection, card_ids)
+    source = details.get(str(source_card_id))
+    if source is None:
+        raise ValueError("That assigned card is no longer in the local catalog.")
+
+    compatible = []
+    for card in details.values():
+        if card["card_type"] != source["card_type"]:
+            continue
+        if _name_key(card["name"]) != _name_key(source["name"]):
+            continue
+        if card["card_type"] == "POKEMON" and card["gameplay_key"] != source["gameplay_key"]:
+            continue
+        compatible.append({key: value for key, value in card.items() if key != "gameplay_key"})
+    compatible.sort(key=lambda card: (card["set_code"], card["number"], card["id"]))
+    return compatible
+
+
 def _printing_candidates(
     connection: sqlite3.Connection, entry: DeckEntry
 ) -> list[sqlite3.Row]:
@@ -300,6 +331,7 @@ def check_deck_list(
     catalog_path: Path | str,
     inventory_path: Path | str,
     inventory_quantities: dict[str, int] | None = None,
+    preferred_card_quantities: dict[str, int] | None = None,
 ) -> dict:
     """Compare a pasted deck list to inventory without changing either database."""
     if not text.strip():
@@ -439,11 +471,35 @@ def check_deck_list(
             item["covered"] += take
             return take
 
+        # Existing or explicitly chosen assignments get first claim so a manual
+        # alternate-art choice survives later automatic refreshes.
+        for item in resolved:
+            requested = details.get(item["requested_id"])
+            if requested is None:
+                continue
+            needed = item["entry"].quantity - item["covered"]
+            for preferred_id, preferred_quantity in (preferred_card_quantities or {}).items():
+                preferred = details.get(str(preferred_id))
+                if preferred is None or preferred["card_type"] != requested["card_type"]:
+                    continue
+                if _name_key(preferred["name"]) != _name_key(requested["name"]):
+                    continue
+                if (
+                    requested["card_type"] == "POKEMON"
+                    and preferred["gameplay_key"] != requested["gameplay_key"]
+                ):
+                    continue
+                wanted = min(needed, max(0, int(preferred_quantity)))
+                needed -= allocate(item, str(preferred_id), wanted, "preferred printing")
+                if needed <= 0:
+                    break
+
         # Pokémon printings get first claim on their exact inventory copies.
         for item in resolved:
             card = item["candidate"]
             if card and card["card_type"] == "POKEMON":
-                allocate(item, item["requested_id"], item["entry"].quantity, "exact printing")
+                needed = item["entry"].quantity - item["covered"]
+                allocate(item, item["requested_id"], needed, "exact printing")
 
         # Trainers and Energy share inventory by name, regardless of printing.
         for item in resolved:

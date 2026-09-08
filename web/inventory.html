@@ -330,8 +330,7 @@
 
         <div class="deck-editor-actions">
           <a id="deck_editor_full_check" href="/deck">Open full deck check</a>
-          <button id="deck_editor_assign" type="button">Assign owned cards to this deck</button>
-          <button id="deck_editor_unassign" type="button" hidden>Clear deck assignments</button>
+          <span class="deck-editor-auto-assignment">Owned cards assign automatically</span>
         </div>
 
         <p id="deck_editor_status" class="deck-editor-status" role="status" aria-live="polite"></p>
@@ -367,6 +366,22 @@
             <div id="deck_editor_search_results" class="deck-editor-search-results"></div>
           </section>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="deck_assignment_dialog" class="deck-assignment-dialog" aria-labelledby="deck_assignment_title">
+      <div class="deck-assignment-shell">
+        <header>
+          <div>
+            <small>ASSIGNED PRINTING</small>
+            <h2 id="deck_assignment_title">Choose a printing</h2>
+            <p id="deck_assignment_current"></p>
+          </div>
+          <button id="deck_assignment_close" type="button" aria-label="Close printing chooser">×</button>
+        </header>
+        <p>Choose another available owned printing. One physical copy will be swapped and saved immediately.</p>
+        <div id="deck_assignment_options" class="deck-assignment-options"></div>
+        <p id="deck_assignment_status" class="deck-editor-status" role="status" aria-live="polite"></p>
       </div>
     </dialog>
     <script src="/card-inspector.js"></script>
