@@ -72,6 +72,7 @@
             <a href="/">Search Cards</a>
             <a class="binder-need-link" href="/needed">Need Cards</a>
             <a href="/deck">Check a Deck</a>
+            <button id="allocate_all_decks" class="binder-allocate-button" type="button">Allocate to Decks</button>
             <button id="theme_toggle" type="button">Light Mode</button>
           </nav>
           <div class="binder-organize" role="group" aria-label="Organize collection by">
@@ -97,7 +98,8 @@
             <div id="deck_view_actions" class="deck-view-actions" hidden>
               <button id="deck_view_copy" class="is-secondary" type="button">Copy deck list</button>
               <button id="deck_view_edit" type="button">Edit deck list</button>
-              <a id="deck_view_check" href="/deck">Open full deck check</a>
+              <button id="deck_view_allocate" class="is-secondary" type="button">Allocate cards</button>
+              <button id="deck_view_delete" class="is-danger" type="button">Delete deck</button>
             </div>
             <div class="binder-export-actions" aria-label="Export collection">
               <span>Export collection</span>
@@ -330,7 +332,7 @@
         </header>
 
         <div class="deck-editor-actions">
-          <a id="deck_editor_full_check" href="/deck">Open full deck check</a>
+          <button id="deck_editor_allocate" type="button">Allocate cards</button>
           <span class="deck-editor-auto-assignment">Owned cards assign automatically</span>
         </div>
 

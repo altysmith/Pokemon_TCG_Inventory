@@ -84,7 +84,7 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
-SERVER_API_VERSION = 7
+SERVER_API_VERSION = 8
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -778,12 +778,31 @@ def assign_saved_deck_cards(data: dict) -> dict:
     }
 
 
-def refresh_saved_deck_assignments() -> None:
+def refresh_saved_deck_assignments() -> dict:
     """Keep every active saved deck assigned without changing physical inventory."""
     if not CARD_CATALOG_PATH.is_file():
-        return
-    for deck in saved_deck_database().decks():
+        return {
+            "deck_count": 0,
+            "assigned_cards": 0,
+            "assigned_unique_cards": 0,
+            "decks": [],
+            "inventory_changed": False,
+            "locations_changed": False,
+        }
+    assignments = [
         assign_saved_deck_cards({"id": deck.id})
+        for deck in saved_deck_database().decks()
+    ]
+    return {
+        "deck_count": len(assignments),
+        "assigned_cards": sum(item["assigned_cards"] for item in assignments),
+        "assigned_unique_cards": sum(
+            item["assigned_unique_cards"] for item in assignments
+        ),
+        "decks": assignments,
+        "inventory_changed": False,
+        "locations_changed": False,
+    }
 
 
 def saved_deck_assignment_options(data: dict) -> dict:
@@ -1860,6 +1879,8 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "removed": True, "inventory_changed": False})
             elif self.path == "/decks/assign":
                 self._json({"ok": True, **assign_saved_deck_cards(data)})
+            elif self.path == "/decks/assign-all":
+                self._json({"ok": True, **refresh_saved_deck_assignments()})
             elif self.path == "/decks/assignment-options":
                 self._json({"ok": True, **saved_deck_assignment_options(data)})
             elif self.path == "/decks/assign/swap":

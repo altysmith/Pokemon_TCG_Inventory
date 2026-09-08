@@ -334,6 +334,8 @@ input:focus { border-color: var(--ink); }
 .deck-view-actions button, .deck-view-actions a { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 0 13px; font: 800 12px "Segoe UI", sans-serif; text-decoration: none; cursor: pointer; }
 .deck-view-actions button { border-color: var(--binder-accent); background: var(--binder-accent); color: #fff; }
 .deck-view-actions button.is-secondary { border-color: var(--binder-border-strong); background: var(--binder-panel); color: var(--binder-text); }
+.deck-view-actions button.is-danger { border-color: rgba(255, 91, 85, .7); background: transparent; color: #ff6b65; }
+.deck-view-actions button.is-danger:hover { background: rgba(255, 91, 85, .12); }
 .deck-view-actions button:disabled { opacity: .68; cursor: default; }
 .binder-main.is-deck-view .binder-organize, .binder-main.is-deck-view .binder-search, .binder-main.is-deck-view .binder-export-actions, .binder-main.is-deck-view .binder-controls > label, .binder-main.is-deck-view .collection-selection-toolbar { display: none; }
 .binder-main.is-deck-view .binder-toolbar { min-height: 82px; }
@@ -948,6 +950,8 @@ input { font-size: 20px; }
 .binder-top-navigation a.binder-need-link { border-color: rgba(220,76,68,.55); color: #ff817b; }
 .binder-top-navigation a.binder-need-link:hover { background: var(--binder-accent); color: #fff; }
 .binder-top-navigation button { margin-left: auto; }
+.binder-top-navigation button.binder-allocate-button { margin-left: 0; border-color: rgba(80, 180, 230, .65); color: #63c8f5; }
+.binder-top-navigation button.binder-allocate-button:hover { background: rgba(46, 126, 168, .16); }
 .binder-toolbar > .binder-search { justify-self: end; }
 .binder-brand strong { font-size: 18px; }
 .binder-brand small { font-size: 12px; }

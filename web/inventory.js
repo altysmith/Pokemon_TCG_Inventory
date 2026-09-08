@@ -19,7 +19,9 @@ const binderMain = document.querySelector('#binder_main');
 const deckViewActions = document.querySelector('#deck_view_actions');
 const deckViewCopy = document.querySelector('#deck_view_copy');
 const deckViewEdit = document.querySelector('#deck_view_edit');
-const deckViewCheck = document.querySelector('#deck_view_check');
+const deckViewAllocate = document.querySelector('#deck_view_allocate');
+const deckViewDelete = document.querySelector('#deck_view_delete');
+const allocateAllDecks = document.querySelector('#allocate_all_decks');
 const drawer = document.querySelector('#card_drawer');
 const drawerClose = document.querySelector('#drawer_close');
 const drawerQuantitySummary = document.querySelector('#drawer_quantity_summary');
@@ -67,7 +69,7 @@ const deckEditorSummary = document.querySelector('#deck_editor_summary');
 const deckEditorStatus = document.querySelector('#deck_editor_status');
 const deckEditorTotal = document.querySelector('#deck_editor_total');
 const deckEditorEntries = document.querySelector('#deck_editor_entries');
-const deckEditorFullCheck = document.querySelector('#deck_editor_full_check');
+const deckEditorAllocate = document.querySelector('#deck_editor_allocate');
 const deckEditorSearchForm = document.querySelector('#deck_editor_search_form');
 const deckEditorQuery = document.querySelector('#deck_editor_query');
 const deckEditorType = document.querySelector('#deck_editor_type');
@@ -832,6 +834,61 @@ async function copySelectedDeckList() {
   }
 }
 
+async function allocateCardsToDecks(deckId = 0, sourceButton = null) {
+  const selectedDeck = savedDecks.find((item) => item.id === deckId) || null;
+  const originalLabel = sourceButton?.textContent || '';
+  if (sourceButton) {
+    sourceButton.disabled = true;
+    sourceButton.textContent = 'Allocating…';
+  }
+  try {
+    const data = await inventoryRequest(
+      selectedDeck ? '/decks/assign' : '/decks/assign-all',
+      selectedDeck ? {id: selectedDeck.id} : {},
+    );
+    await Promise.all([loadCollectionDecks(), loadInventory()]);
+    if (selectedDeck && state.deckId === selectedDeck.id) await refreshDeckView(selectedDeck.id);
+    const refreshedEditorDeck = savedDecks.find((item) => item.id === deckEditorState.deckId);
+    if (deckEditorDialog.open && refreshedEditorDeck) await hydrateDeckEditorArtwork(refreshedEditorDeck);
+    const deckCount = selectedDeck ? 1 : Number(data.deck_count || 0);
+    const assigned = Number(data.assigned_cards || 0);
+    const message = selectedDeck
+      ? `${assigned} owned ${assigned === 1 ? 'card is' : 'cards are'} allocated to ${selectedDeck.name}.`
+      : `${assigned} owned ${assigned === 1 ? 'card is' : 'cards are'} allocated across ${deckCount} saved ${deckCount === 1 ? 'deck' : 'decks'}.`;
+    statusText.textContent = `${message} Quantities and storage locations are unchanged.`;
+    statusText.hidden = false;
+    if (deckEditorDialog.open) setDeckEditorStatus(message, 'saved');
+  } catch (error) {
+    statusText.textContent = error.message;
+    statusText.hidden = false;
+    if (deckEditorDialog.open) setDeckEditorStatus(error.message, 'error');
+  } finally {
+    if (sourceButton) {
+      sourceButton.disabled = false;
+      sourceButton.textContent = originalLabel;
+    }
+  }
+}
+
+async function deleteSelectedDeck() {
+  const deck = savedDecks.find((item) => item.id === state.deckId);
+  if (!deck) return;
+  if (!window.confirm(`Delete ${deck.name} from your saved decks? Your collection quantities and storage locations will not change.`)) return;
+  deckViewDelete.disabled = true;
+  try {
+    await inventoryRequest('/decks/remove', {id: deck.id});
+    leaveDeckView();
+    await Promise.all([loadCollectionDecks(), loadInventory()]);
+    statusText.textContent = `${deck.name} was deleted from your saved decks. Your collection was not changed.`;
+    statusText.hidden = false;
+  } catch (error) {
+    statusText.textContent = error.message;
+    statusText.hidden = false;
+  } finally {
+    deckViewDelete.disabled = false;
+  }
+}
+
 function parseDeckEditorEntries(text) {
   const entries = [];
   let section = 'trainer';
@@ -1165,7 +1222,6 @@ async function openDeckEditor(id) {
   deckEditorState.deckId = id;
   deckEditorState.entries = parseDeckEditorEntries(deck.deck_list);
   deckEditorTitle.textContent = deck.name;
-  deckEditorFullCheck.href = `/deck?deck=${deck.id}`;
   deckEditorSearchResults.replaceChildren();
   deckEditorQuery.value = '';
   deckEditorType.value = '';
@@ -1417,7 +1473,6 @@ function render() {
   binderMain.classList.toggle('is-deck-view', Boolean(selectedDeck));
   deckViewActions.hidden = !selectedDeck;
   if (selectedDeck) {
-    deckViewCheck.href = `/deck?deck=${selectedDeck.id}`;
     renderDeckView(selectedDeck);
     return;
   }
@@ -2051,6 +2106,10 @@ deckViewCopy.addEventListener('click', () => void copySelectedDeckList());
 deckViewEdit.addEventListener('click', () => {
   if (state.deckId) void openDeckEditor(state.deckId);
 });
+deckViewAllocate.addEventListener('click', () => void allocateCardsToDecks(state.deckId, deckViewAllocate));
+deckViewDelete.addEventListener('click', () => void deleteSelectedDeck());
+allocateAllDecks.addEventListener('click', () => void allocateCardsToDecks(0, allocateAllDecks));
+deckEditorAllocate.addEventListener('click', () => void allocateCardsToDecks(deckEditorState.deckId, deckEditorAllocate));
 deckEditorClose.addEventListener('click', () => deckEditorDialog.close());
 deckEditorDialog.addEventListener('click', (event) => { if (event.target === deckEditorDialog) deckEditorDialog.close(); });
 deckEditorSearchForm.addEventListener('submit', (event) => void searchDeckCatalog(event));
