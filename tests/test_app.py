@@ -26,6 +26,7 @@ from app import (
     inventory_locations_snapshot,
     inventory_snapshot,
     move_inventory_location_quantities,
+    needed_cards_snapshot,
     normalize_desktop_session_token,
     open_desktop_session,
     remove_saved_deck,
@@ -291,6 +292,82 @@ class AppTests(unittest.TestCase):
             {"card-1": 1, "card-2": 1},
         )
         self.assertEqual(cleared["cleared_unique_cards"], 2)
+
+    def test_needed_cards_combines_shortages_without_sharing_owned_copies(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            catalog_path = root / "catalog.sqlite3"
+            inventory_path = root / "inventory.sqlite3"
+            decks_path = root / "decks.sqlite3"
+            catalog = CatalogDatabase(catalog_path)
+            catalog.initialize()
+            with catalog.connect() as connection:
+                connection.execute(
+                    "INSERT INTO sets(id, name, code, language) VALUES ('set-1', 'Test Set', 'TST', 'en-US')"
+                )
+                connection.execute(
+                    "INSERT INTO set_codes(set_id, code, code_type) VALUES ('set-1', 'TST', 'primary')"
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO cards(
+                        id, set_id, language, name, number, number_numeric,
+                        card_type, card_subtype, primary_image_url
+                    ) VALUES (?, 'set-1', 'en-US', ?, ?, ?, ?, ?, 'test.png')
+                    """,
+                    [
+                        ("card-1", "Testmon", "001", 1, "POKEMON", "BASIC"),
+                        ("switch-1", "Switch", "010", 10, "TRAINER", "ITEM"),
+                        ("switch-2", "Switch", "011", 11, "TRAINER", "ITEM"),
+                    ],
+                )
+            inventory = InventoryDatabase(inventory_path)
+            inventory.set_quantity("card-1", 1)
+            location = inventory.create_location("Trade Box")
+            inventory.set_location_quantity("card-1", location.id, 1)
+            with (
+                patch.object(app, "CARD_CATALOG_PATH", catalog_path),
+                patch.object(app, "INVENTORY_PATH", inventory_path),
+                patch.object(app, "DECK_LIBRARY_PATH", decks_path),
+            ):
+                save_saved_deck(
+                    {
+                        "name": "Deck A",
+                        "deck_list": "Pokémon: 2\n2 Testmon TST 001\nTrainer: 1\n1 Switch TST 010",
+                    }
+                )
+                save_saved_deck(
+                    {
+                        "name": "Deck B",
+                        "deck_list": "Pokémon: 2\n2 Testmon TST 001\nTrainer: 2\n2 Switch TST 011",
+                    }
+                )
+                before_locations = inventory_locations_snapshot()
+                refresh_saved_deck_assignments()
+                needed = needed_cards_snapshot()
+                after_locations = inventory_locations_snapshot()
+
+        self.assertEqual(needed["summary"]["saved_decks"], 2)
+        self.assertEqual(needed["summary"]["decks_with_needs"], 2)
+        self.assertEqual(needed["summary"]["unique_cards"], 2)
+        self.assertEqual(needed["summary"]["total_copies"], 6)
+        pokemon = next(item for item in needed["items"] if item["name"] == "Testmon")
+        trainer = next(item for item in needed["items"] if item["name"] == "Switch")
+        self.assertEqual(pokemon["quantity"], 3)
+        self.assertEqual(trainer["quantity"], 3)
+        self.assertEqual(trainer["set_code"], "")
+        self.assertEqual(trainer["number"], "")
+        self.assertEqual(
+            {deck["name"]: deck["quantity"] for deck in pokemon["decks"]},
+            {"Deck A": 1, "Deck B": 2},
+        )
+        self.assertEqual(
+            {deck["name"]: deck["quantity"] for deck in trainer["decks"]},
+            {"Deck A": 1, "Deck B": 2},
+        )
+        self.assertEqual(before_locations, after_locations)
+        self.assertFalse(needed["inventory_changed"])
+        self.assertFalse(needed["locations_changed"])
 
     def test_collection_import_preview_and_apply_support_update_and_replace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -975,6 +1052,8 @@ class AppTests(unittest.TestCase):
         inventory_javascript = (app.WEB_ROOT / "inventory.js").read_text(encoding="utf-8")
         card_inspector_javascript = (app.WEB_ROOT / "card-inspector.js").read_text(encoding="utf-8")
         stylesheet = (app.WEB_ROOT / "style.css").read_text(encoding="utf-8")
+        needed_html = (app.WEB_ROOT / "needed.html").read_text(encoding="utf-8")
+        needed_javascript = (app.WEB_ROOT / "needed.js").read_text(encoding="utf-8")
         self.assertIn('id="theme_toggle"', inventory_html)
         self.assertIn('src="/theme.js"', inventory_html)
         self.assertIn('id="card_drawer"', inventory_html)
@@ -982,6 +1061,7 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="inventory_search"', inventory_html)
         self.assertIn('class="binder-top-navigation"', inventory_html)
         self.assertIn('href="/deck">Check a Deck</a>', inventory_html)
+        self.assertIn('href="/needed">Need Cards</a>', inventory_html)
         self.assertLess(
             inventory_html.index('class="binder-top-navigation"'),
             inventory_html.index('id="inventory_groups"'),
@@ -1076,6 +1156,9 @@ class AppTests(unittest.TestCase):
         app_source = (app.ROOT / "app.py").read_text(encoding="utf-8")
         self.assertIn("def _running_collection_server", app_source)
         self.assertIn("server_api_version", app_source)
+        self.assertIn('route == "/decks/needed"', app_source)
+        self.assertIn('"/needed": "needed.html"', app_source)
+        self.assertIn('"/needed.js": "needed.js"', app_source)
         self.assertIn("An older Pokemon Collection server is still using port", app_source)
         self.assertIn('href="/inventory"', html)
         search_html = (app.WEB_ROOT / "search.html").read_text(encoding="utf-8")
@@ -1169,6 +1252,17 @@ class AppTests(unittest.TestCase):
         self.assertIn("ignored_basic_energy_cards", deck_javascript)
         self.assertIn("Basic Energy is ignored", deck_html)
         self.assertIn("Iteration 18 readability pass", stylesheet)
+        self.assertIn('href="/needed">Need Cards</a>', search_html)
+        self.assertIn('href="/needed">Need Cards</a>', deck_html)
+        self.assertIn('class="catalog-need-link is-active"', needed_html)
+        self.assertIn('id="needed_refresh"', needed_html)
+        self.assertIn("fetch('/decks/needed')", needed_javascript)
+        self.assertIn("neededGroup('Pokémon'", needed_javascript)
+        self.assertIn("neededGroup('Trainer'", needed_javascript)
+        self.assertIn("neededGroup('Energy'", needed_javascript)
+        self.assertIn("Find on TCGplayer", needed_javascript)
+        self.assertIn("/deck?deck=${deck.id}", needed_javascript)
+        self.assertIn(".needed-card", stylesheet)
         self.assertIn("fetch('/inventory/add'", javascript)
         self.assertIn("fetch('/inventory/undo'", javascript)
         self.assertIn("lastLookupStatus !== 'accepted'", javascript)

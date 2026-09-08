@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0f13">
+    <title>Cards Needed for Saved Decks</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/theme.js"></script>
+  </head>
+  <body class="catalog-body">
+    <main class="catalog-app">
+      <aside class="catalog-sidebar">
+        <div class="binder-brand">
+          <span class="binder-brand-mark" aria-hidden="true">◆</span>
+          <div><strong>Need Cards</strong><small>Saved deck shopping list</small></div>
+        </div>
+        <nav class="catalog-primary-nav" aria-label="Card tools">
+          <a href="/">Search</a>
+          <a href="/inventory">Collection</a>
+          <a class="catalog-need-link is-active" href="/needed">Need Cards</a>
+          <a href="/deck">Deck Check</a>
+        </nav>
+        <div class="catalog-sidebar-note">
+          <strong>SHOPPING VIEW</strong>
+          <span>Shortages are combined from every saved deck without sharing one owned copy between decks.</span>
+        </div>
+        <button id="theme_toggle" class="binder-theme-toggle" type="button">Light mode</button>
+      </aside>
+
+      <section class="catalog-main needed-main">
+        <header class="catalog-header needed-header">
+          <div>
+            <p class="binder-view-eyebrow">ALL SAVED DECKS</p>
+            <h1>Cards you need</h1>
+            <p>Open this list at a shop to see every card still missing from your saved decks.</p>
+          </div>
+          <button id="needed_refresh" class="needed-refresh" type="button">Refresh list</button>
+        </header>
+
+        <section class="needed-summary" aria-live="polite">
+          <div><strong id="needed_total">—</strong><span>copies needed</span></div>
+          <div><strong id="needed_unique">—</strong><span>unique cards</span></div>
+          <div><strong id="needed_decks">—</strong><span>decks affected</span></div>
+        </section>
+        <p id="needed_status" class="needed-status" role="status">Checking saved decks…</p>
+        <section id="needed_groups" class="needed-groups"></section>
+      </section>
+    </main>
+    <script src="/card-inspector.js"></script>
+    <script src="/needed.js"></script>
+    <script src="/desktop-session.js"></script>
+  </body>
+</html>

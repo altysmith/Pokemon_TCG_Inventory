@@ -84,7 +84,7 @@ DECK_LIBRARY_PATH = Path(
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 18
 ITERATION_NAME = "Search-first collection intake"
-SERVER_API_VERSION = 6
+SERVER_API_VERSION = 7
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
 NUMBER_RE = re.compile(r"\d+")
@@ -580,6 +580,92 @@ def saved_decks_snapshot() -> dict:
             ]
         decks.append(deck)
     return {"decks": decks, "count": len(decks), "inventory_changed": False}
+
+
+def needed_cards_snapshot() -> dict:
+    """Combine shortages from every saved deck using its exclusive assignments."""
+    database = saved_deck_database()
+    decks = database.decks()
+    assignments_by_deck: dict[int, dict[str, int]] = {}
+    for assignment in database.assignments():
+        assignments_by_deck.setdefault(assignment.deck_id, {})[assignment.card_id] = (
+            assignment.quantity
+        )
+
+    combined: dict[tuple[str, str, str, str], dict] = {}
+    decks_with_needs: set[int] = set()
+    for deck in decks:
+        checked = check_deck_list(
+            deck.deck_list,
+            catalog_path=CARD_CATALOG_PATH,
+            inventory_path=INVENTORY_PATH,
+            inventory_quantities=assignments_by_deck.get(deck.id, {}),
+        )
+        for item in checked.get("items", []):
+            missing = max(0, int(item.get("missing", 0)))
+            if missing <= 0:
+                continue
+            section = str(item.get("deck_section", "trainer"))
+            name = str(item.get("name", "")).strip()
+            set_code = str(item.get("set_code", "")).strip() if section == "pokemon" else ""
+            number = str(item.get("number", "")).strip() if section == "pokemon" else ""
+            key = (
+                section,
+                name.casefold(),
+                set_code.casefold(),
+                number.lstrip("0").casefold(),
+            )
+            card = combined.setdefault(
+                key,
+                {
+                    "name": name,
+                    "set_code": set_code,
+                    "number": number,
+                    "category": item.get("category", "Card"),
+                    "deck_section": section,
+                    "image_url": item.get("image_url", ""),
+                    "quantity": 0,
+                    "decks": [],
+                },
+            )
+            card["quantity"] += missing
+            if not card["image_url"] and item.get("image_url"):
+                card["image_url"] = item["image_url"]
+            deck_need = next(
+                (entry for entry in card["decks"] if entry["id"] == deck.id),
+                None,
+            )
+            if deck_need:
+                deck_need["quantity"] += missing
+            else:
+                card["decks"].append(
+                    {"id": deck.id, "name": deck.name, "quantity": missing}
+                )
+            decks_with_needs.add(deck.id)
+
+    section_order = {"pokemon": 0, "trainer": 1, "energy": 2}
+    items = sorted(
+        combined.values(),
+        key=lambda item: (
+            section_order.get(item["deck_section"], 3),
+            item["name"].casefold(),
+            item["set_code"].casefold(),
+            item["number"].casefold(),
+        ),
+    )
+    for item in items:
+        item["decks"].sort(key=lambda deck: deck["name"].casefold())
+    return {
+        "items": items,
+        "summary": {
+            "unique_cards": len(items),
+            "total_copies": sum(item["quantity"] for item in items),
+            "saved_decks": len(decks),
+            "decks_with_needs": len(decks_with_needs),
+        },
+        "inventory_changed": False,
+        "locations_changed": False,
+    }
 
 
 def _saved_deck_name(data: dict) -> str:
@@ -1542,6 +1628,13 @@ class ScannerHandler(BaseHTTPRequestHandler):
             except (ValueError, OSError) as exc:
                 self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+        if route == "/decks/needed":
+            try:
+                refresh_saved_deck_assignments()
+                self._json({"ok": True, **needed_cards_snapshot()})
+            except (ValueError, OSError) as exc:
+                self._json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if route == "/inventory/cards":
             sort_by = parse_qs(parsed.query).get("sort", ["name"])[0]
             try:
@@ -1604,9 +1697,11 @@ class ScannerHandler(BaseHTTPRequestHandler):
             "/": "search.html",
             "/inventory": "inventory.html",
             "/deck": "deck.html",
+            "/needed": "needed.html",
             "/search.js": "search.js",
             "/inventory.js": "inventory.js",
             "/deck.js": "deck.js",
+            "/needed.js": "needed.js",
             "/card-inspector.js": "card-inspector.js",
             "/theme.js": "theme.js",
             "/desktop-session.js": "desktop-session.js",
