@@ -811,7 +811,7 @@ async function copySelectedDeckList() {
   const originalLabel = deckViewCopy.textContent;
   deckViewCopy.disabled = true;
   try {
-    await copyTextToClipboard(deck.deck_list);
+    await copyTextToClipboard(deck.clipboard_deck_list || deck.deck_list);
     deckViewCopy.textContent = 'Copied!';
     statusText.textContent = `${deck.name} was copied in deck-list import format.`;
     statusText.hidden = false;

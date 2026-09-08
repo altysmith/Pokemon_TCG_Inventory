@@ -3,11 +3,39 @@ import unittest
 from pathlib import Path
 
 from card_api.database import CatalogDatabase
-from deck_checker import check_deck_list, parse_deck_list
+from deck_checker import check_deck_list, format_deck_list_for_clipboard, parse_deck_list
 from inventory import InventoryDatabase
 
 
 class DeckCheckerTests(unittest.TestCase):
+    def test_clipboard_format_keeps_only_pokemon_printings(self) -> None:
+        source = (
+            "Pokémon: 2\n"
+            "2 Mega Excadrill ex PBL 065\n\n"
+            "Trainer: 5\n"
+            "4 Ultra Ball MEG 131\n"
+            "1 Pokégear 3.0 BLK 084\n\n"
+            "Energy: 3\n"
+            "2 Metal Energy MEE 008\n"
+            "1 Legacy Energy TWM 167\n\n"
+            "Total Cards: 10"
+        )
+
+        self.assertEqual(
+            format_deck_list_for_clipboard(source),
+            (
+                "Pokémon: 2\n"
+                "2 Mega Excadrill ex PBL 065\n\n"
+                "Trainer: 5\n"
+                "4 Ultra Ball\n"
+                "1 Pokégear 3.0\n\n"
+                "Energy: 3\n"
+                "2 Metal Energy\n"
+                "1 Legacy Energy\n\n"
+                "Total Cards: 10"
+            ),
+        )
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)

@@ -1010,6 +1010,7 @@ class AppTests(unittest.TestCase):
         self.assertIn("async function openDeckView", inventory_javascript)
         self.assertIn("async function copySelectedDeckList", inventory_javascript)
         self.assertIn("navigator.clipboard?.writeText", inventory_javascript)
+        self.assertIn("deck.clipboard_deck_list || deck.deck_list", inventory_javascript)
         self.assertIn("function renderDeckView", inventory_javascript)
         self.assertIn("binder-grid deck-view-grid", inventory_javascript)
         self.assertLess(
@@ -1103,7 +1104,7 @@ class AppTests(unittest.TestCase):
         self.assertIn("Full deck list", deck_javascript)
         self.assertIn('id="deck_copy_full_list"', deck_javascript)
         self.assertIn("async function copyCheckedDeckList", deck_javascript)
-        self.assertIn("copyTextToClipboard(lastCheckedDeckList)", deck_javascript)
+        self.assertIn("copyTextToClipboard(lastCheckedClipboardDeckList)", deck_javascript)
         self.assertIn('src="/card-inspector.js"', deck_html)
         self.assertIn("binder-grid deck-full-grid", deck_javascript)
         self.assertIn("window.CardInspector?.open?.(item, card)", deck_javascript)

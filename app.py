@@ -38,7 +38,7 @@ from collection_transfer import (
     render_collection_csv,
     render_collection_json,
 )
-from deck_checker import check_deck_list, parse_deck_list
+from deck_checker import check_deck_list, format_deck_list_for_clipboard, parse_deck_list
 from inventory import InventoryChange, InventoryDatabase, InventoryLocation, InventoryLocationChange
 from runtime_guard import RuntimeLock
 from saved_decks import SavedDeck, SavedDeckDatabase
@@ -546,6 +546,7 @@ def saved_decks_snapshot() -> dict:
     decks = []
     for saved_deck in database.decks():
         deck = asdict(saved_deck)
+        deck["clipboard_deck_list"] = format_deck_list_for_clipboard(saved_deck.deck_list)
         assignments = assignments_by_deck.get(saved_deck.id, [])
         deck["assignments"] = assignments
         deck["assigned_cards"] = sum(item["quantity"] for item in assignments)

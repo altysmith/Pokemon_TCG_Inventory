@@ -18,6 +18,7 @@ let savedDecks = [];
 let renamingDeckId = 0;
 let currentSavedDeckId = 0;
 let lastCheckedDeckList = '';
+let lastCheckedClipboardDeckList = '';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -68,11 +69,11 @@ async function copyTextToClipboard(text) {
 }
 
 async function copyCheckedDeckList(button) {
-  if (!lastCheckedDeckList) return;
+  if (!lastCheckedClipboardDeckList) return;
   const originalLabel = button.textContent;
   button.disabled = true;
   try {
-    await copyTextToClipboard(lastCheckedDeckList);
+    await copyTextToClipboard(lastCheckedClipboardDeckList);
     button.textContent = 'Copied!';
     statusText.textContent = 'The full deck list was copied in import format.';
   } catch (error) {
@@ -278,6 +279,7 @@ async function saveCheckedDeck() {
 function startNewDeck() {
   currentSavedDeckId = 0;
   lastCheckedDeckList = '';
+  lastCheckedClipboardDeckList = '';
   deckList.value = '';
   deckName.value = '';
   deckName.disabled = false;
@@ -475,6 +477,7 @@ async function checkCurrentDeck() {
       body: JSON.stringify({deck_list: checkedDeckList}),
     });
     lastCheckedDeckList = checkedDeckList;
+    lastCheckedClipboardDeckList = data.clipboard_deck_list || checkedDeckList;
     renderSummary(data);
     renderErrors(data.errors);
     renderResults(data.items, data.ignored_basic_energy || []);
@@ -483,6 +486,7 @@ async function checkCurrentDeck() {
     statusText.textContent = `${data.summary.unique_lines} deck entries checked. ${ignored ? `${ignored} Basic Energy ${ignored === 1 ? 'card was' : 'cards were'} ignored. ` : ''}Your collection was not changed.`;
   } catch (error) {
     lastCheckedDeckList = '';
+    lastCheckedClipboardDeckList = '';
     statusText.textContent = error.message;
   } finally {
     submitButton.disabled = false;

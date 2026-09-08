@@ -57,6 +57,29 @@ class DeckEntry:
     section: str = ""
 
 
+def format_deck_list_for_clipboard(text: str) -> str:
+    """Keep Pokémon printings while omitting irrelevant Trainer/Energy printings."""
+    current_section = ""
+    output: list[str] = []
+    for raw_line in text.replace("\ufeff", "").splitlines():
+        line = raw_line.strip()
+        heading = HEADING_RE.match(line)
+        if heading:
+            heading_name = heading.group(1).casefold()
+            if heading_name in {"pokemon", "pokémon"}:
+                current_section = "pokemon"
+            elif heading_name in {"trainer", "energy"}:
+                current_section = heading_name
+            output.append(line)
+            continue
+        if current_section in {"trainer", "energy"}:
+            printed = PRINTED_LINE_RE.match(line)
+            if printed:
+                line = f"{printed.group('quantity')} {printed.group('name').strip()}"
+        output.append(line)
+    return "\n".join(output).strip()
+
+
 def _collector_key(value: str) -> str:
     cleaned = value.strip().upper()
     return str(int(cleaned)) if cleaned.isdigit() else cleaned.lstrip("0") or "0"
@@ -556,6 +579,7 @@ def check_deck_list(
         for substitute in item["possible_substitutes"]
     )
     return {
+        "clipboard_deck_list": format_deck_list_for_clipboard(text),
         "items": items,
         "ignored_basic_energy": [
             {
