@@ -839,22 +839,17 @@ body.card-inspector-open { overflow: hidden; }
 .deck-section-heading h2 { margin: 5px 0 0; font-size: 26px; letter-spacing: -.025em; }
 .deck-card-gallery { display: grid; align-items: start; justify-content: start; gap: 22px 18px; }
 .deck-missing-gallery { grid-template-columns: repeat(auto-fill, minmax(155px, 190px)); }
-.deck-owned-gallery { grid-template-columns: repeat(auto-fill, minmax(100px, 125px)); gap: 18px 14px; }
 .deck-gallery-card { min-width: 0; border: 0; background: transparent; box-shadow: none; }
 .deck-gallery-art { position: relative; display: grid; width: 100%; aspect-ratio: 5 / 7; place-items: center; overflow: hidden; border: 2px solid; border-radius: 10px; background: transparent; }
 .deck-gallery-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .deck-gallery-art.image-missing::after { content: "Artwork unavailable"; padding: 8px; color: var(--binder-faint); font-size: 10px; text-align: center; }
 .deck-missing-card .deck-gallery-art { border-color: #ef514b; box-shadow: 0 0 0 1px rgba(239,81,75,.12), 0 12px 28px rgba(166,40,36,.17); }
-.deck-owned-card .deck-gallery-art { border-color: #52c58e; box-shadow: 0 0 0 1px rgba(82,197,142,.1), 0 9px 20px rgba(34,112,77,.12); }
 .deck-gallery-badge { position: absolute; right: 7px; bottom: 7px; padding: 5px 8px; border-radius: 7px; background: rgba(6,9,12,.9); color: #fff; font-size: 12px; font-weight: 850; box-shadow: 0 4px 12px rgba(0,0,0,.28); }
 .deck-missing-card .deck-gallery-badge { background: rgba(177,43,39,.94); }
-.deck-owned-card .deck-gallery-badge { background: rgba(30,119,78,.94); }
 .deck-gallery-copy { padding: 10px 2px 0; }
 .deck-gallery-copy > small { display: block; color: var(--binder-faint); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .deck-gallery-copy h3 { margin: 3px 0 2px; overflow: hidden; font-size: 16px; line-height: 1.25; text-overflow: ellipsis; }
-.deck-owned-card .deck-gallery-copy h3 { font-size: 13px; }
 .deck-gallery-copy p { margin: 0; color: var(--binder-muted); font-size: 11px; }
-.deck-owned-card .deck-gallery-copy p { font-size: 10px; }
 .deck-gallery-substitute { display: grid; gap: 3px; margin-top: 9px; padding: 8px; border-left: 2px solid #e8b84f; background: rgba(221,171,61,.08); color: #e8b84f; font-size: 10px; line-height: 1.35; }
 .deck-gallery-substitute span { color: var(--binder-muted); }
 .deck-tcgplayer-link { display: flex; min-height: 38px; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; border: 1px solid #4f8fcf; border-radius: 8px; background: rgba(42,103,164,.13); color: #78b9f5; font-size: 12px; font-weight: 800; text-align: center; text-decoration: none; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
@@ -862,10 +857,6 @@ body.card-inspector-open { overflow: hidden; }
 .deck-tcgplayer-link:focus-visible { outline: 3px solid rgba(120,185,245,.3); outline-offset: 2px; }
 .deck-section-empty { grid-column: 1 / -1; margin: 0; padding: 18px; border: 1px dashed var(--binder-border-strong); border-radius: 10px; color: var(--binder-muted); }
 .deck-section-empty.is-ready { border-color: rgba(82,197,142,.35); color: #65d6a2; }
-.deck-full-groups { display: grid; gap: 34px; }
-.deck-full-group { margin: 0; }
-.deck-full-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 190px)); justify-content: start; }
-.deck-full-card { width: 100%; font-family: "Segoe UI", sans-serif; }
 .deck-builder-layout { display: grid; grid-template-columns: minmax(245px, 1.08fr) minmax(245px, 1fr) minmax(235px, 310px); gap: 18px; align-items: start; }
 .deck-builder-column { display: grid; gap: 18px; }
 .deck-builder-group { overflow: hidden; border: 1px solid var(--binder-border); border-radius: 11px; background: var(--binder-panel); }
@@ -910,7 +901,6 @@ body.card-inspector-open { overflow: hidden; }
   .deck-errors code { grid-column: 1 / -1; }
   .deck-summary dl { grid-template-columns: repeat(3, 1fr); }
   .deck-missing-gallery { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
-  .deck-owned-gallery { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
   .deck-builder-layout { grid-template-columns: 1fr; }
   .deck-builder-preview { position: static; width: min(320px, 100%); min-height: 0; }
   .deck-save-panel { grid-template-columns: 1fr; }

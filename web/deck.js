@@ -319,31 +319,42 @@ function deckItemState(item) {
   return `Need ${item.missing}`;
 }
 
-function deckVisualCard(item, index) {
+function deckBuilderRow(item, index) {
   const statusClass = item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed';
   return `
-    <button class="binder-card deck-full-card ${statusClass}" type="button" data-deck-index="${index}" aria-label="Inspect ${escapeHtml(item.name)}, ${item.requested} in deck, ${escapeHtml(deckItemState(item))}">
-      <span class="binder-card-art ${item.image_url ? '' : 'image-missing'}">
-        ${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)} card" loading="lazy">` : ''}
-        <b class="binder-card-quantity">× ${item.requested}</b>
-      </span>
-      <strong>${escapeHtml(item.name)}</strong>
-      <small>${escapeHtml(printingLabel(item))}</small>
-      <span class="deck-view-card-status">${escapeHtml(deckItemState(item))}</span>
+    <button class="deck-builder-row ${statusClass}" type="button" data-deck-index="${index}" aria-label="Show ${escapeHtml(item.name)}, ${item.requested} in deck, ${escapeHtml(deckItemState(item))}">
+      <strong>${item.requested}</strong>
+      <span><em>${escapeHtml(item.name)}</em>${item.set_code ? `<small>${escapeHtml(item.set_code)}</small>` : ''}</span>
+      <b>${escapeHtml(deckItemState(item))}</b>
     </button>`;
 }
 
-function deckVisualGroup(title, indexedItems) {
+function deckBuilderGroup(title, indexedItems) {
   if (!indexedItems.length) return '';
   const count = indexedItems.reduce((total, entry) => total + entry.item.requested, 0);
   return `
-    <section class="binder-group deck-full-group">
-      <div class="binder-group-heading">
-        <h2>${title}</h2>
-        <span>${indexedItems.length} ${indexedItems.length === 1 ? 'entry' : 'entries'} · ${count} cards</span>
-      </div>
-      <div class="binder-grid deck-full-grid">${indexedItems.map(entry => deckVisualCard(entry.item, entry.index)).join('')}</div>
+    <section class="deck-builder-group">
+      <header><h3>${title} <span>(${count})</span></h3></header>
+      <div>${indexedItems.map(entry => deckBuilderRow(entry.item, entry.index)).join('')}</div>
     </section>`;
+}
+
+function renderDeckBuilderPreview(item) {
+  const preview = document.querySelector('#deck_builder_preview');
+  if (!preview || !item) return;
+  preview.innerHTML = `
+    <div class="deck-builder-preview-heading">
+      <small>Selected card</small>
+      <h3>${escapeHtml(item.name)}</h3>
+    </div>
+    <div class="deck-builder-preview-art ${item.image_url ? '' : 'image-missing'}">
+      ${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)} card">` : ''}
+    </div>
+    <dl>
+      <div><dt>Deck quantity</dt><dd>${item.requested}</dd></div>
+      <div><dt>Printing</dt><dd>${escapeHtml(printingLabel(item))}</dd></div>
+      <div><dt>Inventory</dt><dd class="${item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed'}">${escapeHtml(deckItemState(item))}</dd></div>
+    </dl>`;
 }
 
 function renderResults(items, ignoredBasicEnergy = []) {
@@ -356,16 +367,6 @@ function renderResults(items, ignoredBasicEnergy = []) {
     return;
   }
   const missingItems = items.filter(item => item.missing > 0 || item.status === 'unresolved');
-  const ownedByCard = new Map();
-  items.forEach(item => item.fills.forEach(fill => {
-    const existing = ownedByCard.get(fill.card_id);
-    if (existing) {
-      existing.quantity += fill.quantity;
-      return;
-    }
-    ownedByCard.set(fill.card_id, {...fill});
-  }));
-  const ownedCards = [...ownedByCard.values()].sort((left, right) => left.name.localeCompare(right.name));
 
   const missingMarkup = missingItems.length
     ? missingItems.map(item => {
@@ -393,20 +394,6 @@ function renderResults(items, ignoredBasicEnergy = []) {
       }).join('')
     : '<p class="deck-section-empty is-ready">No cards are missing.</p>';
 
-  const ownedMarkup = ownedCards.length
-    ? ownedCards.map(card => `
-        <article class="deck-gallery-card deck-owned-card">
-          <div class="deck-gallery-art ${card.image_url ? '' : 'image-missing'}">
-            ${card.image_url ? `<img src="${escapeHtml(card.image_url)}" alt="${escapeHtml(card.name)}" loading="lazy">` : ''}
-            <span class="deck-gallery-badge">×${card.quantity}</span>
-          </div>
-          <div class="deck-gallery-copy">
-            <h3>${escapeHtml(card.name)}</h3>
-            <p>${escapeHtml(printingLabel(card))}</p>
-          </div>
-        </article>`).join('')
-    : '<p class="deck-section-empty">No owned cards were allocated to this deck.</p>';
-
   renderedDeckItems = [...items, ...ignoredBasicEnergy];
   const indexedItems = renderedDeckItems.map((item, index) => ({item, index}));
   const pokemonItems = indexedItems.filter(entry => deckGroup(entry.item) === 'pokemon');
@@ -418,28 +405,34 @@ function renderResults(items, ignoredBasicEnergy = []) {
       <div class="deck-section-heading"><span>NEEDS ATTENTION</span><h2>Missing cards</h2></div>
       <div class="deck-card-gallery deck-missing-gallery">${missingMarkup}</div>
     </section>
-    <section class="deck-result-section is-owned">
-      <div class="deck-section-heading"><span>COVERED BY INVENTORY</span><h2>Cards you already have</h2></div>
-      <div class="deck-card-gallery deck-owned-gallery">${ownedMarkup}</div>
-    </section>
     <section class="deck-result-section is-full-deck">
       <div class="deck-section-heading has-actions">
-        <div><span>COMPLETE IMPORT</span><h2>Full deck list</h2></div>
+        <div><span>LIMITLESS-STYLE VIEW</span><h2>Full deck list</h2></div>
         <button id="deck_copy_full_list" type="button">Copy deck list</button>
       </div>
-      <div class="deck-full-groups">
-        ${deckVisualGroup('Pokémon', pokemonItems)}
-        ${deckVisualGroup('Trainer', trainerItems)}
-        ${deckVisualGroup('Energy', energyItems)}
+      <div class="deck-builder-layout">
+        <div class="deck-builder-column">
+          ${deckBuilderGroup('Pokémon', pokemonItems)}
+          ${deckBuilderGroup('Energy', energyItems)}
+        </div>
+        <div class="deck-builder-column">
+          ${deckBuilderGroup('Trainer', trainerItems)}
+        </div>
+        <aside id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></aside>
       </div>
     </section>`;
 
-  document.querySelectorAll('.deck-full-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const item = renderedDeckItems[Number(card.dataset.deckIndex)];
-      if (item?.image_url) window.CardInspector?.open?.(item, card);
+  const builderRows = [...document.querySelectorAll('.deck-builder-row')];
+  builderRows.forEach(row => {
+    row.addEventListener('click', () => {
+      builderRows.forEach(candidate => candidate.classList.toggle('is-selected', candidate === row));
+      renderDeckBuilderPreview(renderedDeckItems[Number(row.dataset.deckIndex)]);
     });
   });
+  if (builderRows.length) {
+    builderRows[0].classList.add('is-selected');
+    renderDeckBuilderPreview(renderedDeckItems[Number(builderRows[0].dataset.deckIndex)]);
+  }
   document.querySelector('#deck_copy_full_list')?.addEventListener('click', (event) => void copyCheckedDeckList(event.currentTarget));
 }
 
