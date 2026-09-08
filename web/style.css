@@ -852,6 +852,9 @@ body.card-inspector-open { overflow: hidden; }
 .deck-gallery-copy p { margin: 0; color: var(--binder-muted); font-size: 11px; }
 .deck-gallery-substitute { display: grid; gap: 3px; margin-top: 9px; padding: 8px; border-left: 2px solid #e8b84f; background: rgba(221,171,61,.08); color: #e8b84f; font-size: 10px; line-height: 1.35; }
 .deck-gallery-substitute span { color: var(--binder-muted); }
+.deck-gallery-substitute button { min-height: 34px; margin-top: 4px; border: 1px solid rgba(232,184,79,.52); border-radius: 7px; background: rgba(232,184,79,.12); color: #f2c966; padding: 6px 9px; font: 800 10px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-gallery-substitute button:hover { border-color: #f2c966; background: rgba(232,184,79,.22); }
+.deck-gallery-substitute button:disabled { opacity: .62; cursor: wait; }
 .deck-tcgplayer-link { display: flex; min-height: 38px; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; border: 1px solid #4f8fcf; border-radius: 8px; background: rgba(42,103,164,.13); color: #78b9f5; font-size: 12px; font-weight: 800; text-align: center; text-decoration: none; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
 .deck-tcgplayer-link:hover { transform: translateY(-1px); border-color: #78b9f5; background: rgba(42,103,164,.24); }
 .deck-tcgplayer-link:focus-visible { outline: 3px solid rgba(120,185,245,.3); outline-offset: 2px; }

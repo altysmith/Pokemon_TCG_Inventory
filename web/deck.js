@@ -227,13 +227,13 @@ function configureSavePanel(data) {
   deckName.disabled = false;
   saveButton.disabled = false;
   saveButton.textContent = 'Save to deck library';
-  saveStatus.textContent = 'Saving this list will not change or reserve inventory cards.';
+  saveStatus.textContent = 'Saving automatically labels available owned copies without changing quantities or storage locations.';
 }
 
 async function saveCheckedDeck() {
   if (!lastCheckedDeckList || deckList.value.trim() !== lastCheckedDeckList) {
     saveStatus.textContent = 'Check this deck again before saving it.';
-    return;
+    return false;
   }
   saveButton.disabled = true;
   saveButton.textContent = 'Saving…';
@@ -251,10 +251,12 @@ async function saveCheckedDeck() {
     await loadSavedDecks(`${data.deck.name} was saved and its owned-card assignments were refreshed.`);
     configureSavePanel({errors: []});
     saveStatus.textContent = 'The saved list and its owned-card assignments now match. Inventory quantities and storage locations were unchanged.';
+    return true;
   } catch (error) {
     saveButton.disabled = false;
     saveButton.textContent = currentSavedDeckId ? 'Update saved deck' : 'Save to deck library';
     saveStatus.textContent = error.message;
+    return false;
   }
 }
 
@@ -319,6 +321,67 @@ function deckItemState(item) {
   return `Need ${item.missing}`;
 }
 
+function collectorNumberKey(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized.replace(/^0+(?=\d)/, '');
+}
+
+function replaceDeckPrinting(item, substitute) {
+  let remaining = Number(substitute.quantity || 0);
+  const sourceName = String(item.name || '').trim().toLowerCase();
+  const sourceSet = String(item.set_code || '').trim().toLowerCase();
+  const sourceNumber = collectorNumberKey(item.number);
+  const updatedLines = deckList.value.split(/\r?\n/).flatMap(line => {
+    if (remaining <= 0) return [line];
+    const match = line.match(/^(\s*)(\d+)\s+(.+?)\s+(\S+)\s+(\S+)(\s*)$/);
+    if (!match) return [line];
+    const [, indentation, quantityText, name, setCode, number, trailing] = match;
+    if (
+      name.trim().toLowerCase() !== sourceName
+      || setCode.toLowerCase() !== sourceSet
+      || collectorNumberKey(number) !== sourceNumber
+    ) return [line];
+    const quantity = Number(quantityText);
+    const take = Math.min(quantity, remaining);
+    remaining -= take;
+    const replacement = `${indentation}${take} ${substitute.name} ${substitute.set_code} ${substitute.number}${trailing}`;
+    if (take === quantity) return [replacement];
+    return [
+      replacement,
+      `${indentation}${quantity - take} ${name} ${setCode} ${number}${trailing}`,
+    ];
+  });
+  if (remaining > 0) throw new Error('The original deck entry could not be updated.');
+  return updatedLines.join('\n');
+}
+
+async function useSameNameSubstitute(itemIndex, substituteIndex, button) {
+  const item = renderedDeckItems[itemIndex];
+  const substitute = item?.possible_substitutes?.[substituteIndex];
+  if (!item || !substitute) return;
+  const savedDeckId = currentSavedDeckId;
+  button.disabled = true;
+  statusText.textContent = `Swapping ${substitute.quantity} ${item.name} to ${printingLabel(substitute)}…`;
+  try {
+    const updatedDeckList = replaceDeckPrinting(item, substitute);
+    deckList.value = updatedDeckList;
+    await checkCurrentDeck();
+    if (lastCheckedDeckList !== updatedDeckList.trim()) {
+      throw new Error('The updated deck could not be rechecked.');
+    }
+    if (savedDeckId && !savePanel.hidden) {
+      const saved = await saveCheckedDeck();
+      if (!saved) throw new Error(saveStatus.textContent || 'The updated deck could not be saved.');
+      statusText.textContent = `${substitute.quantity}× ${item.name} was changed to ${printingLabel(substitute)} and saved to the deck.`;
+    } else {
+      statusText.textContent = `${substitute.quantity}× ${item.name} was changed to ${printingLabel(substitute)}. Save the deck when you are ready.`;
+    }
+  } catch (error) {
+    button.disabled = false;
+    statusText.textContent = error.message;
+  }
+}
+
 function deckBuilderRow(item, index) {
   const statusClass = item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed';
   return `
@@ -366,11 +429,13 @@ function renderResults(items, ignoredBasicEnergy = []) {
       </div>`;
     return;
   }
+  renderedDeckItems = [...items, ...ignoredBasicEnergy];
   const missingItems = items.filter(item => item.missing > 0 || item.status === 'unresolved');
 
   const missingMarkup = missingItems.length
     ? missingItems.map(item => {
         const substitutes = item.possible_substitutes || [];
+        const itemIndex = renderedDeckItems.indexOf(item);
         return `
           <article class="deck-gallery-card deck-missing-card">
             <div class="deck-gallery-art ${item.image_url ? '' : 'image-missing'}">
@@ -384,7 +449,10 @@ function renderResults(items, ignoredBasicEnergy = []) {
               ${substitutes.length ? `
                 <div class="deck-gallery-substitute">
                   <strong>Same-name substitute available</strong>
-                  <span>${substitutes.map(card => `${card.quantity}× ${escapeHtml(printingLabel(card))}`).join(' · ')}</span>
+                  ${substitutes.map((card, substituteIndex) => `
+                    <button type="button" data-substitute-item="${itemIndex}" data-substitute-index="${substituteIndex}">
+                      Use ${card.quantity}× ${escapeHtml(printingLabel(card))}
+                    </button>`).join('')}
                 </div>` : ''}
               <a class="deck-tcgplayer-link" href="${escapeHtml(tcgplayerSearchUrl(item))}" target="_blank" rel="noopener noreferrer" aria-label="Find ${escapeHtml(item.name)} on TCGplayer">
                 Find on TCGplayer <span aria-hidden="true">↗</span>
@@ -394,7 +462,6 @@ function renderResults(items, ignoredBasicEnergy = []) {
       }).join('')
     : '<p class="deck-section-empty is-ready">No cards are missing.</p>';
 
-  renderedDeckItems = [...items, ...ignoredBasicEnergy];
   const indexedItems = renderedDeckItems.map((item, index) => ({item, index}));
   const pokemonItems = indexedItems.filter(entry => deckGroup(entry.item) === 'pokemon');
   const trainerItems = indexedItems.filter(entry => deckGroup(entry.item) === 'trainer');
@@ -433,6 +500,13 @@ function renderResults(items, ignoredBasicEnergy = []) {
     builderRows[0].classList.add('is-selected');
     renderDeckBuilderPreview(renderedDeckItems[Number(builderRows[0].dataset.deckIndex)]);
   }
+  document.querySelectorAll('[data-substitute-item]').forEach(button => {
+    button.addEventListener('click', () => void useSameNameSubstitute(
+      Number(button.dataset.substituteItem),
+      Number(button.dataset.substituteIndex),
+      button,
+    ));
+  });
   document.querySelector('#deck_copy_full_list')?.addEventListener('click', (event) => void copyCheckedDeckList(event.currentTarget));
 }
 
