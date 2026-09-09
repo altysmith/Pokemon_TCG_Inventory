@@ -19,3 +19,6 @@ user_data/*.sqlite3-wal
 user_data/backups/
 user_data/runtime/
 legacy_webcam_scanner/evidence/
+
+user_data/users/
+user_data/scheduled-backups/

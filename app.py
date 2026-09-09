@@ -46,6 +46,7 @@ from deck_checker import (
 )
 from inventory import InventoryChange, InventoryDatabase, InventoryLocation, InventoryLocationChange
 from runtime_guard import RuntimeLock
+import tenant_context as tenants
 from saved_decks import SavedDeck, SavedDeckDatabase
 
 
@@ -82,8 +83,8 @@ DECK_LIBRARY_PATH = Path(
     )
 )
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
-ITERATION = 18
-ITERATION_NAME = "Search-first collection intake"
+ITERATION = 19
+ITERATION_NAME = "Private collections for signed-in users"
 SERVER_API_VERSION = 8
 OCR_TIME_BUDGET_SECONDS = 10.0
 LETTER_RE = re.compile(r"[A-Za-z]+")
@@ -360,17 +361,18 @@ def extract_literal_groups(text: str) -> tuple[str, str]:
 
 
 def _append_csv(row: dict) -> None:
-    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    needs_header = not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0
+    csv_path = tenants.scoped_path("ocr/reads.csv", CSV_PATH)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    needs_header = not csv_path.exists() or csv_path.stat().st_size == 0
     if not needs_header:
-        with CSV_PATH.open("r", newline="", encoding="utf-8-sig") as source:
+        with csv_path.open("r", newline="", encoding="utf-8-sig") as source:
             existing_header = next(csv.reader(source), [])
         if existing_header != CSV_COLUMNS:
             raise ValueError(
-                f"{CSV_PATH.name} has an incompatible header; move or rename it "
+                f"{csv_path.name} has an incompatible header; move or rename it "
                 "before saving new scan results."
             )
-    with CSV_PATH.open("a", newline="", encoding="utf-8-sig") as output:
+    with csv_path.open("a", newline="", encoding="utf-8-sig") as output:
         writer = csv.DictWriter(output, fieldnames=CSV_COLUMNS)
         if needs_header:
             writer.writeheader()
@@ -379,25 +381,24 @@ def _append_csv(row: dict) -> None:
 
 def _append_scan_performance(row: dict) -> None:
     """Append one automatically recorded scan timing with a stable schema."""
-    SCAN_PERFORMANCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    scan_performance_path = tenants.scoped_path(
+        "ocr/performance.csv", SCAN_PERFORMANCE_PATH
+    )
+    scan_performance_path.parent.mkdir(parents=True, exist_ok=True)
     with SCAN_PERFORMANCE_LOCK:
         needs_header = (
-            not SCAN_PERFORMANCE_PATH.exists()
-            or SCAN_PERFORMANCE_PATH.stat().st_size == 0
+            not scan_performance_path.exists()
+            or scan_performance_path.stat().st_size == 0
         )
         if not needs_header:
-            with SCAN_PERFORMANCE_PATH.open(
-                "r", newline="", encoding="utf-8-sig"
-            ) as source:
+            with scan_performance_path.open("r", newline="", encoding="utf-8-sig") as source:
                 existing_header = next(csv.reader(source), [])
             if existing_header != SCAN_PERFORMANCE_COLUMNS:
                 raise ValueError(
-                    f"{SCAN_PERFORMANCE_PATH.name} has an incompatible header; "
+                    f"{scan_performance_path.name} has an incompatible header; "
                     "move or rename it before recording new scan timings."
                 )
-        with SCAN_PERFORMANCE_PATH.open(
-            "a", newline="", encoding="utf-8-sig"
-        ) as output:
+        with scan_performance_path.open("a", newline="", encoding="utf-8-sig") as output:
             writer = csv.DictWriter(output, fieldnames=SCAN_PERFORMANCE_COLUMNS)
             if needs_header:
                 writer.writeheader()
@@ -512,13 +513,13 @@ def lookup_confirmed_fields(data: dict) -> CardInfo:
 
 
 def inventory_database() -> InventoryDatabase:
-    database = InventoryDatabase(INVENTORY_PATH)
+    database = InventoryDatabase(tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH))
     database.initialize()
     return database
 
 
 def saved_deck_database() -> SavedDeckDatabase:
-    database = SavedDeckDatabase(DECK_LIBRARY_PATH)
+    database = SavedDeckDatabase(tenants.scoped_path("decks.sqlite3", DECK_LIBRARY_PATH))
     database.initialize()
     return database
 
@@ -561,7 +562,7 @@ def saved_decks_snapshot() -> dict:
             assigned_check = check_deck_list(
                 saved_deck.deck_list,
                 catalog_path=CARD_CATALOG_PATH,
-                inventory_path=INVENTORY_PATH,
+                inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
                 inventory_quantities={
                     item["card_id"]: item["quantity"] for item in assignments
                 },
@@ -598,7 +599,7 @@ def needed_cards_snapshot() -> dict:
         checked = check_deck_list(
             deck.deck_list,
             catalog_path=CARD_CATALOG_PATH,
-            inventory_path=INVENTORY_PATH,
+            inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
             inventory_quantities=assignments_by_deck.get(deck.id, {}),
         )
         for item in checked.get("items", []):
@@ -744,7 +745,7 @@ def assign_saved_deck_cards(data: dict) -> dict:
     checked = check_deck_list(
         deck.deck_list,
         catalog_path=CARD_CATALOG_PATH,
-        inventory_path=INVENTORY_PATH,
+        inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
         inventory_quantities=available,
         preferred_card_quantities={
             assignment.card_id: assignment.quantity for assignment in current_assignments
@@ -761,7 +762,7 @@ def assign_saved_deck_cards(data: dict) -> dict:
     normally_covered = check_deck_list(
         deck.deck_list,
         catalog_path=CARD_CATALOG_PATH,
-        inventory_path=INVENTORY_PATH,
+        inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
     )["summary"]["covered_cards"]
     return {
         "deck_id": deck_id,
@@ -1339,6 +1340,7 @@ def _inventory_import_fingerprint(
     encoded = json.dumps(
         {
             "mode": mode,
+            "owner": tenants.CURRENT_EMAIL.get(),
             "imported": sorted(imported.items()),
             "current": sorted(current.items()),
         },
@@ -1603,9 +1605,19 @@ class ScannerHandler(BaseHTTPRequestHandler):
             close_desktop_session(token, page)
             self.close_connection = True
 
+    @tenants.authenticated
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         parsed = urlparse(self.path)
         route = parsed.path
+        if route == "/account":
+            self._json(
+                {
+                    "ok": True,
+                    "email": tenants.CURRENT_EMAIL.get(),
+                    "multi_user": tenants.HOSTED,
+                }
+            )
+            return
         if route == "/scan":
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", "/")
@@ -1623,8 +1635,16 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     "primary_ocr_available": importlib.util.find_spec("rapidocr")
                     is not None,
                     "local_catalog_available": CARD_CATALOG_PATH.is_file(),
-                    "inventory_available": INVENTORY_PATH.is_file(),
-                    "deck_library_available": DECK_LIBRARY_PATH.is_file(),
+                    "inventory_available": (
+                        False
+                        if tenants.HOSTED
+                        else tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH).is_file()
+                    ),
+                    "deck_library_available": (
+                        False
+                        if tenants.HOSTED
+                        else tenants.scoped_path("decks.sqlite3", DECK_LIBRARY_PATH).is_file()
+                    ),
                 }
             )
             return
@@ -1749,6 +1769,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    @tenants.authenticated
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         try:
             data = self._body_json()
@@ -1857,7 +1878,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 result = check_deck_list(
                     str(data.get("deck_list", "")),
                     catalog_path=CARD_CATALOG_PATH,
-                    inventory_path=INVENTORY_PATH,
+                    inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
                 )
                 self._json({"ok": True, **result})
             elif self.path == "/decks/save":
@@ -1892,7 +1913,9 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json(
                     {
                         "ok": True,
-                        "path": str(SCAN_PERFORMANCE_PATH),
+                        "path": str(
+                            tenants.scoped_path("ocr/performance.csv", SCAN_PERFORMANCE_PATH)
+                        ),
                         "scan_id": row["scan_id"],
                     }
                 )
@@ -1901,7 +1924,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json(
                     {
                         "ok": True,
-                        "path": str(CSV_PATH),
+                        "path": str(tenants.scoped_path("ocr/reads.csv", CSV_PATH)),
                         "scan_id": row["scan_id"],
                     }
                 )
@@ -1956,8 +1979,9 @@ class ScannerHandler(BaseHTTPRequestHandler):
         )
         numbers = " / ".join(value for value in (card_number, set_total) if value)
         scan_id = uuid.uuid4().hex
-        CROP_DIR.mkdir(parents=True, exist_ok=True)
-        crop_path = CROP_DIR / f"{scan_id}.png"
+        crop_dir = tenants.scoped_path("ocr/crops", CROP_DIR)
+        crop_dir.mkdir(parents=True, exist_ok=True)
+        crop_path = crop_dir / f"{scan_id}.png"
         crop.save(crop_path, format="PNG")
         server_elapsed_seconds = perf_counter() - server_started
         variant_readings = [
@@ -2073,9 +2097,10 @@ def main() -> None:
             "Close every older Pokemon Collection command window, then start the app again."
         )
     try:
-        inventory_database()
-        saved_deck_database()
-        refresh_saved_deck_assignments()
+        if not tenants.HOSTED:
+            inventory_database()
+            saved_deck_database()
+            refresh_saved_deck_assignments()
         server = ThreadingHTTPServer(("127.0.0.1", args.port), ScannerHandler)
     except BaseException:
         runtime_lock.release()

@@ -59,6 +59,73 @@ from inventory import InventoryDatabase
 
 
 class AppTests(unittest.TestCase):
+    def test_hosted_health_stays_anonymous(self) -> None:
+        class FakeIdentity:
+            def verify(self, token: str) -> str:
+                raise AssertionError("health should not verify an identity token")
+
+        class FakeHandler:
+            command = "GET"
+            path = "/health"
+            headers = {}
+
+            def __init__(self) -> None:
+                self.response = None
+
+            def _json(self, payload: dict, status=app.HTTPStatus.OK) -> None:
+                self.response = (status, payload)
+
+        @app.tenants.authenticated
+        def endpoint(handler):
+            raise AssertionError("health should be handled before endpoint dispatch")
+
+        handler = FakeHandler()
+        with (
+            patch.object(app.tenants, "HOSTED", True),
+            patch.object(app.tenants, "IDENTITY", FakeIdentity()),
+        ):
+            endpoint(handler)
+
+        self.assertEqual(handler.response, (app.HTTPStatus.OK, {"ok": True, "multi_user": True}))
+
+    def test_hosted_inventory_database_is_scoped_by_verified_email(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            users_root = Path(temp_dir)
+            with (
+                patch.object(app.tenants, "HOSTED", True),
+                patch.object(app.tenants, "USERS_ROOT", users_root),
+            ):
+                first_context = app.tenants.CURRENT_EMAIL.set("Eric@example.com")
+                try:
+                    app.inventory_database().set_quantity("card-1", 2)
+                finally:
+                    app.tenants.CURRENT_EMAIL.reset(first_context)
+
+                second_context = app.tenants.CURRENT_EMAIL.set("other@example.com")
+                try:
+                    app.inventory_database().set_quantity("card-1", 7)
+                finally:
+                    app.tenants.CURRENT_EMAIL.reset(second_context)
+
+                first_context = app.tenants.CURRENT_EMAIL.set("eric@example.com")
+                try:
+                    first_quantity = app.inventory_database().quantity("card-1")
+                finally:
+                    app.tenants.CURRENT_EMAIL.reset(first_context)
+
+                second_context = app.tenants.CURRENT_EMAIL.set("other@example.com")
+                try:
+                    second_quantity = app.inventory_database().quantity("card-1")
+                finally:
+                    app.tenants.CURRENT_EMAIL.reset(second_context)
+
+        self.assertEqual(first_quantity, 2)
+        self.assertEqual(second_quantity, 7)
+        self.assertNotEqual(
+            app.tenants.tenant_id("Eric@example.com"),
+            app.tenants.tenant_id("other@example.com"),
+        )
+
     def test_desktop_session_reports_a_stale_browser_heartbeat(self) -> None:
         token = "d" * 32
         page = "e" * 32
@@ -983,7 +1050,7 @@ class AppTests(unittest.TestCase):
             csv_path = Path(temp_dir) / "ocr_reads_it5.csv"
             record = {
                 "scanned_at": "2026-07-26T12:00:00-04:00",
-                "iteration": 18,
+                "iteration": app.ITERATION,
                 "scan_id": "scan-1",
                 "image_name": "card.png",
                 "crop_path": str(Path(temp_dir) / "scan-1.png"),
@@ -999,7 +1066,7 @@ class AppTests(unittest.TestCase):
                     app.SCAN_RECORDS["scan-1"] = record
                 saved = save_benchmark_label(
                     {
-                        "iteration": 18,
+                        "iteration": app.ITERATION,
                         "scan_id": "scan-1",
                         "corrected_letters": "PRE",
                         "corrected_numbers": "011 / 131",

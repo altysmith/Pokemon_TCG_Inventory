@@ -129,6 +129,41 @@ class InventoryDatabaseTests(unittest.TestCase):
             [(first.id, "card-1", 2), (second.id, "card-1", 3)],
         )
 
+    def test_sole_location_receives_new_copies_and_tracks_required_reductions(self) -> None:
+        location = self.database.create_location("Main Box")
+
+        added = self.database.add_cards("card-1", 3)
+        increased = self.database.set_quantity("card-1", 5)
+        reduced = self.database.set_quantity("card-1", 2)
+
+        self.assertEqual((added.quantity, increased.quantity, reduced.quantity), (3, 5, 2))
+        self.assertEqual(
+            [(item.location_id, item.card_id, item.quantity) for item in self.database.location_allocations()],
+            [(location.id, "card-1", 2)],
+        )
+
+    def test_multiple_locations_leave_new_copies_unassigned(self) -> None:
+        self.database.create_location("Main Box")
+        self.database.create_location("Trade Binder")
+
+        self.database.set_quantity("card-1", 4)
+
+        self.assertEqual(self.database.location_allocations(), ())
+
+    def test_bulk_quantity_and_undo_use_the_sole_default_location(self) -> None:
+        location = self.database.create_location("Main Box")
+
+        changes = self.database.set_quantities({"card-1": 2, "card-2": 3})
+        scanned = self.database.add_cards("card-1", 2)
+        undone = self.database.undo_add(scanned.event_id)
+
+        self.assertEqual(len(changes), 2)
+        self.assertEqual((undone.quantity, undone.quantity_delta), (2, -2))
+        self.assertEqual(
+            [(item.location_id, item.card_id, item.quantity) for item in self.database.location_allocations()],
+            [(location.id, "card-1", 2), (location.id, "card-2", 3)],
+        )
+
     def test_locations_prevent_double_allocation_and_invalid_total_reduction(self) -> None:
         self.database.set_quantity("card-1", 5)
         first = self.database.create_location("Deck Box 1")

@@ -160,7 +160,7 @@ Selecting a saved deck under **Deck Lists** now shows the complete deck in the m
 
 ### Optional physical locations
 
-The Collection sidebar can organize owned copies into optional locations such as **Deck Box 1**, **Trade Binder**, or **Shelf**. Existing and newly added cards begin in the virtual **Unassigned** location. Open a card's detail drawer to assign any number of its owned copies to one or more locations. **All cards** always shows the complete collection; selecting a location shows only its assigned copies and uses that location's quantities on the card badges.
+The Collection sidebar can organize owned copies into optional locations such as **Deck Box 1**, **Trade Binder**, or **Shelf**. When there is exactly one active location, newly added copies default to it; with no locations or multiple locations, new copies begin in the virtual **Unassigned** location. Existing unassigned cards are not moved automatically. Open a card's detail drawer to assign any number of its owned copies to one or more locations. **All cards** always shows the complete collection; selecting a location shows only its assigned copies and uses that location's quantities on the card badges.
 
 For faster organization, use **Select cards to change location** above the binder. Check individual cards or choose **Select all shown**, then move one copy or every available copy of each selection from Unassigned or another location into a destination. The operation is validated and applied together, creates one automatic backup, and never changes total ownership.
 
@@ -207,3 +207,9 @@ The intermittent Windows Camera `MediaCaptureFailedEvent` error `0xC00D36D5` has
 ## Intended next steps
 
 A later visual inventory can join quantities from `user_data/inventory.sqlite3` to names and images in the canonical catalog without changing stored holdings. Condition, finish, language, notes, and broader inventory browsing can be added as separate inventory features. Automatic card-edge/footer detection, calibrated confidence, and continuous sorting/output integration can also continue independently. The current version deliberately captures one webcam frame per card instead of running OCR continuously on video.
+
+## Iteration 19: private hosted collections
+
+Hosted mode verifies Cloudflare Access RS256 tokens (issuer, audience, expiry and signed email) for every application request. Each normalized verified email gets its own inventory, locations, history, decks, assignments, import previews, and OCR evidence under `user_data/users/<SHA-256 email>/`. The reference catalog stays shared. An email change is a new collection unless an administrator explicitly migrates it; Gmail aliases are not merged. New users start empty and never inherit the old shared databases. Cloudflare Access remains the invitation allowlist.
+
+Set COLLECTION_HOSTED=1, COLLECTION_USERS_ROOT, COLLECTION_PUBLIC_ORIGIN, CF_ACCESS_ISSUER, and CF_ACCESS_AUDIENCE in the Pi service. Missing identity fails closed. The local Windows launcher retains its existing single-user databases and does not sync with hosting. Migrate the owner explicitly while the service is stopped; never copy production data over existing per-user databases. Back up every tenant inventory and deck database. The anonymous /health endpoint exposes only service status; /account reports the verified current email.

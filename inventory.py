@@ -291,6 +291,54 @@ class InventoryDatabase:
         ).fetchone()
         return int(row["quantity"] if row else 0)
 
+    @staticmethod
+    def _sole_active_location_id(connection: sqlite3.Connection) -> int | None:
+        rows = connection.execute(
+            "SELECT id FROM inventory_locations WHERE archived_at IS NULL ORDER BY id LIMIT 2"
+        ).fetchall()
+        return int(rows[0]["id"]) if len(rows) == 1 else None
+
+    @classmethod
+    def _apply_default_location_change(
+        cls,
+        connection: sqlite3.Connection,
+        card_id: str,
+        quantity_delta: int,
+        final_quantity: int,
+    ) -> None:
+        """Keep new copies out of Unassigned when there is one active location."""
+        location_id = cls._sole_active_location_id(connection)
+        if location_id is None:
+            return
+        row = connection.execute(
+            "SELECT quantity FROM inventory_location_holdings "
+            "WHERE location_id = ? AND card_id = ?",
+            (location_id, card_id),
+        ).fetchone()
+        allocated = int(row["quantity"]) if row else 0
+        if quantity_delta > 0:
+            target = allocated + quantity_delta
+        elif allocated > final_quantity:
+            target = final_quantity
+        else:
+            return
+        if target:
+            connection.execute(
+                """
+                INSERT INTO inventory_location_holdings(location_id, card_id, quantity)
+                VALUES (?, ?, ?)
+                ON CONFLICT(location_id, card_id) DO UPDATE SET
+                    quantity = excluded.quantity,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (location_id, card_id, target),
+            )
+        else:
+            connection.execute(
+                "DELETE FROM inventory_location_holdings WHERE location_id = ? AND card_id = ?",
+                (location_id, card_id),
+            )
+
     def locations(self) -> tuple[InventoryLocation, ...]:
         self.initialize()
         with self.connect() as connection:
@@ -656,6 +704,9 @@ class InventoryDatabase:
                 "SELECT quantity FROM inventory_holdings WHERE card_id = ?",
                 (value,),
             ).fetchone()["quantity"]
+            self._apply_default_location_change(
+                connection, value, added_quantity, int(quantity)
+            )
         return InventoryChange(
             value,
             int(quantity),
@@ -682,7 +733,9 @@ class InventoryDatabase:
             ).fetchone()
             allocated_quantity = self._allocated_quantity(connection, value)
         existing_quantity = int(existing["quantity"]) if existing else 0
-        if quantity < allocated_quantity:
+        with self.connect() as connection:
+            sole_location_id = self._sole_active_location_id(connection)
+        if quantity < allocated_quantity and sole_location_id is None:
             raise ValueError(
                 f"{allocated_quantity} copies are assigned to locations. "
                 "Reduce those assignments before lowering the total."
@@ -723,6 +776,9 @@ class InventoryDatabase:
                 """,
                 (value, quantity_delta),
             )
+            self._apply_default_location_change(
+                connection, value, quantity_delta, quantity
+            )
         return InventoryChange(value, quantity, int(cursor.lastrowid), quantity_delta)
 
     def set_quantities(self, quantities: dict[str, int]) -> tuple[InventoryChange, ...]:
@@ -753,6 +809,7 @@ class InventoryDatabase:
             return ()
 
         with self.connect() as connection:
+            sole_location_id = self._sole_active_location_id(connection)
             allocated = {
                 str(row["card_id"]): int(row["quantity"])
                 for row in connection.execute(
@@ -763,7 +820,7 @@ class InventoryDatabase:
         conflicts = [
             (card_id, allocated.get(card_id, 0))
             for card_id, quantity in changed.items()
-            if quantity < allocated.get(card_id, 0)
+            if quantity < allocated.get(card_id, 0) and sole_location_id is None
         ]
         if conflicts:
             card_id, assigned = sorted(conflicts)[0]
@@ -809,6 +866,9 @@ class InventoryDatabase:
                     """,
                     (card_id, quantity_delta),
                 )
+                self._apply_default_location_change(
+                    connection, card_id, quantity_delta, quantity
+                )
                 results.append(
                     InventoryChange(card_id, quantity, int(cursor.lastrowid), quantity_delta)
                 )
@@ -847,7 +907,8 @@ class InventoryDatabase:
                 raise ValueError("The inventory quantity cannot be reduced further.")
             quantity = int(holding["quantity"]) - added_quantity
             allocated_quantity = self._allocated_quantity(connection, card_id)
-            if quantity < allocated_quantity:
+            sole_location_id = self._sole_active_location_id(connection)
+            if quantity < allocated_quantity and sole_location_id is None:
                 raise ValueError(
                     f"{allocated_quantity} copies are assigned to locations. "
                     "Reduce those assignments before undoing this addition."
@@ -873,6 +934,9 @@ class InventoryDatabase:
                 ) VALUES (?, 'undo', ?, ?)
                 """,
                 (card_id, -added_quantity, event_id),
+            )
+            self._apply_default_location_change(
+                connection, card_id, -added_quantity, quantity
             )
         return InventoryChange(
             card_id,
