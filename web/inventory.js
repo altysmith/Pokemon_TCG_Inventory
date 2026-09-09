@@ -2184,3 +2184,11 @@ async function loadInventory({reopenDrawer = false} = {}) {
 }
 
 void Promise.all([loadInventory(), loadCollectionDecks()]);
+
+// The compact tools panel only changes presentation; existing controls keep their handlers.
+const mobileToolsToggle = document.querySelector('#mobile_tools_toggle');
+mobileToolsToggle.addEventListener('click', () => {
+  const expanded = document.body.classList.toggle('mobile-tools-open');
+  mobileToolsToggle.setAttribute('aria-expanded', String(expanded));
+  mobileToolsToggle.textContent = expanded ? 'Close tools' : 'Filters & tools';
+});

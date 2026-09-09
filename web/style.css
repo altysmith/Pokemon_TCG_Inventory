@@ -1098,3 +1098,42 @@ input { font-size: 20px; }
   .deck-editor-entry-art { width: 42px; }
   .deck-editor-entry-controls { grid-column: 1 / -1; justify-self: end; }
 }
+
+/* Collection phone layout. Desktop rules above remain unchanged. */
+.mobile-collection-header, .mobile-collection-nav, .selection-mobile-label { display: none; }
+@media (max-width: 760px) {
+  .binder-body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .mobile-collection-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; color: var(--binder-text); }
+  .mobile-collection-header button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); font: inherit; }
+  .mobile-collection-nav { position: fixed; z-index: 20; inset: auto 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--binder-border); background: var(--binder-bg); }
+  .mobile-collection-nav a { display: grid; place-items: center; min-height: 44px; border-radius: 8px; color: var(--binder-text); text-decoration: none; font-size: 12px; font-weight: 700; }
+  .mobile-collection-nav a[aria-current] { background: var(--binder-accent); color: white; }
+  .binder-sidebar, .binder-top-navigation, .binder-organize, .binder-controls { display: none; }
+  .mobile-tools-open .binder-sidebar { display: block; }
+  .mobile-tools-open .binder-top-navigation { display: flex; padding: 0; border: 0; }
+  .mobile-tools-open .binder-top-navigation a { display: none; }
+  .mobile-tools-open .binder-top-navigation button { min-height: 44px; padding: 8px; font-size: 13px; }
+  .mobile-tools-open .binder-organize { display: flex; flex-wrap: wrap; }
+  .mobile-tools-open .binder-controls { display: flex; flex-wrap: wrap; }
+  .binder-main.is-deck-view .binder-controls { display: flex; flex-wrap: wrap; }
+  .deck-view-actions { flex-wrap: wrap; }
+  .binder-toolbar { min-height: 0; padding: 8px 12px; gap: 8px; }
+  .mobile-tools-open .binder-toolbar { position: static; }
+  .binder-search input { height: 44px; font-size: 16px; }
+  .binder-content-toolbar { padding: 12px; gap: 10px; }
+  .binder-content-toolbar h1 { font-size: 22px; }
+  .binder-view-eyebrow { display: none; }
+  .collection-selection-toolbar { position: static; min-height: 0; margin: 0 12px 12px; padding: 0; border: 0; background: none; box-shadow: none; backdrop-filter: none; }
+  .selection-desktop-label { display: none; }
+  .selection-mobile-label { display: inline; }
+  .collection-selection-toolbar button { min-height: 44px; }
+  .collection-selection-toolbar:has(#collection_selection_actions:not([hidden])) { position: sticky; top: 64px; z-index: 15; padding: 8px; background: var(--binder-panel); border: 1px solid var(--binder-border); }
+  .collection-selection-toolbar > div { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .collection-selection-toolbar strong { flex-basis: 100%; }
+  .binder-groups { padding: 0 12px 24px; }
+  .binder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .binder-card { padding: 6px 6px 8px; }
+  .binder-card > strong { margin-top: 6px; font-size: 14px; }
+  .binder-card > small { font-size: 11px; }
+  .binder-main.is-deck-view .binder-toolbar { min-height: 0; }
+}

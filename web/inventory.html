@@ -9,8 +9,18 @@
     <script src="/theme.js"></script>
   </head>
   <body class="binder-body">
+    <header class="mobile-collection-header">
+      <strong>My Collection</strong>
+      <button id="mobile_tools_toggle" type="button" aria-expanded="false" aria-controls="mobile_collection_tools">Filters &amp; tools</button>
+    </header>
+    <nav class="mobile-collection-nav" aria-label="Mobile card tools">
+      <a href="/inventory" aria-current="page">Collection</a>
+      <a href="/">Search</a>
+      <a href="/needed">Need Cards</a>
+      <a href="/deck">Decks</a>
+    </nav>
     <main class="binder-app">
-      <aside class="binder-sidebar" aria-label="Collection categories">
+      <aside id="mobile_collection_tools" class="binder-sidebar" aria-label="Collection categories">
         <div class="binder-brand">
           <span class="binder-brand-mark" aria-hidden="true">◆</span>
           <div><strong>My Collection</strong><small>Physical card inventory</small></div>
@@ -119,7 +129,7 @@
         </div>
 
         <div id="collection_selection_toolbar" class="collection-selection-toolbar">
-          <button id="collection_selection_start" class="is-primary" type="button">✓ Select cards to change location</button>
+          <button id="collection_selection_start" class="is-primary" type="button"><span class="selection-desktop-label">✓ Select cards to change location</span><span class="selection-mobile-label">Select cards</span></button>
           <div id="collection_selection_actions" hidden>
             <strong id="collection_selection_count">0 cards selected</strong>
             <button id="collection_selection_all" type="button">Select all shown</button>
