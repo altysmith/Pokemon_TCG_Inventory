@@ -11,7 +11,7 @@
   <body class="binder-body">
     <header class="mobile-collection-header">
       <strong>My Collection</strong>
-      <button id="mobile_tools_toggle" type="button" aria-expanded="false" aria-controls="mobile_collection_tools">Filters &amp; tools</button>
+      <button id="mobile_tools_toggle" type="button" aria-expanded="false" aria-controls="mobile_collection_tools">Menu</button>
     </header>
     <nav class="mobile-collection-nav" aria-label="Mobile card tools">
       <a href="/inventory" aria-current="page">Collection</a>
@@ -91,6 +91,7 @@
             <button type="button" data-mode="alpha">A–Z</button>
             <button type="button" data-mode="set">Set</button>
           </div>
+          <button id="mobile_filters_open" class="mobile-only" type="button">Filters</button>
           <label class="binder-search">
             <span class="sr-only">Search cards</span>
             <input id="inventory_search" type="search" placeholder="Search cards, sets, or numbers…" autocomplete="off">
@@ -98,6 +99,7 @@
           </label>
         </header>
 
+        <div id="mobile_filter_chips" class="mobile-filter-chips"></div>
         <div class="binder-content-toolbar">
           <div>
             <p id="view_eyebrow" class="binder-view-eyebrow">My collection</p>
@@ -396,6 +398,17 @@
         <div id="deck_assignment_options" class="deck-assignment-options"></div>
         <p id="deck_assignment_status" class="deck-editor-status" role="status" aria-live="polite"></p>
       </div>
+    </dialog>
+    <dialog id="mobile_filters_dialog" class="mobile-filter-sheet" aria-labelledby="mobile_filters_title">
+      <form method="dialog" id="mobile_filters_form">
+        <header><h2 id="mobile_filters_title">Filter collection</h2><button value="cancel" aria-label="Close filters">×</button></header>
+        <label>Type or category<select id="mobile_type_filter"></select></label>
+        <label>Set<select id="mobile_set_filter"></select></label>
+        <label>Location<select id="mobile_location_filter"></select></label>
+        <label>Sort by<select id="mobile_sort_filter"></select></label>
+        <label>Card size<select id="mobile_grid_size"><option value="3">Compact · 3 columns</option><option value="2">Larger · 2 columns</option></select></label>
+        <footer><button type="button" id="mobile_filters_reset">Reset filters</button><button value="apply">Apply</button></footer>
+      </form>
     </dialog>
     <script src="/card-inspector.js"></script>
     <script src="/inventory.js"></script>

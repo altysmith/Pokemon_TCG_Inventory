@@ -1466,6 +1466,7 @@ function renderAlphabet(groups) {
 }
 
 function render() {
+  renderMobileFilterChips();
   resetCardImageLoading();
   updateActiveControls();
   updateSelectionToolbar();
@@ -2190,5 +2191,60 @@ const mobileToolsToggle = document.querySelector('#mobile_tools_toggle');
 mobileToolsToggle.addEventListener('click', () => {
   const expanded = document.body.classList.toggle('mobile-tools-open');
   mobileToolsToggle.setAttribute('aria-expanded', String(expanded));
-  mobileToolsToggle.textContent = expanded ? 'Close tools' : 'Filters & tools';
+  mobileToolsToggle.textContent = expanded ? 'Close menu' : 'Menu';
+});
+
+function renderMobileFilterChips() {
+  const mount = document.querySelector('#mobile_filter_chips');
+  mount.replaceChildren();
+  for (const [key, label] of [
+    ['category', CATEGORY_LABELS.get(state.category) || state.category],
+    ['set', state.set],
+    ['location', state.location === 'unassigned' ? 'Unassigned' : state.locations.find(x => String(x.id) === String(state.location))?.name],
+  ]) {
+    if (state[key] === 'all') continue;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `${label || state[key]} ×`;
+    button.setAttribute('aria-label', `Remove ${label || key} filter`);
+    button.addEventListener('click', () => { state[key] = 'all'; setFilter.value = state.set; render(); });
+    mount.append(button);
+  }
+}
+const mobileFilterDialog = document.querySelector('#mobile_filters_dialog');
+const mobileType = document.querySelector('#mobile_type_filter');
+const mobileSet = document.querySelector('#mobile_set_filter');
+const mobileLocation = document.querySelector('#mobile_location_filter');
+const mobileSort = document.querySelector('#mobile_sort_filter');
+const mobileGrid = document.querySelector('#mobile_grid_size');
+function mobileOptions(select, options, value) {
+  select.replaceChildren(...options.map(([key, label]) => new Option(label, key)));
+  select.value = String(value);
+}
+try { document.body.classList.toggle('mobile-large-cards', localStorage.getItem('collection-mobile-columns') === '2'); } catch {}
+document.querySelector('#mobile_filters_open').addEventListener('click', () => {
+  mobileOptions(mobileType, [['all', 'All types and categories'], ...CATEGORY_GROUPS.flatMap(g => g.items.map(([key, label]) => [key, `${g.label}: ${label}`]))], state.category);
+  mobileOptions(mobileSet, [...setFilter.options].map(o => [o.value, o.textContent]), state.set);
+  mobileOptions(mobileLocation, [['all', 'All locations'], ['unassigned', 'Unassigned'], ...state.locations.map(x => [x.id, x.name])], state.location);
+  mobileOptions(mobileSort, [...sortSelect.options].map(o => [o.value, o.textContent]), state.sort);
+  mobileGrid.value = document.body.classList.contains('mobile-large-cards') ? '2' : '3';
+  mobileFilterDialog.showModal();
+});
+document.querySelector('#mobile_filters_reset').addEventListener('click', () => {
+  mobileType.value = mobileSet.value = mobileLocation.value = 'all';
+  mobileSort.value = 'name_az';
+});
+document.querySelector('#mobile_filters_form').addEventListener('submit', event => {
+  if (event.submitter?.value !== 'apply') return;
+  leaveDeckView();
+  state.category = mobileType.value;
+  state.set = mobileSet.value;
+  state.location = mobileLocation.value;
+  state.sort = mobileSort.value;
+  state.recent = false;
+  setFilter.value = state.set;
+  sortSelect.value = state.sort;
+  document.body.classList.toggle('mobile-large-cards', mobileGrid.value === '2');
+  try { localStorage.setItem('collection-mobile-columns', mobileGrid.value); } catch {}
+  render();
 });

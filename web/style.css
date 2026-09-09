@@ -1137,3 +1137,30 @@ input { font-size: 20px; }
   .binder-card > small { font-size: 11px; }
   .binder-main.is-deck-view .binder-toolbar { min-height: 0; }
 }
+
+.mobile-only, .mobile-filter-chips { display: none; }
+.mobile-filter-sheet { width: min(480px, 100%); max-height: 85dvh; box-sizing: border-box; margin: auto auto 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--binder-border); border-radius: 18px 18px 0 0; background: var(--binder-panel); color: var(--binder-text); }
+.mobile-filter-sheet::backdrop { background: #0009; }
+.mobile-filter-sheet form { display: grid; gap: 12px; }
+.mobile-filter-sheet header, .mobile-filter-sheet footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mobile-filter-sheet h2 { margin: 0; font-size: 20px; }
+.mobile-filter-sheet label { display: grid; gap: 4px; font-size: 13px; }
+.mobile-filter-sheet select, .mobile-filter-sheet button { min-height: 44px; border: 1px solid var(--binder-border-strong); border-radius: 8px; padding: 8px 12px; background: var(--binder-bg); color: var(--binder-text); font: inherit; }
+.mobile-filter-sheet select { width: 100%; font-size: 16px; }
+.mobile-filter-sheet button[value="apply"] { background: var(--binder-accent); color: white; flex: 1; }
+@media (max-width: 760px) {
+  .binder-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .binder-toolbar > .binder-search { grid-column: 1; grid-row: 1; min-width: 0; }
+  #mobile_filters_open { display: block; grid-column: 2; grid-row: 1; min-height: 44px; border: 1px solid var(--binder-border-strong); border-radius: 8px; padding: 8px 12px; background: var(--binder-panel); color: var(--binder-text); font: inherit; }
+  .mobile-tools-open .binder-top-navigation { grid-row: 2; }
+  .mobile-tools-open .binder-organize { grid-column: 1 / -1; }
+  .mobile-tools-open .binder-controls > label { display: none; }
+  .mobile-filter-chips:not(:empty) { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
+  .mobile-filter-chips button { min-height: 36px; padding: 6px 10px; border: 1px solid var(--binder-border); border-radius: 18px; background: var(--binder-panel); color: var(--binder-text); }
+  .binder-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .mobile-large-cards .binder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .binder-card { padding: 4px 4px 6px; }
+  .binder-card > strong { font-size: 12px; }
+  .binder-card > small { font-size: 10px; }
+  .binder-card-quantity { min-width: 0; right: 3px; bottom: 3px; padding: 3px 5px; font-size: 11px; }
+}
