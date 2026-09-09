@@ -1164,3 +1164,30 @@ input { font-size: 20px; }
   .binder-card > small { font-size: 10px; }
   .binder-card-quantity { min-width: 0; right: 3px; bottom: 3px; padding: 3px 5px; font-size: 11px; }
 }
+
+.mobile-category-grid { display: none; }
+.deck-sidebar-art { width: 30px; height: 42px; object-fit: contain; border-radius: 3px; }
+.binder-deck-navigation .binder-nav-item { grid-template-columns: 30px minmax(0, 1fr) auto; }
+.deck-preview-names, .deck-featured-art, .deck-featured-picker { display: none; }
+.deck-preview-copy { display: contents; }
+@media (max-width: 760px) {
+  .mobile-category-home #inventory_groups, .mobile-category-home #alphabet_navigation { display: none; }
+  .mobile-category-home .mobile-category-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; padding: 0 12px 18px; }
+  .mobile-category-grid button { display: grid; justify-items: center; gap: 7px; min-height: 112px; padding: 12px 5px; border: 1px solid var(--binder-border); border-radius: 12px; background: var(--binder-panel); color: var(--binder-text); }
+  .mobile-category-grid button > span { font-size: 28px; }
+  .mobile-category-grid strong { font-size: 13px; }
+  .mobile-category-grid small { color: var(--binder-muted); }
+  #mobile_categories_back:not([hidden]), #collection_back_top { display: block; margin: 8px 12px 16px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--binder-border); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); }
+  #mobile_categories_back[hidden] { display: none; }
+  .deck-library-open.has-deck-preview { display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 12px; padding: 12px; align-items: start; }
+  .deck-featured-art { display: block; width: 92px; aspect-ratio: 5 / 7; object-fit: contain; border-radius: 6px; }
+  .deck-featured-art[hidden] { display: none; }
+  .deck-preview-copy { display: grid; gap: 5px; min-width: 0; }
+  .deck-preview-copy > em { display: none; }
+  .deck-preview-copy > strong { font-size: 16px; }
+  .deck-preview-names { display: grid; gap: 5px; margin-top: 5px; }
+  .deck-preview-names > span { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+  .deck-preview-names > span > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .deck-featured-picker { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: var(--binder-muted); font-size: 11px; }
+  .deck-featured-picker select { min-width: 0; flex: 1; min-height: 44px; font-size: 16px; background: var(--binder-panel); color: var(--binder-text); border: 1px solid var(--binder-border); border-radius: 6px; }
+}

@@ -134,6 +134,7 @@ function renderDeckLibrary() {
       </article>`;
   }).join('');
 
+  requestAnimationFrame(() => savedDecks.forEach(deck => enhanceDeckPreview(deck, libraryCards.querySelector(`[data-open-deck="${deck.id}"]`), false)));
   document.querySelectorAll('[data-open-deck]').forEach(button => {
     button.addEventListener('click', () => openSavedDeck(Number(button.dataset.openDeck)));
   });
@@ -585,3 +586,56 @@ async function startDeckPage() {
 }
 
 void startDeckPage();
+
+// Cache preview reads per page, and serialize them to avoid flooding the server.
+const deckPreviewCache = new Map();
+let deckPreviewQueue = Promise.resolve();
+function enhanceDeckPreview(deck, target, thumbnail) {
+  if (!target || target.dataset.previewLoaded) return;
+  target.dataset.previewLoaded = 'true';
+  const key = deck.deck_list;
+  if (!deckPreviewCache.has(key)) {
+    const pending = deckPreviewQueue.then(async () => {
+      const response = await fetch('/deck/check', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({deck_list:deck.deck_list})});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error('Preview unavailable');
+      return [...(data.items || []), ...(data.ignored_basic_energy || [])];
+    });
+    deckPreviewQueue = pending.catch(() => {});
+    deckPreviewCache.set(key, pending);
+  }
+  deckPreviewCache.get(key).then(items => {
+    if (!target.isConnected) return;
+    const pokemon = items.filter(x => x.deck_section === 'pokemon' || x.category === 'Pokémon');
+    let featured = pokemon.find(x => deck.name.toLowerCase().includes(x.name.toLowerCase()) && x.image_url) || pokemon.find(x => x.image_url) || items.find(x => x.image_url);
+    try { featured = items.find(x => x.image_url === localStorage.getItem(`deck-featured-${deck.id}`)) || featured; } catch {}
+    const image = document.createElement('img');
+    image.className = thumbnail ? 'deck-sidebar-art' : 'deck-featured-art';
+    image.alt = featured ? featured.name : '';
+    image.loading = 'lazy';
+    if (featured) image.src = featured.image_url;
+    else image.hidden = true;
+    image.addEventListener('error', () => { image.hidden = true; });
+    if (thumbnail) { target.querySelector('.binder-nav-icon').replaceWith(image); return; }
+    const copy = document.createElement('span'); copy.className = 'deck-preview-copy';
+    while (target.firstChild) copy.append(target.firstChild);
+    const list = document.createElement('span'); list.className = 'deck-preview-names';
+    const totals = new Map();
+    for (const item of items) totals.set(item.name, (totals.get(item.name) || 0) + Number(item.requested || 0));
+    for (const [name, count] of [...totals].slice(0, 4)) {
+      const row = document.createElement('span');
+      const label = document.createElement('span'); label.textContent = name;
+      const quantity = document.createElement('b'); quantity.textContent = `×${count}`;
+      row.append(label, quantity); list.append(row);
+    }
+    copy.append(list); target.append(image, copy); target.classList.add('has-deck-preview');
+    if (pokemon.some(x => x.image_url)) {
+      const label = document.createElement('label'); label.className = 'deck-featured-picker'; label.textContent = 'Featured card';
+      const select = document.createElement('select'); select.setAttribute('aria-label', `Featured card for ${deck.name}`);
+      for (const item of pokemon.filter(x => x.image_url)) select.add(new Option(item.name, item.image_url));
+      select.value = featured?.image_url || '';
+      select.addEventListener('change', () => { image.src = select.value; image.hidden = false; image.alt = select.selectedOptions[0].textContent; try { localStorage.setItem(`deck-featured-${deck.id}`, select.value); } catch {} });
+      label.append(select); target.parentElement.append(label);
+    }
+  }).catch(() => { deckPreviewCache.delete(key); });
+}

@@ -143,6 +143,8 @@
 
         <nav id="alphabet_navigation" class="binder-alphabet" aria-label="Alphabet navigation" hidden></nav>
         <p id="inventory_status" class="binder-status" role="status">Loading your local collection…</p>
+        <button id="mobile_categories_back" class="mobile-only" type="button">← Categories</button>
+        <div id="mobile_categories" class="mobile-category-grid"></div>
         <div id="inventory_groups" class="binder-groups" aria-live="polite"></div>
       </section>
 
@@ -410,6 +412,7 @@
         <footer><button type="button" id="mobile_filters_reset">Reset filters</button><button value="apply">Apply</button></footer>
       </form>
     </dialog>
+    <button id="collection_back_top" class="mobile-only" type="button">↑ Back to top</button>
     <script src="/card-inspector.js"></script>
     <script src="/inventory.js"></script>
     <script src="/desktop-session.js"></script>
