@@ -628,6 +628,7 @@ function toggleCardSelection(card) {
 }
 
 function renderCollectionDecks() {
+  sortSavedDecks();
   if (!savedDecks.length) {
     collectionDecksStatus.textContent = 'No saved decks yet.';
     collectionDecks.replaceChildren();
@@ -2339,3 +2340,22 @@ function enhanceDeckPreview(deck, target, thumbnail) {
     }
   }).catch(() => { deckPreviewCache.delete(key); });
 }
+
+function sortSavedDecks() {
+  let order = 'name_az';
+  try { order = localStorage.getItem('saved-deck-sort') || order; } catch {}
+  const select = document.querySelector('#saved_deck_sort');
+  select.value = order;
+  savedDecks.sort((a,b) => {
+    if (order === 'updated' || order === 'created') {
+      const field = order === 'updated' ? 'updated_at' : 'created_at';
+      return String(b[field] || '').localeCompare(String(a[field] || '')) || a.name.localeCompare(b.name);
+    }
+    return a.name.localeCompare(b.name, undefined, {numeric:true, sensitivity:'base'}) * (order === 'name_za' ? -1 : 1);
+  });
+}
+
+document.querySelector('#saved_deck_sort').addEventListener('change', event => {
+  try { localStorage.setItem('saved-deck-sort', event.target.value); } catch {}
+  renderCollectionDecks();
+});
