@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0f13">
     <title>Cards Needed for Saved Decks</title>
     <link rel="stylesheet" href="/style.css">
@@ -15,12 +15,6 @@
           <span class="binder-brand-mark" aria-hidden="true">◆</span>
           <div><strong>Need Cards</strong><small>Saved deck shopping list</small></div>
         </div>
-        <nav class="catalog-primary-nav" aria-label="Card tools">
-          <a href="/">Search</a>
-          <a href="/inventory">Collection</a>
-          <a class="catalog-need-link is-active" href="/needed">Need Cards</a>
-          <a href="/deck">Deck Check</a>
-        </nav>
         <div class="catalog-sidebar-note">
           <strong>SHOPPING VIEW</strong>
           <span>Shortages are combined from every saved deck without sharing one owned copy between decks.</span>
@@ -47,6 +41,7 @@
         <section id="needed_groups" class="needed-groups"></section>
       </section>
     </main>
+    <script src="/app-shell.js"></script>
     <script src="/card-inspector.js"></script>
     <script src="/needed.js"></script>
     <script src="/desktop-session.js"></script>

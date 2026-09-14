@@ -1131,8 +1131,10 @@ class AppTests(unittest.TestCase):
         self.assertIn('data-mode="typing"', inventory_html)
         self.assertIn('id="inventory_search"', inventory_html)
         self.assertIn('class="binder-top-navigation"', inventory_html)
-        self.assertIn('href="/deck">Check a Deck</a>', inventory_html)
-        self.assertIn('href="/needed">Need Cards</a>', inventory_html)
+        shell = (app.WEB_ROOT / "app-shell.js").read_text(encoding="utf-8")
+        self.assertIn('src="/app-shell.js"', inventory_html)
+        self.assertIn("['/deck', 'Decks'", shell)
+        self.assertIn("['/needed', 'Need Cards'", shell)
         self.assertLess(
             inventory_html.index('class="binder-top-navigation"'),
             inventory_html.index('id="inventory_groups"'),
@@ -1333,9 +1335,9 @@ class AppTests(unittest.TestCase):
         self.assertIn("ignored_basic_energy_cards", deck_javascript)
         self.assertIn("Basic Energy is ignored", deck_html)
         self.assertIn("Iteration 18 readability pass", stylesheet)
-        self.assertIn('href="/needed">Need Cards</a>', search_html)
-        self.assertIn('href="/needed">Need Cards</a>', deck_html)
-        self.assertIn('class="catalog-need-link is-active"', needed_html)
+        for page in (search_html, deck_html, needed_html):
+            self.assertIn('src="/app-shell.js"', page)
+        self.assertIn("link.setAttribute('aria-current', 'page')", shell)
         self.assertIn('id="needed_refresh"', needed_html)
         self.assertIn("fetch('/decks/needed')", needed_javascript)
         self.assertIn("neededGroup('Pokémon'", needed_javascript)

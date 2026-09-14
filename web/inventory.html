@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0f13">
     <title>My Pokémon Card Collection</title>
     <link rel="stylesheet" href="/style.css">
@@ -13,12 +13,6 @@
       <strong>My Collection</strong>
       <button id="mobile_tools_toggle" type="button" aria-expanded="false" aria-controls="mobile_collection_tools">Menu</button>
     </header>
-    <nav class="mobile-collection-nav" aria-label="Mobile card tools">
-      <a href="/inventory" aria-current="page">Collection</a>
-      <a href="/">Search</a>
-      <a href="/needed">Need Cards</a>
-      <a href="/deck">Decks</a>
-    </nav>
     <main class="binder-app">
       <aside id="mobile_collection_tools" class="binder-sidebar" aria-label="Collection categories">
         <div class="binder-brand">
@@ -79,10 +73,6 @@
       <section id="binder_main" class="binder-main">
         <header class="binder-toolbar">
           <nav class="binder-top-navigation" aria-label="Main card tools">
-            <a class="is-active" href="/inventory">My Collection</a>
-            <a href="/">Search Cards</a>
-            <a class="binder-need-link" href="/needed">Need Cards</a>
-            <a href="/deck">Check a Deck</a>
             <button id="allocate_all_decks" class="binder-allocate-button" type="button">Allocate to Decks</button>
             <button id="theme_toggle" type="button">Light Mode</button>
           </nav>
@@ -414,6 +404,7 @@
       </form>
     </dialog>
     <button id="collection_back_top" class="mobile-only" type="button">↑ Back to top</button>
+    <script src="/app-shell.js"></script>
     <script src="/card-inspector.js"></script>
     <script src="/inventory.js"></script>
     <script src="/desktop-session.js"></script>

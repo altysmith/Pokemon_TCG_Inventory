@@ -85,7 +85,7 @@ function renderWelcome() {
   icon.setAttribute('aria-hidden', 'true');
   welcome.append(icon);
   welcome.append(element('strong', '', 'Search when you are ready.'));
-  welcome.append(element('p', '', 'Select a format, set, card type, or enter a name or number. Press Enter or use the Search button to see matching cards.'));
+  welcome.append(element('p', '', 'Enter a card name or choose filters above.'));
   resultsContainer.replaceChildren(welcome);
 }
 

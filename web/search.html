@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0f13">
     <title>Search Pokémon Cards</title>
     <link rel="stylesheet" href="/style.css">
@@ -15,12 +15,6 @@
           <span class="binder-brand-mark" aria-hidden="true">◆</span>
           <div><strong>Card Intake</strong><small>Local English catalog</small></div>
         </div>
-        <nav class="catalog-primary-nav" aria-label="Card intake">
-          <a class="is-active" href="/">Search</a>
-          <a href="/inventory">Collection</a>
-          <a class="catalog-need-link" href="/needed">Need Cards</a>
-          <a href="/deck">Deck Check</a>
-        </nav>
         <div class="catalog-sidebar-note">
           <strong>ITERATION 18</strong>
           <span>Search-first collection intake</span>
@@ -32,10 +26,9 @@
         <header class="catalog-header">
           <div>
             <p class="binder-view-eyebrow">Local catalog · English</p>
-            <h1>What card are you looking for?</h1>
-            <p>Choose one or more search options, then press Enter or Search. No cards appear until you ask for them.</p>
+            <h1>Search</h1>
+            <p>What card are you looking for?</p>
           </div>
-          <a class="catalog-collection-link" href="/inventory">View collection</a>
         </header>
 
         <form id="catalog_search_form" class="catalog-search-controls" role="search">
@@ -89,7 +82,7 @@
           <div class="catalog-welcome">
             <span aria-hidden="true">⌕</span>
             <strong>Search when you are ready.</strong>
-            <p>Select a format, set, card type, or enter a name or number. Press Enter or use the Search button to see matching cards.</p>
+            <p>Enter a card name or choose filters above.</p>
           </div>
         </div>
         <div id="catalog_pagination_bottom" class="catalog-pagination catalog-pagination-bottom" hidden>
@@ -100,6 +93,7 @@
         </div>
       </section>
     </main>
+    <script src="/app-shell.js"></script>
     <script src="/card-inspector.js"></script>
     <script src="/search.js"></script>
     <script src="/desktop-session.js"></script>

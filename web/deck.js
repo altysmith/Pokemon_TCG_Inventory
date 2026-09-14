@@ -105,7 +105,7 @@ function renderDeckLibrary() {
     libraryCards.innerHTML = `
       <div class="deck-library-empty">
         <strong>No saved decks yet.</strong>
-        <span>Check a deck below, give it a name, and save it here.</span>
+        <span>Use “Check a new deck” above, then give it a name and save it here.</span>
       </div>`;
     return;
   }
@@ -123,15 +123,15 @@ function renderDeckLibrary() {
     return `
       <article class="deck-library-card ${deck.id === currentSavedDeckId ? 'is-current' : ''}">
         <button class="deck-library-open" type="button" data-open-deck="${deck.id}">
-          <small>SAVED DECK</small>
           <strong>${escapeHtml(deck.name)}</strong>
-          <span>${deck.card_count} cards · ${deck.unique_entries} unique entries</span>
-          <em>Open, check, and edit · Updated ${escapeHtml(savedDeckDate(deck.updated_at))}</em>
+          <span>${deck.card_count} cards · ${deck.unique_entries} unique</span>
+          <span class="deck-open-label">Check Deck <span aria-hidden="true">→</span></span>
         </button>
-        <div class="deck-library-card-actions">
+        <details class="deck-library-menu"><summary aria-label="Manage ${escapeHtml(deck.name)}">⋯</summary><div class="deck-library-card-actions">
+          <small>Updated ${escapeHtml(savedDeckDate(deck.updated_at))}</small>
           <button type="button" data-rename-deck="${deck.id}">Rename</button>
-          <button class="is-remove" type="button" data-remove-deck="${deck.id}">Remove</button>
-        </div>
+          <button class="is-remove" type="button" data-remove-deck="${deck.id}">Remove deck</button>
+        </div></details>
       </article>`;
   }).join('');
 
@@ -262,7 +262,13 @@ async function saveCheckedDeck() {
   }
 }
 
+function revealDeckEditor() {
+  document.querySelector('#deck_import_panel').hidden = false;
+  newDeckButton.setAttribute('aria-expanded', 'true');
+}
+
 function startNewDeck() {
+  revealDeckEditor();
   currentSavedDeckId = 0;
   lastCheckedDeckList = '';
   lastCheckedClipboardDeckList = '';
@@ -548,6 +554,7 @@ async function checkCurrentDeck() {
 async function openSavedDeck(id) {
   const deck = savedDecks.find(item => item.id === id);
   if (!deck) return;
+  revealDeckEditor();
   currentSavedDeckId = id;
   deckList.value = deck.deck_list;
   deckName.value = deck.name;
@@ -615,28 +622,28 @@ function enhanceDeckPreview(deck, target, thumbnail) {
     image.alt = featured ? featured.name : '';
     image.loading = 'lazy';
     if (featured) image.src = featured.image_url;
-    else image.hidden = true;
-    image.addEventListener('error', () => { image.hidden = true; });
+    else image.alt = deck.name;
+
     if (thumbnail) { target.querySelector('.binder-nav-icon').replaceWith(image); return; }
     const copy = document.createElement('span'); copy.className = 'deck-preview-copy';
     while (target.firstChild) copy.append(target.firstChild);
     const list = document.createElement('span'); list.className = 'deck-preview-names';
     const totals = new Map();
     for (const item of items) totals.set(item.name, (totals.get(item.name) || 0) + Number(item.requested || 0));
-    for (const [name, count] of [...totals].slice(0, 4)) {
+    for (const [name, count] of [...totals].slice(0, 2)) {
       const row = document.createElement('span');
       const label = document.createElement('span'); label.textContent = name;
       const quantity = document.createElement('b'); quantity.textContent = `×${count}`;
       row.append(label, quantity); list.append(row);
     }
-    copy.append(list); target.append(image, copy); target.classList.add('has-deck-preview');
+    copy.insertBefore(list, copy.querySelector('.deck-open-label')); target.append(image, copy); target.classList.add('has-deck-preview');
     if (pokemon.some(x => x.image_url)) {
       const label = document.createElement('label'); label.className = 'deck-featured-picker'; label.textContent = 'Featured card';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Featured card for ${deck.name}`);
       for (const item of pokemon.filter(x => x.image_url)) select.add(new Option(item.name, item.image_url));
       select.value = featured?.image_url || '';
       select.addEventListener('change', () => { image.src = select.value; image.hidden = false; image.alt = select.selectedOptions[0].textContent; try { localStorage.setItem(`deck-featured-${deck.id}`, select.value); } catch {} });
-      label.append(select); target.parentElement.append(label);
+      label.append(select); target.parentElement.querySelector('.deck-library-card-actions').append(label);
     }
   }).catch(() => { deckPreviewCache.delete(key); });
 }

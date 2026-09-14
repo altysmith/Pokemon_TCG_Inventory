@@ -1738,6 +1738,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             "/deck": "deck.html",
             "/needed": "needed.html",
             "/search.js": "search.js",
+            "/app-shell.js": "app-shell.js",
             "/inventory.js": "inventory.js",
             "/deck.js": "deck.js",
             "/needed.js": "needed.js",

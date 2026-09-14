@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0f13">
     <title>Deck Inventory Check</title>
     <link rel="stylesheet" href="/style.css">
@@ -15,12 +15,6 @@
           <span class="binder-brand-mark" aria-hidden="true">◆</span>
           <div><strong>Deck Check</strong><small>Local inventory comparison</small></div>
         </div>
-        <nav class="catalog-primary-nav" aria-label="Card tools">
-          <a href="/">Search</a>
-          <a href="/inventory">Collection</a>
-          <a class="catalog-need-link" href="/needed">Need Cards</a>
-          <a class="is-active" href="/deck">Deck Check</a>
-        </nav>
         <div class="catalog-sidebar-note">
           <strong>READ ONLY</strong>
           <span>Checking a deck never changes your collection.</span>
@@ -32,31 +26,17 @@
         <header class="catalog-header deck-header">
           <div>
             <p class="binder-view-eyebrow">Limitless · Pokémon TCG Live</p>
-            <h1>Can I build this deck?</h1>
+            <h1>Decks</h1>
             <p>Paste a copied deck list and compare every card with your physical collection.</p>
           </div>
-          <a class="catalog-collection-link" href="/inventory">View collection</a>
         </header>
 
-        <section class="deck-library-panel" aria-labelledby="deck_library_heading">
-          <header>
-            <div>
-              <span>YOUR DECKS</span>
-              <h2 id="deck_library_heading">Saved deck library</h2>
-              <p>Open any saved list to check it against your collection as it exists today.</p>
-            </div>
-            <strong id="deck_library_count">0 decks</strong>
-          </header>
-          <p id="deck_library_status" class="deck-library-status" role="status">Loading saved decks…</p>
-<label class="saved-deck-sort">Sort decks<select id="saved_deck_sort"><option value="name_az">Name A–Z</option><option value="name_za">Name Z–A</option><option value="updated">Recently updated</option><option value="created">Newest added</option></select></label>
-          <div id="deck_library_cards" class="deck-library-cards"></div>
-        </section>
-
-        <section class="deck-import-panel">
+        <div class="deck-start-action"><button id="deck_new" class="catalog-search-button" type="button" aria-controls="deck_import_panel" aria-expanded="false">+ Check a new deck</button></div>
+        <section id="deck_import_panel" class="deck-import-panel" hidden>
           <form id="deck_form">
             <div class="deck-editor-heading">
               <label for="deck_list">Deck list</label>
-              <button id="deck_new" type="button">Start a new deck</button>
+
             </div>
             <textarea id="deck_list" spellcheck="false" placeholder="Pokémon: 18&#10;4 Raging Bolt ex TEF 123&#10;&#10;Trainer: 34&#10;4 Professor's Research SVI 189&#10;&#10;Energy: 8&#10;6 Basic Lightning Energy SVE 4"></textarea>
             <div class="deck-import-actions">
@@ -64,6 +44,18 @@
               <button id="deck_submit" class="catalog-search-button" type="submit">Check my inventory</button>
             </div>
           </form>
+        </section>
+
+        <section class="deck-library-panel" aria-labelledby="deck_library_heading">
+          <header>
+            <div>
+              <h2 id="deck_library_heading">Saved Decks</h2>
+            </div>
+            <strong id="deck_library_count">0 decks</strong>
+          </header>
+          <p id="deck_library_status" class="deck-library-status" role="status">Loading saved decks…</p>
+<label class="saved-deck-sort">Sort decks<select id="saved_deck_sort"><option value="name_az">Name A–Z</option><option value="name_za">Name Z–A</option><option value="updated">Recently updated</option><option value="created">Newest added</option></select></label>
+          <div id="deck_library_cards" class="deck-library-cards"></div>
         </section>
 
         <section id="deck_summary" class="deck-summary" hidden aria-live="polite"></section>
@@ -80,6 +72,7 @@
         <section id="deck_results" class="deck-results" aria-live="polite"></section>
       </section>
     </main>
+    <script src="/app-shell.js"></script>
     <script src="/card-inspector.js"></script>
     <script src="/deck.js"></script>
     <script src="/desktop-session.js"></script>
