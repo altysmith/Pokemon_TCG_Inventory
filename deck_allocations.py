@@ -72,6 +72,7 @@ def check_allocations(text, deck_id, catalog_path, inventory_path, connection, o
                     if quantity:
                         choices.append({'deck_id': row['deck_id'], 'deck_name': decks[row['deck_id']]['name'],
                                         'card_id': card_id, 'quantity': quantity,
+                                        'allocated_quantity': row['quantity'],
                                         'printing': f"{card['set_code']} · {card['number']}"})
         choices.sort(key=lambda source: (source['deck_id'] != 0, source['deck_name'].casefold(), source['card_id']))
         allocation['sources'] = choices

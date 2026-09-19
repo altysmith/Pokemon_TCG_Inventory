@@ -714,25 +714,35 @@ function deckViewGroup(item) {
   return 'trainer';
 }
 
+function allocationBadge(item) {
+  const assigned = Number(item.allocation?.assigned || 0);
+  const needed = Math.max(0, item.requested - assigned);
+  const prefix = `${assigned}/${item.requested}`;
+  const missing = Number(item.missing || 0);
+  const other = Number(item.allocation?.reserved || 0);
+  const free = Math.max(0, Number(item.allocation?.available || 0) - assigned);
+  if (!needed) return {text: `${prefix} allocated`, tone: 'ready'};
+  if (missing >= needed) return {text: `${prefix} · ${needed} missing`, tone: 'missing'};
+  if (free >= needed) return {text: `${prefix} · ${needed} available`, tone: 'available'};
+  if (other >= needed) return {text: `${prefix} · ${needed} in other decks`, tone: 'reserved'};
+  return {text: `${prefix} · Review sources`, tone: 'mixed'};
+}
+
 function deckViewStatus(item) {
   if (item.status === 'ignored') return 'Basic Energy · not checked';
   if (item.status === 'unresolved') return 'Needs review';
-  if (item.allocation) {
-    const assigned = Number(item.allocation.assigned || 0);
-    const needed = Math.max(0, item.requested - assigned);
-    return needed ? `${assigned}/${item.requested} allocated · allocate ${needed}` : `${assigned}/${item.requested} allocated`;
-  }
-  if (Number(item.missing || 0) > 0) return `${item.covered || 0} owned · need ${item.missing}`;
-  return `${item.covered || 0} owned`;
+  if (item.allocation) return allocationBadge(item).text;
+  return item.missing ? `${item.missing} missing from collection` : `${item.covered || 0} owned`;
 }
 
 function deckViewCard(item, prioritizeImage = false) {
-  const tile = document.createElement('button');
+  const tile = document.createElement('article');
   const ready = item.allocation ? item.allocation.assigned >= item.requested : item.status === 'ready';
   tile.className = `binder-card deck-view-card${item.status === 'ignored' ? ' is-ignored' : ready ? ' is-ready' : ' is-needed'}`;
-  tile.type = 'button';
-  tile.setAttribute('aria-label', `Inspect ${item.name}, ${item.requested} in deck, ${deckViewStatus(item)}`);
-  const art = document.createElement('span');
+  if (item.allocation) tile.dataset.allocationTone = allocationBadge(item).tone;
+  const art = document.createElement('button');
+  art.type = 'button';
+  art.setAttribute('aria-label', `Enlarge ${item.name}`);
   art.className = 'binder-card-art';
   art.title = item.image_url ? 'Click artwork to enlarge' : 'Artwork unavailable';
   const image = document.createElement('img');
@@ -747,11 +757,19 @@ function deckViewCard(item, prioritizeImage = false) {
   name.textContent = item.name;
   const identity = document.createElement('small');
   identity.textContent = item.set_code && item.number ? `${item.set_code}  •  ${item.number}` : item.category;
-  const status = document.createElement('span');
+  const status = document.createElement(item.allocation ? 'button' : 'span');
   status.className = 'deck-view-card-status';
+  if (item.allocation) {
+    status.type = 'button';
+    status.dataset.tone = allocationBadge(item).tone;
+    status.dataset.allocationIndex = item.allocation.index;
+    status.setAttribute('aria-label', `${item.name}: ${deckViewStatus(item)}. Review allocations`);
+    status.addEventListener('click', () => openCollectionAllocation(item, status));
+  }
   status.textContent = deckViewStatus(item);
   tile.append(art, name, identity, status);
-  if (item.image_url) tile.addEventListener('click', () => window.CardInspector?.open?.(item, tile));
+  if (item.image_url) art.addEventListener('click', () => window.CardInspector?.open?.(item, art));
+  else art.disabled = true;
   return tile;
 }
 
@@ -786,10 +804,10 @@ function renderDeckView(deck) {
   ];
   const fragment = document.createDocumentFragment();
   const shortages = items.filter(item => item.status !== 'ignored' && item.allocation && item.allocation.assigned < item.requested);
-  const allocations = document.createElement('section');
+  const allocations = document.createElement('details');
   allocations.className = 'collection-allocation-summary';
-  const allocationTitle = document.createElement('h2');
-  allocationTitle.textContent = shortages.length ? 'Cards needing allocation' : 'All checked cards are allocated';
+  const allocationTitle = document.createElement('summary');
+  allocationTitle.textContent = shortages.length ? `${shortages.length} card types need allocation · Review` : 'All checked cards are allocated';
   allocations.append(allocationTitle);
   for (const item of shortages) {
     const link = document.createElement('a');
@@ -2440,3 +2458,65 @@ document.querySelector('#saved_deck_sort').addEventListener('change', event => {
   try { localStorage.setItem('collection-deck-sort', event.target.value); } catch {}
   renderCollectionDecks();
 });
+
+const collectionAllocationDialog = document.createElement('dialog');
+collectionAllocationDialog.className = 'collection-allocation-dialog';
+collectionAllocationDialog.setAttribute('aria-labelledby', 'collection_allocation_title');
+document.body.append(collectionAllocationDialog);
+let collectionAllocationReturnIndex = null;
+collectionAllocationDialog.addEventListener('close', () => {
+  document.querySelector(`[data-allocation-index="${collectionAllocationReturnIndex}"]`)?.focus({preventScroll: true});
+});
+
+function openCollectionAllocation(item) {
+  const deckId = state.deckId;
+  const deck = savedDecks.find(candidate => candidate.id === deckId);
+  if (!deck || !item.allocation) return;
+  collectionAllocationReturnIndex = item.allocation.index;
+  const make = (tag, text) => { const element = document.createElement(tag); element.textContent = text; return element; };
+  const header = document.createElement('header');
+  const title = make('h2', item.name); title.id = 'collection_allocation_title';
+  const close = make('button', '×'); close.type = 'button'; close.setAttribute('aria-label', 'Close allocations');
+  close.addEventListener('click', () => collectionAllocationDialog.close()); header.append(title, close);
+  const summary = make('p', `${item.allocation.assigned}/${item.requested} allocated to ${deck.name} · ${Math.max(0, item.requested - item.allocation.assigned)} more needed`);
+  const content = document.createElement('div'); content.className = 'collection-allocation-sources';
+  if (item.missing) content.append(make('p', `${item.missing} missing from collection. Moving cards between decks cannot cover this shortage.`));
+  const message = make('p', 'Choose a source below. Other decks stay unchanged.'); message.setAttribute('role', 'status');
+  for (const source of item.allocation.sources) {
+    const row = document.createElement('section'); row.className = 'deck-allocation-source';
+    row.append(make('strong', source.deck_name));
+    row.append(make('span', source.deck_id ? `${source.allocated_quantity ?? source.quantity} allocated here · up to ${source.quantity} can move` : `${source.quantity} available to allocate`));
+    if (source.printing) row.append(make('span', source.printing));
+    const label = make('label', 'Copies');
+    const input = document.createElement('input'); input.type = 'number'; input.min = '1'; input.max = String(source.quantity); input.value = String(source.quantity);
+    input.setAttribute('aria-label', `Copies from ${source.deck_name}`); label.append(input);
+    const move = make('button', source.deck_id ? `Take from ${source.deck_name}` : 'Allocate available copies'); move.type = 'button';
+    move.addEventListener('click', async () => {
+      const quantity = Number(input.value);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > source.quantity) { message.textContent = `Choose 1–${source.quantity} copies.`; return; }
+      if (source.deck_id && !window.confirm(`Move ${quantity}× ${item.name} from ${source.deck_name} to ${deck.name}? ${source.deck_name} will lose these allocated copies.`)) return;
+      content.querySelectorAll('button').forEach(button => { button.disabled = true; });
+      try {
+        await inventoryRequest('/decks/transfer-allocation', {id: deckId, source_deck_id: source.deck_id, card_id: source.card_id,
+          item_index: item.allocation.index, quantity, deck_list: deck.deck_list});
+        await loadCollectionDecks();
+        await refreshDeckView(deckId);
+        if (state.deckId === deckId && collectionAllocationDialog.open) {
+          const updated = state.deckData?.items?.find(candidate => candidate.allocation?.index === item.allocation.index);
+          if (updated) {
+            openCollectionAllocation(updated);
+            collectionAllocationDialog.querySelector('[role="status"]').textContent = `${quantity}× ${item.name} allocated to ${deck.name}.`;
+          }
+        }
+      } catch (error) {
+        message.textContent = error.message;
+        content.querySelectorAll('button').forEach(button => { button.disabled = false; });
+      }
+    });
+    row.append(label, move); content.append(row);
+  }
+  if (!item.allocation.sources.length && !item.missing) content.append(make('p', 'All required copies are allocated to this deck.'));
+  collectionAllocationDialog.replaceChildren(header, summary, content, message);
+  if (!collectionAllocationDialog.open) collectionAllocationDialog.showModal();
+  close.focus();
+}
