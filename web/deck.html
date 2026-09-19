@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/style.css">
     <script src="/theme.js"></script>
   </head>
-  <body class="catalog-body">
+  <body class="catalog-body deck-page">
     <main class="catalog-app">
       <aside class="catalog-sidebar">
         <div class="binder-brand">
@@ -32,6 +32,11 @@
         </header>
 
         <div class="deck-start-action"><button id="deck_new" class="catalog-search-button" type="button" aria-controls="deck_import_panel" aria-expanded="false">+ Check a new deck</button></div>
+        <div class="deck-desktop-toolbar">
+          <button id="deck_back" type="button">← Back to decks</button>
+          <h2 id="deck_workspace_title">Check a new deck</h2>
+          <button id="deck_edit_current" type="button" hidden>Edit deck list</button>
+        </div>
         <section id="deck_import_panel" class="deck-import-panel" hidden>
           <form id="deck_form">
             <div class="deck-editor-heading">
@@ -51,11 +56,16 @@
             <div>
               <h2 id="deck_library_heading">Saved Decks</h2>
             </div>
-            <strong id="deck_library_count">0 decks</strong>
+            <div class="deck-library-controls">
+              <strong id="deck_library_count">0 decks</strong>
+              <button id="deck_library_toggle" type="button" aria-expanded="true" aria-controls="deck_library_content">Hide decks</button>
+            </div>
           </header>
+          <div id="deck_library_content">
           <p id="deck_library_status" class="deck-library-status" role="status">Loading saved decks…</p>
 <label class="saved-deck-sort">Sort decks<select id="saved_deck_sort"><option value="name_az">Name A–Z</option><option value="name_za">Name Z–A</option><option value="updated">Recently updated</option><option value="created">Newest added</option></select></label>
           <div id="deck_library_cards" class="deck-library-cards"></div>
+          </div>
         </section>
 
         <section id="deck_summary" class="deck-summary" hidden aria-live="polite"></section>

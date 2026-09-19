@@ -8,17 +8,51 @@ const resultsContainer = document.querySelector('#deck_results');
 const libraryCards = document.querySelector('#deck_library_cards');
 const libraryCount = document.querySelector('#deck_library_count');
 const libraryStatus = document.querySelector('#deck_library_status');
+const libraryToggle = document.querySelector('#deck_library_toggle');
+const libraryContent = document.querySelector('#deck_library_content');
 const savePanel = document.querySelector('#deck_save_panel');
 const deckName = document.querySelector('#deck_name');
 const saveButton = document.querySelector('#deck_save');
 const saveStatus = document.querySelector('#deck_save_status');
 const newDeckButton = document.querySelector('#deck_new');
+const desktopDeckView = window.matchMedia('(min-width: 761px)');
+const workspaceTitle = document.querySelector('#deck_workspace_title');
+const editCurrentButton = document.querySelector('#deck_edit_current');
+
+function showDeckWorkspace(title, editing = false) {
+  document.body.classList.add('deck-workspace-active');
+  workspaceTitle.textContent = title;
+  editCurrentButton.hidden = editing;
+}
+
+document.querySelector('#deck_back').addEventListener('click', () => {
+  document.body.classList.remove('deck-workspace-active');
+  setLibraryExpanded(true);
+  requestAnimationFrame(() => (libraryCards.querySelector(`[data-open-deck="${currentSavedDeckId}"]`) || newDeckButton).focus());
+});
+editCurrentButton.addEventListener('click', () => {
+  revealDeckEditor();
+  editCurrentButton.hidden = true;
+  deckList.focus();
+});
+desktopDeckView.addEventListener('change', event => {
+  if (!event.matches && document.body.classList.contains('deck-workspace-active')) revealDeckEditor();
+});
 
 let savedDecks = [];
 let renamingDeckId = 0;
 let currentSavedDeckId = 0;
 let lastCheckedDeckList = '';
 let lastCheckedClipboardDeckList = '';
+
+function setLibraryExpanded(expanded) {
+  if (!expanded && libraryContent.contains(document.activeElement)) libraryToggle.focus();
+  libraryContent.hidden = !expanded;
+  libraryToggle.setAttribute('aria-expanded', String(expanded));
+  libraryToggle.textContent = expanded ? 'Hide decks' : 'Show decks';
+}
+
+libraryToggle.addEventListener('click', () => setLibraryExpanded(libraryContent.hidden));
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -129,6 +163,7 @@ function renderDeckLibrary() {
         </button>
         <details class="deck-library-menu"><summary aria-label="Manage ${escapeHtml(deck.name)}">⋯</summary><div class="deck-library-card-actions">
           <small>Updated ${escapeHtml(savedDeckDate(deck.updated_at))}</small>
+          <button type="button" data-edit-deck="${deck.id}">Edit deck list</button>
           <button type="button" data-rename-deck="${deck.id}">Rename</button>
           <button class="is-remove" type="button" data-remove-deck="${deck.id}">Remove deck</button>
         </div></details>
@@ -138,6 +173,9 @@ function renderDeckLibrary() {
   requestAnimationFrame(() => savedDecks.forEach(deck => enhanceDeckPreview(deck, libraryCards.querySelector(`[data-open-deck="${deck.id}"]`), false)));
   document.querySelectorAll('[data-open-deck]').forEach(button => {
     button.addEventListener('click', () => openSavedDeck(Number(button.dataset.openDeck)));
+  });
+  document.querySelectorAll('[data-edit-deck]').forEach(button => {
+    button.addEventListener('click', () => editSavedDeck(Number(button.dataset.editDeck)));
   });
   document.querySelectorAll('[data-rename-deck]').forEach(button => {
     button.addEventListener('click', () => {
@@ -267,8 +305,32 @@ function revealDeckEditor() {
   newDeckButton.setAttribute('aria-expanded', 'true');
 }
 
-function startNewDeck() {
+function editSavedDeck(id) {
+  const deck = savedDecks.find(item => item.id === id);
+  if (!deck) return;
+  showDeckWorkspace(`Edit ${deck.name}`, true);
   revealDeckEditor();
+  setLibraryExpanded(false);
+  currentSavedDeckId = id;
+  lastCheckedDeckList = '';
+  lastCheckedClipboardDeckList = '';
+  deckList.value = deck.deck_list;
+  deckName.value = deck.name;
+  deckName.disabled = true;
+  savePanel.hidden = true;
+  summary.hidden = true;
+  errorsContainer.hidden = true;
+  resultsContainer.replaceChildren();
+  statusText.textContent = `Editing ${deck.name}. Check your changes, then choose “Update saved deck”.`;
+  renderDeckLibrary();
+  deckList.focus({preventScroll: true});
+  form.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function startNewDeck() {
+  showDeckWorkspace('Check a new deck', true);
+  revealDeckEditor();
+  setLibraryExpanded(false);
   currentSavedDeckId = 0;
   lastCheckedDeckList = '';
   lastCheckedClipboardDeckList = '';
@@ -519,6 +581,7 @@ function renderResults(items, ignoredBasicEnergy = []) {
 }
 
 async function checkCurrentDeck() {
+  setLibraryExpanded(false);
   submitButton.disabled = true;
   submitButton.textContent = 'Checking…';
   statusText.textContent = 'Comparing the deck with your local inventory…';
@@ -554,12 +617,20 @@ async function checkCurrentDeck() {
 async function openSavedDeck(id) {
   const deck = savedDecks.find(item => item.id === id);
   if (!deck) return;
+  showDeckWorkspace(deck.name);
   revealDeckEditor();
   currentSavedDeckId = id;
   deckList.value = deck.deck_list;
   deckName.value = deck.name;
   renderDeckLibrary();
-  form.scrollIntoView({behavior: 'smooth', block: 'start'});
+  if (desktopDeckView.matches) {
+    document.querySelector('#deck_import_panel').hidden = true;
+    newDeckButton.setAttribute('aria-expanded', 'false');
+    document.querySelector('#deck_back').focus();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } else {
+    form.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
   await checkCurrentDeck();
 }
 
