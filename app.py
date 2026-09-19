@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+from deck_allocations import check_allocations, transfer_allocation
 import hashlib
 import io
 import importlib.util
@@ -1876,10 +1877,18 @@ class ScannerHandler(BaseHTTPRequestHandler):
             elif self.path == "/inventory/import/apply":
                 self._json({"ok": True, **apply_inventory_import(data)})
             elif self.path == "/deck/check":
-                result = check_deck_list(
-                    str(data.get("deck_list", "")),
-                    catalog_path=CARD_CATALOG_PATH,
-                    inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
+                database = saved_deck_database()
+                with database.connect() as connection:
+                    result = check_allocations(
+                        str(data.get("deck_list", "")), int(data.get("deck_id", 0)),
+                        CARD_CATALOG_PATH, tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
+                        connection, {item.card_id: item.quantity for item in inventory_database().holdings()},
+                    )
+                self._json({"ok": True, **result})
+            elif self.path == "/decks/transfer-allocation":
+                result = transfer_allocation(
+                    saved_deck_database(), inventory_database(), CARD_CATALOG_PATH,
+                    tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH), data,
                 )
                 self._json({"ok": True, **result})
             elif self.path == "/decks/save":

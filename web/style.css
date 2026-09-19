@@ -1404,3 +1404,16 @@ body.has-app-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
   .deck-page .deck-builder-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .deck-page .deck-builder-preview { position: static; grid-column: 1 / -1; width: 280px; }
 }
+
+.deck-builder-row.is-reserved b { color: #f2c966; white-space: normal; text-align: right; }
+.deck-allocation-controls { margin-top: 18px; border-top: 1px solid var(--binder-border); padding-top: 12px; }
+.deck-allocation-controls h4 { margin: 0 0 8px; font-size: 15px; }
+.deck-allocation-controls p { color: var(--binder-muted); font-size: 12px; line-height: 1.5; }
+.deck-allocation-source { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--binder-border-strong); border-radius: 8px; }
+.deck-allocation-source strong { overflow-wrap: anywhere; font-size: 13px; }
+.deck-allocation-source span, .deck-allocation-source label { font-size: 12px; color: var(--binder-muted); }
+.deck-allocation-source label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.deck-allocation-source input { width: 70px; min-height: 40px; border: 1px solid var(--binder-border); border-radius: 6px; padding: 6px; background: var(--binder-bg); color: var(--binder-text); font: inherit; }
+.deck-allocation-source button { min-height: 44px; border: 1px solid var(--binder-accent); border-radius: 6px; background: var(--binder-accent); color: white; font-weight: 700; cursor: pointer; }
+.deck-allocation-source button:disabled { opacity: .6; cursor: wait; }
+.deck-allocation-message { color: #f2c966; }

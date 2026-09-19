@@ -290,6 +290,7 @@ async function saveCheckedDeck() {
     currentSavedDeckId = data.deck.id;
     await loadSavedDecks(`${data.deck.name} was saved and its owned-card assignments were refreshed.`);
     configureSavePanel({errors: []});
+    await checkCurrentDeck();
     saveStatus.textContent = 'The saved list and its owned-card assignments now match. Inventory quantities and storage locations were unchanged.';
     return true;
   } catch (error) {
@@ -348,13 +349,15 @@ function startNewDeck() {
 
 function renderSummary(data) {
   const result = data.summary;
-  const ready = result.missing_cards === 0 && data.errors.length === 0;
+  const reserved = result.reserved_cards || 0;
+  const ready = result.missing_cards === 0 && !reserved && data.errors.length === 0;
   summary.hidden = false;
   summary.className = `deck-summary ${ready ? 'is-complete' : 'has-missing'}`;
   summary.innerHTML = `
     <div class="deck-summary-verdict">
-      <span>${ready ? 'DECK READY' : 'CARDS NEEDED'}</span>
-      <strong>${ready ? 'You can build this deck.' : `${result.missing_cards} ${result.missing_cards === 1 ? 'card' : 'cards'} still needed.`}</strong>
+      <span>${ready ? 'DECK READY' : reserved && !result.missing_cards ? 'ALLOCATION NEEDED' : 'CARDS NEEDED'}</span>
+      <strong>${ready ? 'You can build this deck.' : result.missing_cards ? `${result.missing_cards} cards still needed.` : `Buildable by moving ${reserved} ${reserved === 1 ? 'card' : 'cards'}.`}</strong>
+      ${reserved ? `<p>${reserved} owned ${reserved === 1 ? 'copy is' : 'copies are'} allocated to other decks.</p>` : ''}
     </div>
     <dl>
       <div><dt>Deck</dt><dd>${result.deck_cards}</dd></div>
@@ -385,6 +388,7 @@ function deckGroup(item) {
 }
 
 function deckItemState(item) {
+  if (item.allocation?.reserved) return item.missing ? `Need ${item.missing} · ${item.allocation.reserved} elsewhere` : `${item.allocation.reserved} in another deck`;
   if (item.status === 'ready') return 'Ready';
   if (item.status === 'ignored') return 'Ignored';
   if (item.status === 'unresolved') return 'Review';
@@ -453,7 +457,7 @@ async function useSameNameSubstitute(itemIndex, substituteIndex, button) {
 }
 
 function deckBuilderRow(item, index) {
-  const statusClass = item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed';
+  const statusClass = item.allocation?.reserved ? 'is-reserved' : item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed';
   return `
     <button class="deck-builder-row ${statusClass}" type="button" data-deck-index="${index}" aria-label="Show ${escapeHtml(item.name)}, ${item.requested} in deck, ${escapeHtml(deckItemState(item))}">
       <strong>${item.requested}</strong>
@@ -486,8 +490,59 @@ function renderDeckBuilderPreview(item) {
     <dl>
       <div><dt>Deck quantity</dt><dd>${item.requested}</dd></div>
       <div><dt>Printing</dt><dd>${escapeHtml(printingLabel(item))}</dd></div>
-      <div><dt>Inventory</dt><dd class="${item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed'}">${escapeHtml(deckItemState(item))}</dd></div>
-    </dl>`;
+      <div><dt>Inventory</dt><dd class="${item.allocation?.reserved ? 'is-reserved' : item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed'}">${escapeHtml(deckItemState(item))}</dd></div>
+    </dl>
+    ${allocationControls(item)}`;
+  preview.querySelectorAll('[data-allocation-source]').forEach(button => {
+    button.addEventListener('click', () => moveDeckAllocation(item, Number(button.dataset.allocationSource), button));
+  });
+}
+
+function allocationControls(item) {
+  const allocation = item.allocation;
+  if (!allocation) return '';
+  const canEdit = allocation.editable && currentSavedDeckId && deckList.value.trim() === lastCheckedDeckList;
+  return `<section class="deck-allocation-controls" aria-label="Card allocations">
+    <h4>Allocations</h4>
+    <p>${allocation.assigned} assigned to this deck · ${allocation.available} available of ${item.requested} needed</p>
+    ${allocation.sources.map((source, index) => `<div class="deck-allocation-source">
+      <strong>${escapeHtml(source.deck_name)}</strong>
+      <span>${source.quantity} ${source.quantity === 1 ? 'copy' : 'copies'}${source.deck_id ? ' can be moved here' : ' available to assign'}</span>
+      ${canEdit ? `<label>Copies <input type="number" min="1" max="${source.quantity}" value="${source.quantity}" aria-label="Copies from ${escapeHtml(source.deck_name)}"></label>
+      <button type="button" data-allocation-source="${index}">${source.deck_id ? 'Move to this deck' : 'Assign to this deck'}</button>` : ''}
+    </div>`).join('')}
+    ${!canEdit && allocation.sources.length ? '<p>Save your checked deck list to change allocations here.</p>' : ''}
+    <p class="deck-allocation-message" role="status"></p>
+  </section>`;
+}
+
+async function moveDeckAllocation(item, index, button) {
+  const source = item.allocation.sources[index];
+  const quantity = Number(button.parentElement.querySelector('input').value);
+  const message = button.closest('.deck-allocation-controls').querySelector('[role="status"]');
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > source.quantity) {
+    message.textContent = `Choose between 1 and ${source.quantity} copies.`;
+    return;
+  }
+  if (deckList.value.trim() !== lastCheckedDeckList) {
+    message.textContent = 'Save and recheck your changed deck list first.';
+    return;
+  }
+  const target = savedDecks.find(deck => deck.id === currentSavedDeckId);
+  if (source.deck_id && !window.confirm(`Move ${quantity}× ${item.name} from ${source.deck_name} to ${target?.name || 'this deck'}? ${source.deck_name} will lose these allocated copies. Collection quantities and storage locations stay unchanged.`)) return;
+  button.disabled = true;
+  try {
+    await requestJson('/decks/transfer-allocation', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: currentSavedDeckId, source_deck_id: source.deck_id, card_id: source.card_id,
+        item_index: item.allocation.index, quantity, deck_list: lastCheckedDeckList})});
+    await loadSavedDecks();
+    await checkCurrentDeck();
+    document.querySelector(`[data-deck-index="${item.allocation.index}"]`)?.click();
+    statusText.textContent = `${quantity}× ${item.name} ${source.deck_id ? `moved from ${source.deck_name}` : 'assigned'} to ${target?.name || 'this deck'}.`;
+  } catch (error) {
+    message.textContent = error.message;
+    button.disabled = false;
+  }
 }
 
 function renderResults(items, ignoredBasicEnergy = []) {
@@ -530,7 +585,7 @@ function renderResults(items, ignoredBasicEnergy = []) {
             </div>
           </article>`;
       }).join('')
-    : '<p class="deck-section-empty is-ready">No cards are missing.</p>';
+    : `<p class="deck-section-empty ${items.some(item => item.allocation?.reserved) ? '' : 'is-ready'}">${items.some(item => item.allocation?.reserved) ? 'You own every card. Some copies are in other decks; select those rows below to review allocations.' : 'No cards are missing.'}</p>`;
 
   const indexedItems = renderedDeckItems.map((item, index) => ({item, index}));
   const pokemonItems = indexedItems.filter(entry => deckGroup(entry.item) === 'pokemon');
@@ -594,7 +649,7 @@ async function checkCurrentDeck() {
     const data = await requestJson('/deck/check', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({deck_list: checkedDeckList}),
+      body: JSON.stringify({deck_list: checkedDeckList, deck_id: currentSavedDeckId}),
     });
     lastCheckedDeckList = checkedDeckList;
     lastCheckedClipboardDeckList = data.clipboard_deck_list || checkedDeckList;

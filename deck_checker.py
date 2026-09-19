@@ -473,12 +473,13 @@ def check_deck_list(
 
         # Existing or explicitly chosen assignments get first claim so a manual
         # alternate-art choice survives later automatic refreshes.
+        preferred_remaining = dict(preferred_card_quantities or {})
         for item in resolved:
             requested = details.get(item["requested_id"])
             if requested is None:
                 continue
             needed = item["entry"].quantity - item["covered"]
-            for preferred_id, preferred_quantity in (preferred_card_quantities or {}).items():
+            for preferred_id, preferred_quantity in preferred_remaining.items():
                 preferred = details.get(str(preferred_id))
                 if preferred is None or preferred["card_type"] != requested["card_type"]:
                     continue
@@ -490,7 +491,9 @@ def check_deck_list(
                 ):
                     continue
                 wanted = min(needed, max(0, int(preferred_quantity)))
-                needed -= allocate(item, str(preferred_id), wanted, "preferred printing")
+                taken = allocate(item, str(preferred_id), wanted, "preferred printing")
+                preferred_remaining[preferred_id] -= taken
+                needed -= taken
                 if needed <= 0:
                     break
 
