@@ -158,7 +158,7 @@ function renderDeckLibrary() {
       <article class="deck-library-card ${deck.id === currentSavedDeckId ? 'is-current' : ''}">
         <button class="deck-library-open" type="button" data-open-deck="${deck.id}">
           <strong>${escapeHtml(deck.name)}</strong>
-          <span>${deck.card_count} cards · ${deck.unique_entries} unique</span>
+          <span class="deck-preview-counts">${deck.card_count} cards · ${deck.unique_entries} unique</span>
           <span class="deck-open-label">Check Deck <span aria-hidden="true">→</span></span>
         </button>
         <details class="deck-library-menu"><summary aria-label="Manage ${escapeHtml(deck.name)}">⋯</summary><div class="deck-library-card-actions">

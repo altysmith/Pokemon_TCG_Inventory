@@ -1366,13 +1366,13 @@ body.has-app-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
   .deck-page .deck-library-cards { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 24px; margin: 0; }
   .deck-page .deck-library-card { border-radius: 16px; }
   .deck-page .deck-library-open,
-  .deck-page .deck-library-open.has-deck-preview { display: flex; flex-direction: column; align-items: stretch; min-height: 365px; padding: 24px; gap: 20px; border-radius: 16px; }
+  .deck-page .deck-library-open.has-deck-preview { display: flex; flex-direction: column; align-items: stretch; min-height: 325px; padding: 24px; gap: 20px; border-radius: 16px; }
   .deck-page .deck-featured-frame { width: 130px; height: 182px; margin: 0 auto; overflow: hidden; box-shadow: 0 12px 24px #0003; }
   .deck-page .deck-featured-art { width: 100%; height: 100%; }
   .deck-page .deck-preview-copy { gap: 8px; }
   .deck-page .deck-library-open strong { font-size: 22px; }
   .deck-page .deck-library-open span { font-size: 13px; }
-  .deck-page .deck-preview-names { gap: 5px 10px; }
+  .deck-page .deck-preview-counts, .deck-page .deck-preview-names { display: none; }
   .deck-page .deck-preview-names > span { font-size: 12px; }
   .deck-page .deck-library-open .deck-open-label { margin-top: 8px; padding: 10px 14px; font-size: 13px; }
   .deck-page .deck-library-card:hover { border-color: var(--binder-accent); box-shadow: 0 10px 28px #0002; }
