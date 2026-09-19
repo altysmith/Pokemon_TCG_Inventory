@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0f13">
     <title>My Pokémon Card Collection</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style.css?v=tcg-icons-20260918">
     <script src="/theme.js"></script>
   </head>
   <body class="binder-body">
@@ -35,16 +35,6 @@
           <div id="location_navigation"></div>
         </section>
 
-        <section class="binder-location-nav binder-deck-nav" aria-labelledby="deck_navigation_heading">
-          <header>
-            <h2 id="deck_navigation_heading">Deck Lists</h2>
-            <a href="/deck">New</a>
-          </header>
-<label class="saved-deck-sort">Sort decks<select id="saved_deck_sort"><option value="name_az">Name A–Z</option><option value="name_za">Name Z–A</option><option value="updated">Recently updated</option><option value="created">Newest added</option></select></label>
-          <p id="collection_decks_status" class="binder-deck-status" role="status">Loading…</p>
-          <div id="collection_decks" class="binder-deck-navigation"></div>
-        </section>
-
         <nav id="category_navigation" class="binder-category-nav">
           <section>
             <h2>Pokémon</h2>
@@ -63,6 +53,18 @@
             <div id="special_categories"></div>
           </section>
         </nav>
+
+        <section class="binder-location-nav binder-deck-nav" aria-labelledby="deck_navigation_heading">
+          <header>
+            <h2 id="deck_navigation_heading"><button id="collection_decks_toggle" type="button" aria-expanded="false" aria-controls="collection_decks_content">Deck Lists <span aria-hidden="true">▾</span></button></h2>
+            <a href="/deck">New</a>
+          </header>
+<div id="collection_decks_content" hidden>
+<label class="saved-deck-sort">Sort decks<select id="saved_deck_sort"><option value="custom">Custom order</option><option value="name_az">Name A–Z</option><option value="name_za">Name Z–A</option><option value="updated">Recently updated</option><option value="created">Newest added</option></select></label>
+          <p id="collection_decks_status" class="binder-deck-status" role="status">Loading…</p>
+          <div id="collection_decks" class="binder-deck-navigation"></div>
+          </div>
+        </section>
 
         <button id="recent_button" class="binder-nav-item binder-recent" type="button" data-category="recent">
           <span class="binder-nav-icon" aria-hidden="true">◷</span><span>Recently added</span>
@@ -406,7 +408,7 @@
     <button id="collection_back_top" class="mobile-only" type="button">↑ Back to top</button>
     <script src="/app-shell.js"></script>
     <script src="/card-inspector.js"></script>
-    <script src="/inventory.js"></script>
+    <script src="/inventory.js?v=tcg-icons-20260918"></script>
     <script src="/desktop-session.js"></script>
   </body>
 </html>

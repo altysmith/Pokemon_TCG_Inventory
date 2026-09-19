@@ -15,6 +15,14 @@ const deckName = document.querySelector('#deck_name');
 const saveButton = document.querySelector('#deck_save');
 const saveStatus = document.querySelector('#deck_save_status');
 const newDeckButton = document.querySelector('#deck_new');
+const displayCard = document.querySelector('#deck_display_card');
+const displayPreview = document.querySelector('#deck_display_preview');
+displayCard.addEventListener('change', () => {
+  displayPreview.hidden = !displayCard.value;
+  if (displayCard.value) displayPreview.src = displayCard.value;
+  saveButton.disabled = !displayCard.value;
+  saveButton.textContent = currentSavedDeckId ? 'Update saved deck' : 'Save to deck library';
+});
 const desktopDeckView = window.matchMedia('(min-width: 761px)');
 const workspaceTitle = document.querySelector('#deck_workspace_title');
 const editCurrentButton = document.querySelector('#deck_edit_current');
@@ -253,10 +261,23 @@ function configureSavePanel(data) {
   }
   savePanel.hidden = false;
   const saved = savedDecks.find(deck => deck.id === currentSavedDeckId);
+  if (data.items) {
+    const selected = saved?.display_image || displayCard.value;
+    displayCard.replaceChildren(new Option('Choose a card…', ''));
+    const images = new Set();
+    for (const item of [...data.items, ...(data.ignored_basic_energy || [])]) {
+      if (!item.image_url || images.has(item.image_url)) continue;
+      images.add(item.image_url);
+      displayCard.add(new Option(`${item.name} · ${printingLabel(item)}`, item.image_url));
+    }
+    displayCard.value = selected;
+    displayPreview.hidden = !displayCard.value;
+    if (displayCard.value) displayPreview.src = displayCard.value;
+  }
   if (saved) {
     deckName.value = saved.name;
     deckName.disabled = true;
-    const changed = lastCheckedDeckList !== saved.deck_list.trim();
+    const changed = lastCheckedDeckList !== saved.deck_list.trim() || displayCard.value !== (saved.display_image || '');
     saveButton.disabled = !changed;
     saveButton.textContent = changed ? 'Update saved deck' : 'Saved in library';
     saveStatus.textContent = changed
@@ -271,6 +292,11 @@ function configureSavePanel(data) {
 }
 
 async function saveCheckedDeck() {
+  if (!displayCard.value) {
+    saveStatus.textContent = 'Choose a display card before saving this deck.';
+    displayCard.focus();
+    return false;
+  }
   if (!lastCheckedDeckList || deckList.value.trim() !== lastCheckedDeckList) {
     saveStatus.textContent = 'Check this deck again before saving it.';
     return false;
@@ -278,6 +304,15 @@ async function saveCheckedDeck() {
   saveButton.disabled = true;
   saveButton.textContent = 'Saving…';
   try {
+    const existing = savedDecks.find(deck => deck.id === currentSavedDeckId);
+    if (existing && existing.deck_list.trim() === lastCheckedDeckList) {
+      await requestJson('/decks/display-card', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: existing.id, display_image: displayCard.value})});
+      await loadSavedDecks('Display card saved.');
+      configureSavePanel({errors: []});
+      saveStatus.textContent = 'Display card saved.';
+      return true;
+    }
     const data = await requestJson('/decks/save', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -285,6 +320,7 @@ async function saveCheckedDeck() {
         id: currentSavedDeckId || 0,
         name: deckName.value,
         deck_list: lastCheckedDeckList,
+        display_image: displayCard.value,
       }),
     });
     currentSavedDeckId = data.deck.id;
@@ -309,6 +345,7 @@ function revealDeckEditor() {
 function editSavedDeck(id) {
   const deck = savedDecks.find(item => item.id === id);
   if (!deck) return;
+  displayCard.value = deck.display_image || '';
   showDeckWorkspace(`Edit ${deck.name}`, true);
   revealDeckEditor();
   setLibraryExpanded(false);
@@ -329,6 +366,7 @@ function editSavedDeck(id) {
 }
 
 function startNewDeck() {
+  displayCard.value = '';
   showDeckWorkspace('Check a new deck', true);
   revealDeckEditor();
   setLibraryExpanded(false);
@@ -672,6 +710,7 @@ async function checkCurrentDeck() {
 async function openSavedDeck(id) {
   const deck = savedDecks.find(item => item.id === id);
   if (!deck) return;
+  displayCard.value = deck.display_image || '';
   showDeckWorkspace(deck.name);
   revealDeckEditor();
   currentSavedDeckId = id;
@@ -743,6 +782,7 @@ function enhanceDeckPreview(deck, target, thumbnail) {
     const pokemon = items.filter(x => x.deck_section === 'pokemon' || x.category === 'Pokémon');
     let featured = pokemon.find(x => deck.name.toLowerCase().includes(x.name.toLowerCase()) && x.image_url) || pokemon.find(x => x.image_url) || items.find(x => x.image_url);
     try { featured = items.find(x => x.image_url === localStorage.getItem(`deck-featured-${deck.id}`)) || featured; } catch {}
+    featured = items.find(x => x.image_url === deck.display_image) || featured;
     const image = document.createElement('img');
     image.className = thumbnail ? 'deck-sidebar-art' : 'deck-featured-art';
     image.alt = featured ? featured.name : '';
@@ -763,12 +803,20 @@ function enhanceDeckPreview(deck, target, thumbnail) {
       row.append(label, quantity); list.append(row);
     }
     copy.insertBefore(list, copy.querySelector('.deck-open-label')); target.append(image, copy); target.classList.add('has-deck-preview');
-    if (pokemon.some(x => x.image_url)) {
+    if (items.some(x => x.image_url)) {
       const label = document.createElement('label'); label.className = 'deck-featured-picker'; label.textContent = 'Featured card';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Featured card for ${deck.name}`);
-      for (const item of pokemon.filter(x => x.image_url)) select.add(new Option(item.name, item.image_url));
+      for (const item of items.filter(x => x.image_url)) select.add(new Option(item.name, item.image_url));
       select.value = featured?.image_url || '';
-      select.addEventListener('change', () => { image.src = select.value; image.hidden = false; image.alt = select.selectedOptions[0].textContent; try { localStorage.setItem(`deck-featured-${deck.id}`, select.value); } catch {} });
+      select.addEventListener('change', async () => {
+        select.disabled = true;
+        try {
+          await requestJson('/decks/display-card', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: deck.id, display_image: select.value})});
+          deck.display_image = select.value;
+          image.src = select.value; image.hidden = false; image.alt = select.selectedOptions[0].textContent;
+        } catch (error) { select.value = deck.display_image || featured?.image_url || ''; setLibraryStatus(error.message, 'error'); }
+        finally { select.disabled = false; }
+      });
       label.append(select); target.parentElement.querySelector('.deck-library-card-actions').append(label);
     }
   }).catch(() => { deckPreviewCache.delete(key); });

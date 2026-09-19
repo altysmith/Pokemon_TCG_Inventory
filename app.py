@@ -527,6 +527,7 @@ def saved_deck_database() -> SavedDeckDatabase:
 
 def saved_decks_snapshot() -> dict:
     database = saved_deck_database()
+    presentation = database.presentation()
     all_assignments = database.assignments()
     assignment_details: dict[str, dict] = {}
     card_ids = sorted({assignment.card_id for assignment in all_assignments})
@@ -553,6 +554,7 @@ def saved_decks_snapshot() -> dict:
     decks = []
     for saved_deck in database.decks():
         deck = asdict(saved_deck)
+        deck.update(presentation.get(saved_deck.id, {"display_image": "", "sort_position": None}))
         deck["clipboard_deck_list"] = format_deck_list_for_clipboard(saved_deck.deck_list)
         assignments = assignments_by_deck.get(saved_deck.id, [])
         deck["assignments"] = assignments
@@ -692,6 +694,15 @@ def _saved_deck_id(data: dict, *, required: bool = True) -> int:
     return max(0, deck_id)
 
 
+def validated_deck_display_image(deck_list: str, image: str) -> str:
+    checked = check_deck_list(deck_list, catalog_path=CARD_CATALOG_PATH,
+                              inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH))
+    choices = {item.get("image_url") for item in checked["items"] + checked.get("ignored_basic_energy", [])}
+    if not image or image not in choices:
+        raise ValueError("Choose a display card from this deck list.")
+    return image
+
+
 def save_saved_deck(data: dict) -> SavedDeck:
     name = _saved_deck_name(data)
     deck_list = str(data.get("deck_list", "")).strip()
@@ -710,6 +721,8 @@ def save_saved_deck(data: dict) -> SavedDeck:
         sum(entry.quantity for entry in entries),
         len(entries),
         deck_id=_saved_deck_id(data, required=False),
+        display_image=(validated_deck_display_image(deck_list, str(data["display_image"]))
+                       if "display_image" in data else None),
     )
 
 
@@ -1902,6 +1915,18 @@ class ScannerHandler(BaseHTTPRequestHandler):
                         "inventory_changed": False,
                     }
                 )
+            elif self.path == "/decks/order":
+                saved_deck_database().reorder([int(value) for value in data.get("ids", [])])
+                self._json({"ok": True})
+            elif self.path == "/decks/display-card":
+                database = saved_deck_database()
+                deck_id = _saved_deck_id(data)
+                deck = next((item for item in database.decks() if item.id == deck_id), None)
+                if deck is None:
+                    raise ValueError("That saved deck no longer exists.")
+                image = validated_deck_display_image(deck.deck_list, str(data.get("display_image", "")))
+                database.set_display_image(deck_id, image)
+                self._json({"ok": True})
             elif self.path == "/decks/rename":
                 deck = rename_saved_deck(data)
                 self._json({"ok": True, "deck": asdict(deck), "inventory_changed": False})

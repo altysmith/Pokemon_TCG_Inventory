@@ -62,6 +62,13 @@ const locationsStatus = document.querySelector('#inventory_locations_status');
 const locationsList = document.querySelector('#inventory_locations_list');
 const collectionDecks = document.querySelector('#collection_decks');
 const collectionDecksStatus = document.querySelector('#collection_decks_status');
+const collectionDecksToggle = document.querySelector('#collection_decks_toggle');
+const collectionDecksContent = document.querySelector('#collection_decks_content');
+collectionDecksToggle.addEventListener('click', () => {
+  const expanded = collectionDecksContent.hidden;
+  collectionDecksContent.hidden = !expanded;
+  collectionDecksToggle.setAttribute('aria-expanded', String(expanded));
+});
 const deckEditorDialog = document.querySelector('#deck_editor_dialog');
 const deckEditorClose = document.querySelector('#deck_editor_close');
 const deckEditorTitle = document.querySelector('#deck_editor_title');
@@ -354,6 +361,15 @@ function inventoryDate(value) {
   return Number.isNaN(date.valueOf()) ? null : date;
 }
 
+const TCG_TYPE_ICONS = new Set(['grass', 'fire', 'water', 'lightning', 'psychic', 'fighting', 'darkness', 'metal', 'dragon', 'colorless']);
+function applyTypeIcon(element, key) {
+  element.setAttribute('aria-hidden', 'true');
+  if (!TCG_TYPE_ICONS.has(key)) return;
+  element.textContent = '';
+  element.classList.add('tcg-type-icon');
+  element.dataset.type = key;
+}
+
 function renderCategoryNavigation() {
   const counts = new Map();
   for (const card of locationFilteredCards()) {
@@ -372,6 +388,7 @@ function renderCategoryNavigation() {
       button.dataset.category = key;
       button.dataset.tone = key;
       button.innerHTML = `<span class="binder-nav-icon" aria-hidden="true">${icon}</span><span></span><b></b>`;
+      applyTypeIcon(button.children[0], key);
       button.children[1].textContent = label;
       button.children[2].textContent = String(counts.get(key) || 0);
       fragment.append(button);
@@ -651,7 +668,23 @@ function renderCollectionDecks() {
     button.append(icon, name, count);
     button.classList.toggle('is-active', deck.id === state.deckId);
     button.addEventListener('click', () => void openDeckView(deck.id));
-    return button;
+    if (document.querySelector('#saved_deck_sort').value !== 'custom') return button;
+    const row = document.createElement('div');
+    row.className = 'collection-deck-order-row';
+    const controls = document.createElement('div');
+    controls.className = 'collection-deck-order-controls';
+    for (const [direction, label] of [[-1, 'Move up'], [1, 'Move down']]) {
+      const move = document.createElement('button');
+      move.type = 'button';
+      move.textContent = direction === -1 ? '↑' : '↓';
+      move.setAttribute('aria-label', `${label} ${deck.name}`);
+      const index = savedDecks.indexOf(deck);
+      move.disabled = index + direction < 0 || index + direction >= savedDecks.length;
+      move.addEventListener('click', () => void moveCollectionDeck(deck.id, direction));
+      controls.append(move);
+    }
+    row.append(button, controls);
+    return row;
   });
   collectionDecks.replaceChildren(...cards);
   requestAnimationFrame(() => savedDecks.forEach(deck => enhanceDeckPreview(deck, collectionDecks.querySelector(`[data-deck-id="${deck.id}"]`), true)));
@@ -1404,7 +1437,7 @@ function cardElement(card, prioritizeImage = false) {
 
   const art = document.createElement('span');
   art.className = 'binder-card-art';
-  art.title = 'Click artwork to enlarge';
+  art.title = 'Open card details and edit quantity';
   const image = document.createElement('img');
   image.decoding = 'async';
   image.alt = `${card.name} card`;
@@ -1433,13 +1466,9 @@ function cardElement(card, prioritizeImage = false) {
     }
     tile.append(assignments);
   }
-  tile.addEventListener('click', (event) => {
+  tile.addEventListener('click', () => {
     if (selectionState.active) {
       toggleCardSelection(card);
-      return;
-    }
-    if (event.target.closest('.binder-card-art')) {
-      window.CardInspector.open(card, tile);
       return;
     }
     openDrawer(card);
@@ -2271,6 +2300,7 @@ function renderMobileCategories(cards) {
       button.dataset.tone = key;
       const symbol = document.createElement('span');
       symbol.textContent = ({grass:'🌿', fire:'🔥', water:'💧', lightning:'⚡', psychic:'🔮', fighting:'🥊', darkness:'🌙', metal:'⚙', dragon:'🐉', colorless:'☆', item:'🎒', supporter:'👤', stadium:'🏟', tool:'🔧', 'basic-energy':'⚡', 'special-energy':'✨'})[key] || icon;
+      applyTypeIcon(symbol, key);
       const title = document.createElement('strong'); title.textContent = label;
       const total = document.createElement('small'); total.textContent = `${count} cards`;
       button.append(symbol, title, total);
@@ -2310,6 +2340,7 @@ function enhanceDeckPreview(deck, target, thumbnail) {
     const pokemon = items.filter(x => x.deck_section === 'pokemon' || x.category === 'Pokémon');
     let featured = pokemon.find(x => deck.name.toLowerCase().includes(x.name.toLowerCase()) && x.image_url) || pokemon.find(x => x.image_url) || items.find(x => x.image_url);
     try { featured = items.find(x => x.image_url === localStorage.getItem(`deck-featured-${deck.id}`)) || featured; } catch {}
+    featured = items.find(x => x.image_url === deck.display_image) || featured;
     const image = document.createElement('img');
     image.className = thumbnail ? 'deck-sidebar-art' : 'deck-featured-art';
     image.alt = featured ? featured.name : '';
@@ -2341,12 +2372,32 @@ function enhanceDeckPreview(deck, target, thumbnail) {
   }).catch(() => { deckPreviewCache.delete(key); });
 }
 
+async function moveCollectionDeck(id, direction) {
+  const ordered = savedDecks.map(deck => deck.id);
+  const index = ordered.indexOf(id);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= ordered.length) return;
+  [ordered[index], ordered[next]] = [ordered[next], ordered[index]];
+  collectionDecks.querySelectorAll('.collection-deck-order-controls button').forEach(button => { button.disabled = true; });
+  try {
+    await inventoryRequest('/decks/order', {ids: ordered});
+    savedDecks.forEach(deck => { deck.sort_position = ordered.indexOf(deck.id); });
+    renderCollectionDecks();
+    collectionDecksStatus.textContent = 'Custom order saved.';
+    collectionDecks.querySelector(`[data-deck-id="${id}"]`)?.focus({preventScroll: true});
+  } catch (error) {
+    renderCollectionDecks();
+    collectionDecksStatus.textContent = error.message;
+  }
+}
+
 function sortSavedDecks() {
-  let order = 'name_az';
-  try { order = localStorage.getItem('saved-deck-sort') || order; } catch {}
+  let order = 'custom';
+  try { order = localStorage.getItem('collection-deck-sort') || order; } catch {}
   const select = document.querySelector('#saved_deck_sort');
   select.value = order;
   savedDecks.sort((a,b) => {
+    if (order === 'custom') return (a.sort_position ?? Number.MAX_SAFE_INTEGER) - (b.sort_position ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name);
     if (order === 'updated' || order === 'created') {
       const field = order === 'updated' ? 'updated_at' : 'created_at';
       return String(b[field] || '').localeCompare(String(a[field] || '')) || a.name.localeCompare(b.name);
@@ -2356,6 +2407,6 @@ function sortSavedDecks() {
 }
 
 document.querySelector('#saved_deck_sort').addEventListener('change', event => {
-  try { localStorage.setItem('saved-deck-sort', event.target.value); } catch {}
+  try { localStorage.setItem('collection-deck-sort', event.target.value); } catch {}
   renderCollectionDecks();
 });

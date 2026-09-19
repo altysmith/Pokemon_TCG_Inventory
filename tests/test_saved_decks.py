@@ -57,6 +57,30 @@ class SavedDeckDatabaseTests(unittest.TestCase):
             ).fetchone()
         self.assertTrue(archived["archived_at"])
 
+    def test_presentation_persists_and_does_not_change_allocations(self) -> None:
+        first = self.database.save('First', '1 Card ABC 1', 1, 1, display_image='https://example.test/card.png')
+        second = self.database.save('Second', '1 Card ABC 1', 1, 1)
+        self.database.replace_assignments(first.id, {'card-1': 1})
+        assignments = self.database.assignments()
+        self.database.reorder([second.id, first.id])
+        self.database.set_display_image(first.id, 'https://example.test/other.png')
+        self.database.save('First', '2 Card ABC 1', 2, 1, deck_id=first.id)
+        presentation = SavedDeckDatabase(self.path).presentation()
+        self.assertEqual(presentation[first.id]['display_image'], 'https://example.test/other.png')
+        self.assertEqual(presentation[second.id]['sort_position'], 0)
+        self.assertEqual(presentation[first.id]['sort_position'], 1)
+        self.assertEqual(self.database.assignments(), assignments)
+
+    def test_invalid_order_is_rejected_atomically(self) -> None:
+        first = self.database.save('First', '1 Card ABC 1', 1, 1)
+        second = self.database.save('Second', '1 Card ABC 1', 1, 1)
+        self.database.reorder([first.id, second.id])
+        before = self.database.presentation()
+        for order in ([first.id], [first.id, first.id], [first.id, 999]):
+            with self.assertRaises(ValueError):
+                self.database.reorder(order)
+            self.assertEqual(self.database.presentation(), before)
+
     def test_replace_and_clear_assignments_do_not_change_deck_list(self) -> None:
         deck = self.database.save("Excadrill", "2 Drilbur PBL 046", 2, 1)
 

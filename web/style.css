@@ -1417,3 +1417,27 @@ body.has-app-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 .deck-allocation-source button { min-height: 44px; border: 1px solid var(--binder-accent); border-radius: 6px; background: var(--binder-accent); color: white; font-weight: 700; cursor: pointer; }
 .deck-allocation-source button:disabled { opacity: .6; cursor: wait; }
 .deck-allocation-message { color: #f2c966; }
+
+/* Collection categories and decks remain reachable above the fixed app navigation. */
+.binder-sidebar { min-height: 0; }
+.binder-sidebar > * { flex-shrink: 0; }
+.binder-sidebar { padding-bottom: 28px; scroll-padding-bottom: 28px; }
+.collection-deck-order-row { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 3px; align-items: center; }
+.collection-deck-order-controls { display: grid; gap: 3px; }
+.collection-deck-order-controls button { min-height: 32px; border: 1px solid var(--binder-border); border-radius: 6px; background: var(--binder-panel); color: var(--binder-text); cursor: pointer; font-size: 17px; }
+.collection-deck-order-controls button:disabled { opacity: .3; cursor: default; }
+.deck-display-choice select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); font: inherit; }
+.deck-display-choice img { width: 64px; height: 90px; object-fit: contain; }
+.deck-display-choice img[hidden] { display: none; }
+@media (min-width: 901px) {
+  .binder-app, .binder-main { height: calc(100dvh - var(--app-nav-height, 82px)); min-height: 0; }
+  .binder-sidebar { height: 100%; overflow-y: auto; }
+}
+@media (max-width: 900px) {
+  .binder-sidebar { height: auto; overflow: visible; }
+  .binder-category-nav { display: block; }
+  .binder-body.has-app-nav { padding-bottom: calc(var(--app-nav-height, 86px) + 16px); }
+}
+@media (max-width: 760px) {
+  .collection-deck-order-controls button { min-height: 44px; }
+}

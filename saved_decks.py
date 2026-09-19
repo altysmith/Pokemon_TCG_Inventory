@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS saved_deck_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_saved_deck_assignments_card
     ON saved_deck_assignments(card_id, deck_id);
+
+CREATE TABLE IF NOT EXISTS saved_deck_presentation (
+    deck_id INTEGER PRIMARY KEY REFERENCES saved_decks(id) ON DELETE CASCADE,
+    display_image TEXT NOT NULL DEFAULT '',
+    sort_position INTEGER
+);
 """
 
 
@@ -198,6 +204,7 @@ class SavedDeckDatabase:
         unique_entries: int,
         *,
         deck_id: int = 0,
+        display_image: str | None = None,
     ) -> SavedDeck:
         self.initialize()
         try:
@@ -228,6 +235,12 @@ class SavedDeckDatabase:
                         (name, deck_list, card_count, unique_entries),
                     )
                     deck_id = int(cursor.lastrowid)
+                if display_image is not None:
+                    connection.execute(
+                        "INSERT INTO saved_deck_presentation(deck_id, display_image) VALUES (?, ?) "
+                        "ON CONFLICT(deck_id) DO UPDATE SET display_image=excluded.display_image",
+                        (deck_id, display_image),
+                    )
                 row = connection.execute(
                     """
                     SELECT id, name, deck_list, card_count, unique_entries,
@@ -241,6 +254,35 @@ class SavedDeckDatabase:
         if row is None:
             raise ValueError("The deck could not be saved.")
         return self._deck(row)
+
+    def presentation(self) -> dict[int, dict]:
+        self.initialize()
+        with self.connect() as connection:
+            return {row['deck_id']: dict(row) for row in connection.execute(
+                'SELECT deck_id, display_image, sort_position FROM saved_deck_presentation')}
+
+    def reorder(self, deck_ids: list[int]) -> None:
+        self.initialize()
+        with self.connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            active = {row[0] for row in connection.execute('SELECT id FROM saved_decks WHERE archived_at IS NULL')}
+            if len(deck_ids) != len(set(deck_ids)) or set(deck_ids) != active:
+                raise ValueError('The deck library changed. Reload it before reordering.')
+            connection.executemany(
+                'INSERT INTO saved_deck_presentation(deck_id, sort_position) VALUES (?, ?) '
+                'ON CONFLICT(deck_id) DO UPDATE SET sort_position=excluded.sort_position',
+                [(deck_id, position) for position, deck_id in enumerate(deck_ids)],
+            )
+
+    def set_display_image(self, deck_id: int, image: str) -> None:
+        self.initialize()
+        with self.connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            if not connection.execute('SELECT 1 FROM saved_decks WHERE id=? AND archived_at IS NULL', (deck_id,)).fetchone():
+                raise ValueError('That saved deck no longer exists.')
+            connection.execute(
+                'INSERT INTO saved_deck_presentation(deck_id, display_image) VALUES (?, ?) '
+                'ON CONFLICT(deck_id) DO UPDATE SET display_image=excluded.display_image', (deck_id, image))
 
     def rename(self, deck_id: int, name: str) -> SavedDeck:
         self.initialize()

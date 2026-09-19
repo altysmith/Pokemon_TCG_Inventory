@@ -74,6 +74,11 @@
             <label for="deck_name">Deck name</label>
             <input id="deck_name" type="text" maxlength="80" autocomplete="off" placeholder="Example: Raging Bolt">
           </div>
+          <div class="deck-display-choice">
+            <label for="deck_display_card">Display card (required)</label>
+            <select id="deck_display_card" required><option value="">Choose a card…</option></select>
+            <img id="deck_display_preview" alt="Selected deck display card" hidden>
+          </div>
           <button id="deck_save" class="catalog-search-button" type="button">Save to deck library</button>
           <p id="deck_save_status" role="status">Saving automatically labels available owned copies without changing quantities or storage locations.</p>
         </section>

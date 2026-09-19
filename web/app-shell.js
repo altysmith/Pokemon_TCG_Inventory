@@ -16,6 +16,9 @@
   }
   document.body.append(nav);
   document.body.classList.add('has-app-nav');
+  const updateNavHeight = () => document.documentElement.style.setProperty('--app-nav-height', `${nav.getBoundingClientRect().height}px`);
+  new ResizeObserver(updateNavHeight).observe(nav);
+  updateNavHeight();
 
   const artSelector = '.binder-card-art, .catalog-result-art, .needed-card-art, .deck-gallery-art, .deck-builder-preview-art, .deck-editor-entry-art, .deck-editor-result-art, .deck-assignment-option-art';
   function prepareArt(art) {
