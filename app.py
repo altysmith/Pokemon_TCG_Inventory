@@ -561,27 +561,28 @@ def saved_decks_snapshot() -> dict:
         deck["assigned_cards"] = sum(item["quantity"] for item in assignments)
         deck["assigned_unique_cards"] = len(assignments)
         deck["assignment_entries"] = []
-        if assignments:
-            assigned_check = check_deck_list(
-                saved_deck.deck_list,
-                catalog_path=CARD_CATALOG_PATH,
-                inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
-                inventory_quantities={
-                    item["card_id"]: item["quantity"] for item in assignments
-                },
-            )
-            deck["assignment_entries"] = [
-                {
-                    "name": item["name"],
-                    "set_code": item["set_code"],
-                    "number": item["number"],
-                    "deck_section": item["deck_section"],
-                    "quantity": sum(fill["quantity"] for fill in item["fills"]),
-                    "fills": item["fills"],
-                }
-                for item in assigned_check["items"]
-                if item["fills"]
-            ]
+        assigned_check = check_deck_list(
+            saved_deck.deck_list,
+            catalog_path=CARD_CATALOG_PATH,
+            inventory_path=tenants.scoped_path("inventory.sqlite3", INVENTORY_PATH),
+            inventory_quantities={
+                item["card_id"]: item["quantity"] for item in assignments
+            },
+        )
+        deck["assignment_entries"] = [
+            {
+                "name": item["name"],
+                "set_code": item["set_code"],
+                "number": item["number"],
+                "deck_section": item["deck_section"],
+                "quantity": sum(fill["quantity"] for fill in item["fills"]),
+                "fills": item["fills"],
+            }
+            for item in assigned_check["items"]
+            if item["fills"]
+        ]
+        deck['allocation_missing'] = assigned_check['summary']['missing_cards']
+        deck['allocation_complete'] = assigned_check['summary']['complete']
         decks.append(deck)
     return {"decks": decks, "count": len(decks), "inventory_changed": False}
 

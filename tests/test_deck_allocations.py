@@ -1,4 +1,6 @@
 import unittest
+from unittest.mock import patch
+import app
 from pathlib import Path
 import test_deck_checker
 from concurrent.futures import ThreadPoolExecutor
@@ -135,8 +137,42 @@ class AllocationTests(unittest.TestCase):
                                     2, 2, deck_id=self.target.id)
         result = self.check(target)
         self.assertEqual(result['summary']['reserved_cards'], 0)
-        self.assertEqual(sum(source['quantity'] for item in result['items']
-                             for source in item['allocation']['sources']), 2)
+        self.assertTrue(all(source['quantity'] <= 1 for item in result['items']
+                            for source in item['allocation']['sources']))
+
+    def test_choose_second_source_leaves_first_deck_intact(self):
+        second = self.database.save('Zoroark', self.target.deck_list, 1, 1)
+        self.inventory.set_quantity('research-svi', 2)
+        self.database.replace_assignments(second.id, {'research-svi': 1})
+        choices = self.check()['items'][0]['allocation']['sources']
+        self.assertEqual({source['deck_id'] for source in choices}, {self.source.id, second.id})
+        self.transfer(source_deck_id=second.id)
+        self.assertEqual(self.database.assignments(self.source.id)[0].quantity, 1)
+        self.assertEqual(self.database.assignments(second.id), ())
+        self.assertEqual(self.database.assignments(self.target.id)[0].quantity, 1)
+
+    def test_choose_other_deck_with_compatible_alternate_printing(self):
+        second = self.database.save('Zoroark', self.target.deck_list, 1, 1)
+        self.inventory.set_quantity('research-pre', 1)
+        self.database.replace_assignments(second.id, {'research-pre': 1})
+        choices = self.check()['items'][0]['allocation']['sources']
+        self.assertEqual({source['card_id'] for source in choices}, {'research-svi', 'research-pre'})
+        self.transfer(source_deck_id=second.id, card_id='research-pre')
+        self.assertEqual(self.database.assignments(self.source.id)[0].quantity, 1)
+        self.assertEqual(self.database.assignments(self.target.id)[0].card_id, 'research-pre')
+
+    def test_gallery_reports_source_shortage_after_transfer(self):
+        with (patch.object(app, 'CARD_CATALOG_PATH', self.fixture.catalog_path),
+              patch.object(app, 'INVENTORY_PATH', self.fixture.inventory_path),
+              patch.object(app, 'DECK_LIBRARY_PATH', self.database.path)):
+            before = {deck['id']: deck for deck in app.saved_decks_snapshot()['decks']}
+            self.assertTrue(before[self.source.id]['allocation_complete'])
+            self.assertEqual(before[self.target.id]['allocation_missing'], 1)
+            self.transfer()
+            after = {deck['id']: deck for deck in app.saved_decks_snapshot()['decks']}
+            self.assertTrue(after[self.target.id]['allocation_complete'])
+            self.assertFalse(after[self.source.id]['allocation_complete'])
+            self.assertEqual(after[self.source.id]['allocation_missing'], 1)
 
 if __name__ == '__main__':
     unittest.main()

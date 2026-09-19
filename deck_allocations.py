@@ -1,5 +1,5 @@
 """Read-only deck availability and explicit, atomic allocation transfers."""
-from deck_checker import check_deck_list
+from deck_checker import check_deck_list, compatible_assignment_cards
 
 
 def check_allocations(text, deck_id, catalog_path, inventory_path, connection, owned):
@@ -9,6 +9,7 @@ def check_allocations(text, deck_id, catalog_path, inventory_path, connection, o
         raise ValueError('That saved deck no longer exists.')
     rows = [dict(row) for row in connection.execute(
         'SELECT a.* FROM saved_deck_assignments a JOIN saved_decks d ON d.id=a.deck_id WHERE d.archived_at IS NULL')]
+    original_rows = [dict(row) for row in rows]
     current, totals = {}, {}
     for row in rows:
         card = row['card_id']
@@ -51,6 +52,29 @@ def check_allocations(text, deck_id, catalog_path, inventory_path, connection, o
         item['allocation'] = {'index': index, 'assigned': allocated, 'reserved': reserved,
                               'available': item['covered'] - reserved, 'sources': sources,
                               'editable': bool(deck_id and decks[deck_id]['deck_list'].strip() == text.strip())}
+    # Sources are alternatives, not an automatically selected borrowing plan.
+    for item in result['items']:
+        allocation = item['allocation']
+        deficit = max(0, item['requested'] - allocation['assigned'])
+        choices = []
+        if deficit and item['fills']:
+            compatible = compatible_assignment_cards(catalog_path, item['fills'][0]['card_id'], set(owned))
+            for card in compatible:
+                card_id = card['id']
+                free_count = min(deficit, free.get(card_id, 0))
+                if free_count:
+                    choices.append({'deck_id': 0, 'deck_name': 'Unallocated copies', 'card_id': card_id,
+                                    'quantity': free_count, 'printing': f"{card['set_code']} · {card['number']}"})
+                for row in original_rows:
+                    if row['deck_id'] == deck_id or row['card_id'] != card_id:
+                        continue
+                    quantity = min(deficit, row['quantity'], max(0, owned.get(card_id, 0) - current.get(card_id, 0)))
+                    if quantity:
+                        choices.append({'deck_id': row['deck_id'], 'deck_name': decks[row['deck_id']]['name'],
+                                        'card_id': card_id, 'quantity': quantity,
+                                        'printing': f"{card['set_code']} · {card['number']}"})
+        choices.sort(key=lambda source: (source['deck_id'] != 0, source['deck_name'].casefold(), source['card_id']))
+        allocation['sources'] = choices
     result['summary']['reserved_cards'] = sum(item['allocation']['reserved'] for item in result['items'])
     result['summary']['available_cards'] = result['summary']['covered_cards'] - result['summary']['reserved_cards']
     return result
@@ -78,6 +102,15 @@ def transfer_allocation(database, inventory, catalog_path, inventory_path, data)
                        if source['deck_id'] == source_id and source['card_id'] == card_id), None)
         if source is None or quantity > source['quantity']:
             raise ValueError('Availability changed. Recheck the deck and try again.')
+        current = {row['card_id']: row['quantity'] for row in connection.execute(
+            'SELECT card_id, quantity FROM saved_deck_assignments WHERE deck_id=?', (deck_id,))}
+        def coverage(quantities):
+            return check_deck_list(deck['deck_list'], catalog_path=catalog_path, inventory_path=inventory_path,
+                                   inventory_quantities=quantities)['summary']['covered_cards']
+        before = coverage(current)
+        current[card_id] = current.get(card_id, 0) + quantity
+        if coverage(current) - before != quantity:
+            raise ValueError('This deck no longer needs that many compatible copies. Recheck it first.')
         if source_id:
             old = connection.execute('SELECT quantity FROM saved_deck_assignments WHERE deck_id=? AND card_id=?', (source_id, card_id)).fetchone()['quantity']
             if old == quantity:

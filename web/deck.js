@@ -166,6 +166,7 @@ function renderDeckLibrary() {
       <article class="deck-library-card ${deck.id === currentSavedDeckId ? 'is-current' : ''}">
         <button class="deck-library-open" type="button" data-open-deck="${deck.id}">
           <strong>${escapeHtml(deck.name)}</strong>
+          ${typeof deck.allocation_complete === 'boolean' ? `<span class="deck-allocation-badge ${deck.allocation_complete ? 'is-ready' : 'is-needed'}">${deck.allocation_complete ? 'Fully allocated' : 'Needs allocated cards'}</span>` : ''}
           <span class="deck-preview-counts">${deck.card_count} cards · ${deck.unique_entries} unique</span>
           <span class="deck-open-label">Check Deck <span aria-hidden="true">→</span></span>
         </button>
@@ -543,11 +544,14 @@ function allocationControls(item) {
   return `<section class="deck-allocation-controls" aria-label="Card allocations">
     <h4>Allocations</h4>
     <p>${allocation.assigned} assigned to this deck · ${allocation.available} available of ${item.requested} needed</p>
+    ${allocation.sources.length ? '<p>Choose where to take copies from. Only the source you select will change.</p>' : ''}
     ${allocation.sources.map((source, index) => `<div class="deck-allocation-source">
       <strong>${escapeHtml(source.deck_name)}</strong>
+      ${source.deck_id && typeof savedDecks.find(deck => deck.id === source.deck_id)?.allocation_complete === 'boolean' ? `<span>${savedDecks.find(deck => deck.id === source.deck_id).allocation_complete ? 'Currently fully allocated' : 'Already needs allocated cards'}</span>` : ''}
+      ${source.printing ? `<span>${escapeHtml(source.printing)}</span>` : ''}
       <span>${source.quantity} ${source.quantity === 1 ? 'copy' : 'copies'}${source.deck_id ? ' can be moved here' : ' available to assign'}</span>
       ${canEdit ? `<label>Copies <input type="number" min="1" max="${source.quantity}" value="${source.quantity}" aria-label="Copies from ${escapeHtml(source.deck_name)}"></label>
-      <button type="button" data-allocation-source="${index}">${source.deck_id ? 'Move to this deck' : 'Assign to this deck'}</button>` : ''}
+      <button type="button" data-allocation-source="${index}">${source.deck_id ? `Take from ${escapeHtml(source.deck_name)}` : 'Assign to this deck'}</button>` : ''}
     </div>`).join('')}
     ${!canEdit && allocation.sources.length ? '<p>Save your checked deck list to change allocations here.</p>' : ''}
     <p class="deck-allocation-message" role="status"></p>
@@ -576,7 +580,8 @@ async function moveDeckAllocation(item, index, button) {
     await loadSavedDecks();
     await checkCurrentDeck();
     document.querySelector(`[data-deck-index="${item.allocation.index}"]`)?.click();
-    statusText.textContent = `${quantity}× ${item.name} ${source.deck_id ? `moved from ${source.deck_name}` : 'assigned'} to ${target?.name || 'this deck'}.`;
+    const donor = savedDecks.find(deck => deck.id === source.deck_id);
+    statusText.textContent = `${quantity}× ${item.name} ${source.deck_id ? `moved from ${source.deck_name}` : 'assigned'} to ${target?.name || 'this deck'}.${donor ? ` ${donor.name} now needs ${donor.allocation_missing} allocated copies (Basic Energy excluded).` : ''}`;
   } catch (error) {
     message.textContent = error.message;
     button.disabled = false;
