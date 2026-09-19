@@ -760,6 +760,15 @@ async function startDeckPage() {
   const requestedDeck = Number(new URLSearchParams(window.location.search).get('deck'));
   if (requestedDeck > 0 && savedDecks.some((deck) => deck.id === requestedDeck)) {
     await openSavedDeck(requestedDeck);
+    const card = new URLSearchParams(window.location.search).get('card');
+    if (card !== null && /^\d+$/.test(card)) {
+      const row = document.querySelector(`[data-deck-index="${Number(card)}"]`);
+      if (row) {
+        row.click();
+        document.querySelector('#deck_builder_preview')?.scrollIntoView({block: 'start'});
+        row.focus({preventScroll: true});
+      }
+    }
   }
 }
 

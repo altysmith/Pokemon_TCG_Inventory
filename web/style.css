@@ -1444,3 +1444,10 @@ body.has-app-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 .deck-library-open .deck-allocation-badge { display: block; font-size: 12px; color: #f2c966; }
 .deck-library-open .deck-allocation-badge.is-ready { color: #65d6a2; }
 .deck-allocation-source button { overflow-wrap: anywhere; padding: 8px; }
+.collection-allocation-summary { margin: 0 0 24px; padding: 18px; border: 1px solid var(--binder-border-strong); border-radius: 12px; background: var(--binder-panel); }
+.collection-allocation-summary h2 { margin: 0 0 12px; font-size: 20px; }
+.collection-allocation-summary a { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--binder-border); color: var(--binder-text); text-decoration: none; overflow-wrap: anywhere; }
+.collection-allocation-summary a span, .collection-allocation-summary p { color: var(--binder-muted); font-size: 13px; line-height: 1.5; }
+.collection-allocation-summary a b { color: #78b9f5; font-size: 13px; }
+.collection-allocation-summary p { margin-bottom: 0; }
+.deck-view-card-status { white-space: normal; }

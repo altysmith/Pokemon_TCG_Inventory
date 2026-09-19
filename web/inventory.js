@@ -717,13 +717,19 @@ function deckViewGroup(item) {
 function deckViewStatus(item) {
   if (item.status === 'ignored') return 'Basic Energy · not checked';
   if (item.status === 'unresolved') return 'Needs review';
+  if (item.allocation) {
+    const assigned = Number(item.allocation.assigned || 0);
+    const needed = Math.max(0, item.requested - assigned);
+    return needed ? `${assigned}/${item.requested} allocated · allocate ${needed}` : `${assigned}/${item.requested} allocated`;
+  }
   if (Number(item.missing || 0) > 0) return `${item.covered || 0} owned · need ${item.missing}`;
   return `${item.covered || 0} owned`;
 }
 
 function deckViewCard(item, prioritizeImage = false) {
   const tile = document.createElement('button');
-  tile.className = `binder-card deck-view-card${item.status === 'ready' ? ' is-ready' : item.status === 'ignored' ? ' is-ignored' : ' is-needed'}`;
+  const ready = item.allocation ? item.allocation.assigned >= item.requested : item.status === 'ready';
+  tile.className = `binder-card deck-view-card${item.status === 'ignored' ? ' is-ignored' : ready ? ' is-ready' : ' is-needed'}`;
   tile.type = 'button';
   tile.setAttribute('aria-label', `Inspect ${item.name}, ${item.requested} in deck, ${deckViewStatus(item)}`);
   const art = document.createElement('span');
@@ -779,6 +785,30 @@ function renderDeckView(deck) {
     ['energy', 'Energy'],
   ];
   const fragment = document.createDocumentFragment();
+  const shortages = items.filter(item => item.status !== 'ignored' && item.allocation && item.allocation.assigned < item.requested);
+  const allocations = document.createElement('section');
+  allocations.className = 'collection-allocation-summary';
+  const allocationTitle = document.createElement('h2');
+  allocationTitle.textContent = shortages.length ? 'Cards needing allocation' : 'All checked cards are allocated';
+  allocations.append(allocationTitle);
+  for (const item of shortages) {
+    const link = document.createElement('a');
+    link.href = `/deck?deck=${deck.id}&card=${item.allocation.index}`;
+    const name = document.createElement('strong');
+    name.textContent = `${item.name} · allocate ${item.requested - item.allocation.assigned}`;
+    const detail = document.createElement('span');
+    const sources = [...new Set(item.allocation.sources.filter(source => source.deck_id).map(source => source.deck_name))];
+    const free = item.allocation.sources.some(source => !source.deck_id);
+    detail.textContent = [free ? 'Unallocated copies available' : '', sources.length ? `In ${sources.join(', ')}` : '', item.missing ? `${item.missing} not owned` : ''].filter(Boolean).join(' · ') || 'Review available copies';
+    const action = document.createElement('b');
+    action.textContent = 'Review allocation →';
+    link.append(name, detail, action);
+    allocations.append(link);
+  }
+  const allocationNote = document.createElement('p');
+  allocationNote.textContent = 'Basic Energy is not checked. Reviewing allocations does not move any cards.';
+  allocations.append(allocationNote);
+  fragment.append(allocations);
   let imageIndex = 0;
   for (const [key, label] of sections) {
     const cards = items.filter((item) => deckViewGroup(item) === key);
@@ -810,7 +840,7 @@ async function refreshDeckView(deckId = state.deckId) {
   state.deckError = '';
   render();
   try {
-    const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list});
+    const data = await inventoryRequest('/deck/check', {deck_list: deck.deck_list, deck_id: deck.id});
     if (state.deckId !== deckId) return;
     state.deckData = data;
   } catch (error) {
