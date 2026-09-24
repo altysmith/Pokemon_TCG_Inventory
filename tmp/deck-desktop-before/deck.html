@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b0f13">
+    <title>Deck Inventory Check</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/theme.js"></script>
+  </head>
+  <body class="catalog-body">
+    <main class="catalog-app">
+      <aside class="catalog-sidebar">
+        <div class="binder-brand">
+          <span class="binder-brand-mark" aria-hidden="true">◆</span>
+          <div><strong>Deck Check</strong><small>Local inventory comparison</small></div>
+        </div>
+        <div class="catalog-sidebar-note">
+          <strong>READ ONLY</strong>
+          <span>Checking a deck never changes your collection.</span>
+        </div>
+        <button id="theme_toggle" class="binder-theme-toggle" type="button">Light mode</button>
+      </aside>
+
+      <section class="catalog-main deck-main">
+        <header class="catalog-header deck-header">
+          <div>
+            <p class="binder-view-eyebrow">Limitless · Pokémon TCG Live</p>
+            <h1>Decks</h1>
+            <p>Paste a copied deck list and compare every card with your physical collection.</p>
+          </div>
+        </header>
+
+        <div class="deck-start-action"><button id="deck_new" class="catalog-search-button" type="button" aria-controls="deck_import_panel" aria-expanded="false">+ Check a new deck</button></div>
+        <section id="deck_import_panel" class="deck-import-panel" hidden>
+          <form id="deck_form">
+            <div class="deck-editor-heading">
+              <label for="deck_list">Deck list</label>
+
+            </div>
+            <textarea id="deck_list" spellcheck="false" placeholder="Pokémon: 18&#10;4 Raging Bolt ex TEF 123&#10;&#10;Trainer: 34&#10;4 Professor's Research SVI 189&#10;&#10;Energy: 8&#10;6 Basic Lightning Energy SVE 4"></textarea>
+            <div class="deck-import-actions">
+              <p>Pokémon use the requested printing or a gameplay-identical alternate artwork. Trainers and Special Energy match by name. Basic Energy is ignored.</p>
+              <button id="deck_submit" class="catalog-search-button" type="submit">Check my inventory</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="deck-library-panel" aria-labelledby="deck_library_heading">
+          <header>
+            <div>
+              <h2 id="deck_library_heading">Saved Decks</h2>
+            </div>
+            <div class="deck-library-controls">
+              <strong id="deck_library_count">0 decks</strong>
+              <button id="deck_library_toggle" type="button" aria-expanded="true" aria-controls="deck_library_content">Hide decks</button>
+            </div>
+          </header>
+          <div id="deck_library_content">
+          <p id="deck_library_status" class="deck-library-status" role="status">Loading saved decks…</p>
+<label class="saved-deck-sort">Sort decks<select id="saved_deck_sort"><option value="name_az">Name A–Z</option><option value="name_za">Name Z–A</option><option value="updated">Recently updated</option><option value="created">Newest added</option></select></label>
+          <div id="deck_library_cards" class="deck-library-cards"></div>
+          </div>
+        </section>
+
+        <section id="deck_summary" class="deck-summary" hidden aria-live="polite"></section>
+        <section id="deck_save_panel" class="deck-save-panel" hidden>
+          <div>
+            <label for="deck_name">Deck name</label>
+            <input id="deck_name" type="text" maxlength="80" autocomplete="off" placeholder="Example: Raging Bolt">
+          </div>
+          <button id="deck_save" class="catalog-search-button" type="button">Save to deck library</button>
+          <p id="deck_save_status" role="status">Saving automatically labels available owned copies without changing quantities or storage locations.</p>
+        </section>
+        <p id="deck_status" class="deck-status" role="status">Paste a deck list when you are ready.</p>
+        <section id="deck_errors" class="deck-errors" hidden></section>
+        <section id="deck_results" class="deck-results" aria-live="polite"></section>
+      </section>
+    </main>
+    <script src="/app-shell.js"></script>
+    <script src="/card-inspector.js"></script>
+    <script src="/deck.js"></script>
+    <script src="/desktop-session.js"></script>
+  </body>
+</html>

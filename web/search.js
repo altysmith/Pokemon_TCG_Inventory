@@ -242,7 +242,6 @@ async function loadCatalog() {
     const response = await fetch(`/catalog/search?${parameters}`, {cache: 'no-store', signal: searchState.request.signal});
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Catalog search failed');
-    fillFacets(result);
     searchState.total = result.total;
     renderCards(result.items);
     updatePagination();
@@ -310,16 +309,17 @@ async function startSearch() {
   try {
     const response = await fetch('/health', {cache: 'no-store'});
     const health = await response.json();
-    if (!response.ok || health.iteration !== SEARCH_ITERATION || !health.local_catalog_available) {
+    const hostedHealth = health.ok === true && health.multi_user === true;
+    if (!response.ok || (!hostedHealth && (health.iteration !== SEARCH_ITERATION || !health.local_catalog_available))) {
       throw new Error(`Restart the collection app to load Iteration ${SEARCH_ITERATION} and its local catalog.`);
     }
     const facetsResponse = await fetch('/catalog/facets', {cache: 'no-store'});
     const facets = await facetsResponse.json();
     if (!facetsResponse.ok || !facets.ok) throw new Error(facets.error || 'Search options could not be loaded.');
     fillFacets(facets);
-    clearPendingResults();
+    if (!searchState.hasSearched) clearPendingResults();
   } catch (error) {
-    statusText.textContent = error.message;
+    if (!searchState.hasSearched) statusText.textContent = error.message;
   }
 }
 

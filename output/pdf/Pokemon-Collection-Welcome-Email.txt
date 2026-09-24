@@ -1,0 +1,25 @@
+To: trehendrickson@gmail.com; mlmasingo@gmail.com
+Subject: Your Pokémon collection app access + getting-started guide
+Attachment: Pokemon-Collection-Getting-Started.pdf
+
+Hi both,
+
+You now have access to the Pokémon collection app:
+https://cards.altylab.com
+
+Choose Sign in with Google using the Gmail address this email was sent to. You can also enter that address and request an emailed login code.
+
+Each of you has your own separate, empty collection and saved decks. You can:
+- Search for cards and track how many copies you own.
+- Organize cards into boxes, binders, or other locations.
+- Paste deck lists and see which cards you own or still need.
+- Save and edit decks, and view a combined missing-card list.
+- Export your collection or import a supported collection file.
+
+The attached three-page guide walks through the buttons and steps. A good first try is to add a few cards in Search, open Collection to check them, and then paste a deck list into Decks.
+
+The app works in your phone or computer browser. Use the same email each time to keep using the same save.
+
+Let me know if you have any trouble signing in or using it.
+
+Eric
