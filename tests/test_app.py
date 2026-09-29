@@ -37,6 +37,12 @@ class AppTests(unittest.TestCase):
             ("", "MEG", "086", "132"),
         )
 
+    def test_digit_containing_set_code_is_preserved(self) -> None:
+        self.assertEqual(
+            extract_footer_fields("30C EN 001/128"),
+            ("", "30C", "001", "128"),
+        )
+
     def test_attached_regulation_mark_and_language_noise_are_separated(self) -> None:
         self.assertEqual(
             extract_footer_fields("IDRIN 135/182"),
