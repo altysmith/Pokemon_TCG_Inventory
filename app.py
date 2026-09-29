@@ -42,12 +42,8 @@ SCANNER_DATA = ScannerData(DATA_PATH)
 MAX_REQUEST_BYTES = 30 * 1024 * 1024
 ITERATION = 5
 ITERATION_NAME = "Labeled OCR benchmark"
-# Set codes may include digits (for example, the 30th Celebration code ``30C``).
-# Keep numeric-only collector numbers out of this group.
-LETTER_RE = re.compile(r"[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*")
-# Do not treat digits embedded in an alphanumeric set code (such as ``30C``)
-# as a collector number.
-NUMBER_RE = re.compile(r"(?<![A-Za-z0-9])\d+(?![A-Za-z0-9])")
+LETTER_RE = re.compile(r"[A-Za-z]+")
+NUMBER_RE = re.compile(r"\d+")
 CURRENT_REGULATION_MARKS = frozenset("ABCDEFGHIJ")
 CSV_COLUMNS = [
     "scanned_at",
@@ -73,9 +69,9 @@ def extract_footer_fields(text: str) -> tuple[str, str, str, str]:
     """Read regulation, set, card number, and total by printed position.
 
     This deliberately uses no known-set list. A one-letter token immediately
-    before the first set-code token is the regulation mark; the alphanumeric
-    token is the literal set-code read. The exact ``en`` language marker is
-    ignored.
+    before the first multi-letter token is the regulation mark; the
+    multi-letter token is the literal set-code read. The exact ``en`` language
+    marker is ignored.
     """
     letter_tokens = [
         token.upper()

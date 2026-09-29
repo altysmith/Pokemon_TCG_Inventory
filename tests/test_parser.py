@@ -14,16 +14,6 @@ class ParserTests(unittest.TestCase):
         result = parse_card_text("ASC 162/217")
         self.assertEqual((result.set_code, result.card_number, result.set_total), ("ASC", "162", "217"))
 
-    def test_30th_celebration(self) -> None:
-        result = parse_card_text("30C 001/128")
-        self.assertEqual((result.set_code, result.card_number, result.set_total), ("30C", "1", "128"))
-
-        values = {
-            item.value
-            for item in extract_code_observations("30C 001/128", known_set_codes())
-        }
-        self.assertIn("30C", values)
-
     def test_english_marker_is_ignored(self) -> None:
         result = parse_card_text("ASC EN 162/217")
         self.assertEqual((result.set_code, result.card_number, result.set_total), ("ASC", "162", "217"))

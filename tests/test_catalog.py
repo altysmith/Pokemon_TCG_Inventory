@@ -8,7 +8,7 @@ class CatalogTests(unittest.TestCase):
         codes = known_set_codes()
         self.assertGreaterEqual(len(codes), 140)
         self.assertTrue(
-            {"30C", "ASC", "MEG", "MEP", "PRE", "PAL", "DRI", "POR"} <= codes
+            {"ASC", "MEG", "MEP", "PRE", "PAL", "DRI", "POR"} <= codes
         )
 
     def test_mep_has_offline_validation_metadata(self) -> None:
@@ -20,12 +20,6 @@ class CatalogTests(unittest.TestCase):
         details = set_catalog()["SSP"]
         self.assertEqual(details["tcgdex_id"], "sv08")
         self.assertEqual(details["printed_total"], 191)
-
-    def test_30th_celebration_has_verified_tcgdex_mapping(self) -> None:
-        details = set_catalog()["30C"]
-        self.assertEqual(details["name"], "30th Celebration")
-        self.assertEqual(details["tcgdex_id"], "30th")
-        self.assertEqual(details["printed_total"], 128)
 
 
 if __name__ == "__main__":
