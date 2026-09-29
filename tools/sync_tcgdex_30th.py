@@ -65,6 +65,14 @@ def category(value: object) -> str:
     raise ValueError(f"Unsupported TCGdex card category: {value!r}")
 
 
+def image_url(card: dict) -> str:
+    """Turn TCGdex's image base URL into a browser-displayable card image."""
+    base_url = str(card.get("image", "")).rstrip("/")
+    if not base_url.startswith("https://assets.tcgdex.net/"):
+        raise ValueError(f"TCGdex card image URL is invalid: {base_url!r}")
+    return f"{base_url}/high.webp"
+
+
 def sync(database_path: Path, raw_root: Path) -> tuple[int, Path]:
     set_payload = fetch_json(SOURCE_URL)
     if set_payload.get("id") != SET_SLUG or set_payload.get("name") != "30th Celebration":
@@ -149,7 +157,7 @@ def sync(database_path: Path, raw_root: Path) -> tuple[int, Path]:
                     f"{SET_ID}:{number}", SET_ID, card["name"], card_type, subtype, number,
                     int(number) if number.isdigit() else None,
                     str(set_payload["cardCount"]["official"]), card.get("hp"), card.get("rarity"),
-                    card.get("stage"), card.get("image"),
+                    card.get("stage"), image_url(card),
                 ),
             )
             for type_position, card_type_name in enumerate(card.get("types") or []):
@@ -169,7 +177,7 @@ def sync(database_path: Path, raw_root: Path) -> tuple[int, Path]:
             )
             connection.execute(
                 "INSERT INTO card_images(card_id, source_id, image_format, face, variant, url) VALUES (?, ?, 'webp', 'front', 'front', ?)",
-                (f"{SET_ID}:{number}", source_id, card.get("image")),
+                (f"{SET_ID}:{number}", source_id, image_url(card)),
             )
     return len(cards), snapshot_path
 
