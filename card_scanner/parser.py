@@ -55,7 +55,9 @@ class NumberCandidate:
     reasons: tuple[str, ...] = ()
 
 
-_TOKEN_RE = re.compile(r"[A-Z]{2,}(?:-[A-Z]+)?")
+# Printed set codes can contain digits, such as 30C. Require at least one
+# letter so collector numbers remain number evidence rather than code evidence.
+_TOKEN_RE = re.compile(r"(?=[A-Z0-9]*[A-Z])[A-Z0-9]{2,}(?:-[A-Z0-9]+)?")
 _PAIR_RE = re.compile(
     r"(?<!\d)(\d(?:\s*\d){0,2})\s*(?P<sep>[/\\|Il4])\s*"
     r"(\d(?:\s*\d){0,3})(?!\d)"
@@ -186,7 +188,10 @@ def extract_number_observations(text: str) -> tuple[NumberObservation, ...]:
 def parse_card_text(text: str) -> ParsedCard:
     """Compatibility parser for a single clean-ish OCR string."""
     normalized = normalize_ocr_text(text)
-    code_match = re.search(r"(?<![A-Z])([A-Z]{3})(?:\s*EN)?(?![A-Z])", normalized)
+    code_match = re.search(
+        r"(?<![A-Z0-9])(?=[A-Z0-9]{0,2}[A-Z])([A-Z0-9]{3})(?:\s*EN)?(?![A-Z0-9])",
+        normalized,
+    )
     pairs = [item for item in extract_number_observations(normalized) if item.total]
     pair = max(pairs, key=lambda item: item.weight, default=None)
     return ParsedCard(
