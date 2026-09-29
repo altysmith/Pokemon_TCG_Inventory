@@ -26,7 +26,7 @@ function setup(hosted = false) {
       querySelector(id) { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); },
       createElement: node,
     },
-    Option: function(text, value) { this.text = text; this.value = value; },
+    Option: function(text, value) { this.text = text; this.value = value; this.dataset = {}; },
     AbortController, URLSearchParams,
     fetch: async url => {
       urls.push(url);

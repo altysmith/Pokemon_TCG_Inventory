@@ -36,6 +36,7 @@ function fillFacets(result) {
   if (searchState.facetsLoaded) return;
   result.sets.forEach(set => {
     const option = new Option(`${set.code} · ${set.name}`, set.id);
+    option.dataset.standardLegal = String(Boolean(set.standard_legal));
     setFilter.add(option);
   });
   searchState.facetsLoaded = true;
@@ -270,6 +271,12 @@ function restartSearch() {
 }
 
 searchForm.addEventListener('submit', event => { event.preventDefault(); restartSearch(); });
+setFilter.addEventListener('change', () => {
+  const selectedSet = setFilter.selectedOptions[0];
+  if (setFilter.value && formatFilter.value === 'standard' && selectedSet?.dataset.standardLegal === 'false') {
+    formatFilter.value = 'expanded';
+  }
+});
 [queryInput, setFilter, formatFilter, cardTypeFilter].forEach(control => {
   control.addEventListener(control === queryInput ? 'input' : 'change', clearPendingResults);
   control.addEventListener('keydown', event => {

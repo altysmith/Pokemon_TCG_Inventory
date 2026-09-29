@@ -690,6 +690,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in items["items"]], ["j-item"])
         self.assertEqual([item["id"] for item in ace_specs["items"]], ["j-item"])
         self.assertEqual(facets["formats"][0]["marks"], ["H", "I", "J"])
+        self.assertTrue(facets["sets"][0]["standard_legal"])
 
     def test_catalog_quantity_revalidates_canonical_card_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

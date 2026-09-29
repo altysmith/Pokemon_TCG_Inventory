@@ -913,10 +913,17 @@ def catalog_facets() -> dict:
             dict(row)
             for row in connection.execute(
                 """
-                SELECT id, name, code FROM sets
-                WHERE language = 'en-US'
+                SELECT s.id, s.name, s.code,
+                       EXISTS(
+                           SELECT 1 FROM cards c
+                           WHERE c.set_id = s.id
+                             AND c.regulation_mark IN (?, ?, ?)
+                       ) AS standard_legal
+                FROM sets s
+                WHERE s.language = 'en-US'
                 ORDER BY release_date DESC, name COLLATE NOCASE
-                """
+                """,
+                STANDARD_REGULATION_MARKS,
             ).fetchall()
         ]
     return {
