@@ -79,7 +79,6 @@ const deckEditorEntries = document.querySelector('#deck_editor_entries');
 const deckEditorAllocate = document.querySelector('#deck_editor_allocate');
 const deckEditorSearchForm = document.querySelector('#deck_editor_search_form');
 const deckEditorQuery = document.querySelector('#deck_editor_query');
-const deckEditorType = document.querySelector('#deck_editor_type');
 const deckEditorSearchResults = document.querySelector('#deck_editor_search_results');
 const deckAssignmentDialog = document.querySelector('#deck_assignment_dialog');
 const deckAssignmentClose = document.querySelector('#deck_assignment_close');
@@ -182,7 +181,7 @@ const selectionState = {
   quantities: new Map(),
 };
 let savedDecks = [];
-const deckEditorState = {deckId: 0, entries: [], searching: false};
+const deckEditorState = {deckId: 0, entries: [], selectedEntryKey: '', searching: false};
 const deckAssignmentState = {deckId: 0, sourceCardId: ''};
 
 function titleCase(value) {
@@ -1040,7 +1039,11 @@ function renderDeckEditorEntries() {
   deckEditorSummary.textContent = `${deckEditorState.entries.length} unique ${deckEditorState.entries.length === 1 ? 'entry' : 'entries'} · ${assigned} owned ${assigned === 1 ? 'card is' : 'cards are'} assigned to this deck · Storage locations are unchanged.`;
   const rows = deckEditorState.entries.map((entry, index) => {
     const article = document.createElement('article');
-    article.className = 'deck-editor-entry';
+    const key = deckEntryKey(entry);
+    const selected = deckEditorState.selectedEntryKey === key;
+    article.className = `deck-editor-entry${selected ? ' is-selected' : ''}`;
+    article.tabIndex = 0;
+    article.setAttribute('aria-label', `${entry.name}, quantity ${entry.quantity}. Select to show quantity controls.`);
     const art = document.createElement('button');
     art.className = `deck-editor-entry-art${entry.image_url ? '' : ' image-missing'}`;
     art.type = 'button';
@@ -1077,6 +1080,7 @@ function renderDeckEditorEntries() {
     }
     const controls = document.createElement('div');
     controls.className = 'deck-editor-entry-controls';
+    controls.hidden = !selected;
     const minus = document.createElement('button');
     minus.type = 'button';
     minus.textContent = '−';
@@ -1093,11 +1097,23 @@ function renderDeckEditorEntries() {
     plus.textContent = '+';
     plus.setAttribute('aria-label', `Add one ${entry.name}`);
     const update = (value) => void updateDeckEntryQuantity(index, value);
+    controls.addEventListener('click', (event) => event.stopPropagation());
     minus.addEventListener('click', () => update(Math.max(0, entry.quantity - 1)));
     plus.addEventListener('click', () => update(Math.min(60, entry.quantity + 1)));
     quantity.addEventListener('change', () => update(Number(quantity.value)));
     controls.append(minus, quantity, plus);
     article.append(art, identity, controls);
+    const select = () => {
+      deckEditorState.selectedEntryKey = key;
+      renderDeckEditorEntries();
+    };
+    article.addEventListener('click', select);
+    article.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        select();
+      }
+    });
     return article;
   });
   if (!rows.length) {
@@ -1152,6 +1168,7 @@ async function updateDeckEntryQuantity(index, requested) {
   const original = deckEditorState.entries.map((entry) => ({...entry}));
   const entry = deckEditorState.entries[index];
   if (!entry) return;
+  deckEditorState.selectedEntryKey = deckEntryKey(entry);
   if (quantity === 0) deckEditorState.entries.splice(index, 1);
   else entry.quantity = quantity;
   renderDeckEditorEntries();
@@ -1186,8 +1203,10 @@ async function addCatalogCardToDeck(card) {
     }
     existing.quantity += 1;
     if (!existing.image_url) existing.image_url = entry.image_url;
+    deckEditorState.selectedEntryKey = deckEntryKey(existing);
   } else {
     deckEditorState.entries.push(entry);
+    deckEditorState.selectedEntryKey = deckEntryKey(entry);
   }
   renderDeckEditorEntries();
   const saved = await saveDeckEditorEntries(`${card.name} was added to the deck. Ownership was not changed.`);
@@ -1243,20 +1262,19 @@ function renderDeckCatalogResults(cards, total) {
 async function searchDeckCatalog(event) {
   event.preventDefault();
   const query = deckEditorQuery.value.trim();
-  const type = deckEditorType.value;
-  if (!query && !type) {
-    setDeckEditorStatus('Enter a card name or choose a card type before searching.', 'error');
+  if (!query) {
+    setDeckEditorStatus('Enter a card name before searching.', 'error');
     deckEditorQuery.focus();
     return;
   }
   setDeckEditorStatus('Searching the full local card catalog…');
-  const parameters = new URLSearchParams({q: query, type, format: 'expanded', limit: '30', offset: '0'});
+  const parameters = new URLSearchParams({q: query, name_only: 'true', limit: '30', offset: '0'});
   try {
     const response = await fetch(`/catalog/search?${parameters}`, {cache: 'no-store'});
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Catalog search failed.');
     renderDeckCatalogResults(data.items || [], data.total || 0);
-    setDeckEditorStatus('Choose Add beside any printing. Unowned cards are allowed.');
+    setDeckEditorStatus('Showing name matches only. Choose + Add beside any printing. Unowned cards are allowed.');
   } catch (error) {
     deckEditorSearchResults.replaceChildren();
     setDeckEditorStatus(error.message, 'error');
@@ -1307,8 +1325,8 @@ async function openDeckEditor(id) {
   deckEditorTitle.textContent = deck.name;
   deckEditorSearchResults.replaceChildren();
   deckEditorQuery.value = '';
-  deckEditorType.value = '';
-  setDeckEditorStatus('Use −, +, or enter a quantity. Changes save immediately.');
+  deckEditorState.selectedEntryKey = '';
+  setDeckEditorStatus('Select a card to show − and + quantity controls. Changes save immediately.');
   renderDeckEditorEntries();
   deckEditorDialog.showModal();
   await hydrateDeckEditorArtwork(deck);

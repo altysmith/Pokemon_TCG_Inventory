@@ -533,7 +533,9 @@ input:focus { border-color: var(--ink); }
 .deck-editor-section-heading h3 { margin: 4px 0 0; font-size: 19px; }
 .deck-editor-section-heading > strong { color: var(--binder-muted); font-size: 12px; }
 .deck-editor-entries { display: grid; gap: 8px; margin-top: 15px; }
-.deck-editor-entry { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--binder-border); border-radius: 10px; background: var(--binder-panel); padding: 8px; }
+.deck-editor-entry { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--binder-border); border-radius: 10px; background: var(--binder-panel); padding: 8px; cursor: pointer; }
+.deck-editor-entry.is-selected { border-color: var(--binder-accent); box-shadow: 0 0 0 2px var(--binder-accent-soft); }
+.deck-editor-entry:focus-visible { outline: 3px solid rgba(120,185,245,.4); outline-offset: 2px; }
 .deck-editor-entry-art, .deck-editor-result-art { overflow: hidden; border: 0; border-radius: 6px; background: var(--binder-panel-raised); padding: 0; cursor: zoom-in; }
 .deck-editor-entry-art { width: 52px; aspect-ratio: 5 / 7; }
 .deck-editor-entry-art img, .deck-editor-result-art img { width: 100%; height: 100%; object-fit: cover; }
@@ -551,7 +553,7 @@ input:focus { border-color: var(--ink); }
 .deck-editor-entry-controls button:first-child { border-radius: 7px 0 0 7px; }
 .deck-editor-entry-controls button:last-child { border-radius: 0 7px 7px 0; }
 .deck-editor-entry-controls input { width: 48px; border-inline: 0; font-weight: 800; }
-.deck-editor-search-form { display: grid; grid-template-columns: minmax(0, 1fr) 145px auto; gap: 8px; }
+.deck-editor-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .deck-editor-search-form input, .deck-editor-search-form select { min-height: 42px; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-bg); color: var(--binder-text); padding: 0 11px; }
 .deck-editor-search-form button { border: 1px solid var(--binder-accent); border-radius: 8px; background: var(--binder-accent); color: #fff; padding: 0 15px; font-weight: 850; cursor: pointer; }
 .deck-editor-search-results { display: grid; gap: 8px; margin-top: 15px; }

@@ -942,6 +942,7 @@ def catalog_search(
     set_id: str = "",
     format_name: str = "",
     card_category: str = "",
+    name_only: bool = False,
     limit: int = 48,
     offset: int = 0,
 ) -> dict:
@@ -982,18 +983,22 @@ def catalog_search(
                 parameters.append(card_subtype)
     terms = re.findall(r"[A-Za-z0-9'-]+", query.strip())[:6]
     for term in terms:
-        filters.append(
-            """(
-                c.name LIKE ? COLLATE NOCASE
-                OR s.name LIKE ? COLLATE NOCASE
-                OR EXISTS (
-                    SELECT 1 FROM set_codes sc
-                    WHERE sc.set_id = s.id AND sc.code = ? COLLATE NOCASE
-                )
-                OR ltrim(c.number, '0') = ltrim(?, '0')
-            )"""
-        )
-        parameters.extend((f"%{term}%", f"%{term}%", term, term))
+        if name_only:
+            filters.append("c.name LIKE ? COLLATE NOCASE")
+            parameters.append(f"%{term}%")
+        else:
+            filters.append(
+                """(
+                    c.name LIKE ? COLLATE NOCASE
+                    OR s.name LIKE ? COLLATE NOCASE
+                    OR EXISTS (
+                        SELECT 1 FROM set_codes sc
+                        WHERE sc.set_id = s.id AND sc.code = ? COLLATE NOCASE
+                    )
+                    OR ltrim(c.number, '0') = ltrim(?, '0')
+                )"""
+            )
+            parameters.extend((f"%{term}%", f"%{term}%", term, term))
     where = " WHERE " + " AND ".join(filters)
     order_by = (
         "c.number_numeric, c.number, c.name COLLATE NOCASE"
@@ -1740,6 +1745,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                             set_id=query.get("set", [""])[0],
                             format_name=query.get("format", [""])[0],
                             card_category=query.get("type", [""])[0],
+                            name_only=query.get("name_only", [""])[0].lower() in {"1", "true", "yes"},
                             limit=int(query.get("limit", [48])[0]),
                             offset=int(query.get("offset", [0])[0]),
                         ),

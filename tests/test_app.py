@@ -637,11 +637,15 @@ class AppTests(unittest.TestCase):
                 result = catalog_search(
                     "PRE 11", format_name="standard", card_category="pokemon"
                 )
+                name_match = catalog_search("Budew", name_only=True)
+                set_only_match = catalog_search("PRE", name_only=True)
 
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["id"], "card-pre-011")
         self.assertEqual(result["items"][0]["quantity"], 7)
         self.assertEqual(result["language"], "en-US")
+        self.assertEqual([item["id"] for item in name_match["items"]], ["card-pre-011"])
+        self.assertEqual(set_only_match["total"], 0)
 
     def test_catalog_search_requires_submission_criteria_and_filters_format_and_type(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1225,7 +1229,7 @@ class AppTests(unittest.TestCase):
         self.assertIn("async function openDeckEditor", inventory_javascript)
         self.assertIn("async function addCatalogCardToDeck", inventory_javascript)
         self.assertIn("async function updateDeckEntryQuantity", inventory_javascript)
-        self.assertIn("format: 'expanded'", inventory_javascript)
+        self.assertIn("name_only: 'true'", inventory_javascript)
         self.assertIn("Ownership was not changed", inventory_javascript)
         self.assertIn("function openMoveDialog", inventory_javascript)
         self.assertIn(".collection-selection-toolbar", stylesheet)
