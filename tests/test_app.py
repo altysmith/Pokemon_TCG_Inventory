@@ -1300,7 +1300,7 @@ class AppTests(unittest.TestCase):
         self.assertIn("function startNewDeck", deck_javascript)
         self.assertIn(".deck-library-cards", stylesheet)
         self.assertIn("deck-missing-gallery", deck_javascript)
-        self.assertIn("Full deck list", deck_javascript)
+        self.assertIn("Cards in this deck", deck_javascript)
         self.assertIn('id="deck_copy_full_list"', deck_javascript)
         self.assertIn("async function copyCheckedDeckList", deck_javascript)
         self.assertIn("copyTextToClipboard(lastCheckedClipboardDeckList)", deck_javascript)
@@ -1308,19 +1308,9 @@ class AppTests(unittest.TestCase):
         self.assertIn('id="deck_builder_preview"', deck_javascript)
         self.assertIn("function renderDeckBuilderPreview", deck_javascript)
         self.assertIn("deck-builder-layout", deck_javascript)
-        self.assertLess(
-            deck_javascript.index("deckBuilderGroup('Pokémon'"),
-            deck_javascript.index("deckBuilderGroup('Trainer'"),
-        )
-        self.assertLess(
-            deck_javascript.index("deckBuilderGroup('Trainer'"),
-            deck_javascript.index('id="deck_builder_preview"'),
-        )
-        self.assertLess(
-            deck_javascript.index("Missing cards"),
-            deck_javascript.index("Full deck list"),
-        )
-        self.assertIn("Missing cards", deck_javascript)
+        self.assertIn("deck-visual-grid", deck_javascript)
+        self.assertIn("data-deck-card-quantity", deck_javascript)
+        self.assertIn("Needed cards", deck_javascript)
         self.assertNotIn("Cards you already have", deck_javascript)
         self.assertIn("Same-name substitute available", deck_javascript)
         self.assertIn("async function useSameNameSubstitute", deck_javascript)

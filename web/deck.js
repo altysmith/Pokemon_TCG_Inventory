@@ -25,26 +25,16 @@ displayCard.addEventListener('change', () => {
 });
 const desktopDeckView = window.matchMedia('(min-width: 761px)');
 const workspaceTitle = document.querySelector('#deck_workspace_title');
-const editCurrentButton = document.querySelector('#deck_edit_current');
 
-function showDeckWorkspace(title, editing = false) {
+function showDeckWorkspace(title) {
   document.body.classList.add('deck-workspace-active');
   workspaceTitle.textContent = title;
-  editCurrentButton.hidden = editing;
 }
 
 document.querySelector('#deck_back').addEventListener('click', () => {
   document.body.classList.remove('deck-workspace-active');
   setLibraryExpanded(true);
   requestAnimationFrame(() => (libraryCards.querySelector(`[data-open-deck="${currentSavedDeckId}"]`) || newDeckButton).focus());
-});
-editCurrentButton.addEventListener('click', () => {
-  revealDeckEditor();
-  editCurrentButton.hidden = true;
-  deckList.focus();
-});
-desktopDeckView.addEventListener('change', event => {
-  if (!event.matches && document.body.classList.contains('deck-workspace-active')) revealDeckEditor();
 });
 
 let savedDecks = [];
@@ -338,17 +328,11 @@ async function saveCheckedDeck() {
   }
 }
 
-function revealDeckEditor() {
-  document.querySelector('#deck_import_panel').hidden = false;
-  newDeckButton.setAttribute('aria-expanded', 'true');
-}
-
 function editSavedDeck(id) {
   const deck = savedDecks.find(item => item.id === id);
   if (!deck) return;
   displayCard.value = deck.display_image || '';
-  showDeckWorkspace(`Edit ${deck.name}`, true);
-  revealDeckEditor();
+  showDeckWorkspace(`Edit ${deck.name}`);
   setLibraryExpanded(false);
   currentSavedDeckId = id;
   lastCheckedDeckList = '';
@@ -360,16 +344,14 @@ function editSavedDeck(id) {
   summary.hidden = true;
   errorsContainer.hidden = true;
   resultsContainer.replaceChildren();
-  statusText.textContent = `Editing ${deck.name}. Check your changes, then choose “Update saved deck”.`;
+  statusText.textContent = `Editing ${deck.name}. Changes to pictured cards are checked automatically.`;
   renderDeckLibrary();
-  deckList.focus({preventScroll: true});
-  form.scrollIntoView({behavior: 'smooth', block: 'start'});
+  void checkCurrentDeck();
 }
 
 function startNewDeck() {
   displayCard.value = '';
-  showDeckWorkspace('Check a new deck', true);
-  revealDeckEditor();
+  showDeckWorkspace('Build a new deck');
   setLibraryExpanded(false);
   currentSavedDeckId = 0;
   lastCheckedDeckList = '';
@@ -381,9 +363,9 @@ function startNewDeck() {
   summary.hidden = true;
   errorsContainer.hidden = true;
   resultsContainer.replaceChildren();
-  statusText.textContent = 'Paste a new deck list when you are ready.';
+  statusText.textContent = 'Search by card name to add the first card.';
   renderDeckLibrary();
-  deckList.focus();
+  renderEmptyDeckBuilder();
 }
 
 function renderSummary(data) {
@@ -687,6 +669,43 @@ async function moveDeckAllocation(item, index, button) {
   }
 }
 
+function deckVisualCard(item, index) {
+  const canEdit = deckBuilderCanEdit();
+  const statusClass = item.allocation?.reserved ? 'is-reserved' : item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed';
+  return `
+    <article class="deck-visual-card ${statusClass}" data-deck-card-index="${index}">
+      <button class="deck-visual-card-select" type="button" data-deck-index="${index}" aria-label="Show ${escapeHtml(item.name)} details">
+        <span class="deck-visual-card-art ${item.image_url ? '' : 'image-missing'}">${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}" loading="lazy">` : ''}</span>
+        <span class="deck-visual-card-copy"><small>${escapeHtml(item.category)}</small><strong>${escapeHtml(item.name)}</strong><em>${escapeHtml(printingLabel(item))}</em></span>
+      </button>
+      ${canEdit ? `<div class="deck-visual-quantity-controls" aria-label="${escapeHtml(item.name)} deck quantity">
+        <button type="button" data-deck-card-quantity="${Math.max(0, item.requested - 1)}" data-deck-card-index="${index}" aria-label="Remove one ${escapeHtml(item.name)}">−</button><strong>${item.requested}</strong><button type="button" data-deck-card-quantity="${Math.min(60, item.requested + 1)}" data-deck-card-index="${index}" aria-label="Add one ${escapeHtml(item.name)}">+</button>
+      </div>` : ''}
+      <span class="deck-visual-card-state">${escapeHtml(deckItemState(item))}</span>
+    </article>`;
+}
+
+function deckBuilderSearchMarkup() {
+  return `<aside class="deck-builder-side"><section class="deck-builder-search">
+    <small>FULL LOCAL CATALOG</small><h3>Add a card</h3>
+    <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search</button></form>
+    <div id="deck_builder_search_results" class="deck-builder-search-results" role="status"></div>
+  </section></aside>`;
+}
+
+function bindDeckBuilderSearch() {
+  document.querySelector('#deck_builder_search_form')?.addEventListener('submit', event => void searchDeckBuilderCatalog(event));
+}
+
+function renderEmptyDeckBuilder() {
+  resultsContainer.innerHTML = `
+    <section class="deck-result-section is-full-deck deck-visual-workspace">
+      <div class="deck-section-heading"><span>CURRENT LIST</span><h2>Cards in this deck <small>0 cards</small></h2></div>
+      <div class="deck-builder-layout"><div class="deck-visual-empty"><strong>Your deck starts here.</strong><p>Search the local catalog by card name to add a pictured card.</p></div>${deckBuilderSearchMarkup()}</div>
+    </section>`;
+  bindDeckBuilderSearch();
+}
+
 function renderResults(items, ignoredBasicEnergy = []) {
   if (!items.length && !ignoredBasicEnergy.length) {
     resultsContainer.innerHTML = `
@@ -735,45 +754,35 @@ function renderResults(items, ignoredBasicEnergy = []) {
   const energyItems = indexedItems.filter(entry => deckGroup(entry.item) === 'energy');
 
   resultsContainer.innerHTML = `
-    <section class="deck-result-section is-missing">
-      <div class="deck-section-heading"><span>NEEDS ATTENTION</span><h2>Missing cards</h2></div>
+    <section class="deck-result-section is-missing deck-needed-strip">
+      <div class="deck-section-heading"><span>CARDS NEEDED</span><h2>Needed cards <small>${missingItems.reduce((total, item) => total + (item.missing || 0), 0)} copies</small></h2></div>
       <div class="deck-card-gallery deck-missing-gallery">${missingMarkup}</div>
     </section>
-    <section class="deck-result-section is-full-deck">
+    <section class="deck-result-section is-full-deck deck-visual-workspace">
       <div class="deck-section-heading has-actions">
-        <div><span>LIMITLESS-STYLE VIEW</span><h2>Full deck list</h2></div>
+        <div><span>CURRENT LIST</span><h2>Cards in this deck <small>${renderedDeckItems.reduce((total, item) => total + item.requested, 0)} cards</small></h2></div>
         <button id="deck_copy_full_list" type="button">Copy deck list</button>
       </div>
       <div class="deck-builder-layout">
-        <div class="deck-builder-column">
-          ${deckBuilderGroup('Pokémon', pokemonItems)}
-          ${deckBuilderGroup('Energy', energyItems)}
-        </div>
-        <div class="deck-builder-column">
-          ${deckBuilderGroup('Trainer', trainerItems)}
-        </div>
-        <aside class="deck-builder-side">
-          <div id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></div>
-          <section class="deck-builder-search">
-            <small>FULL LOCAL CATALOG</small><h3>Add a card</h3>
-            <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search</button></form>
-            <div id="deck_builder_search_results" class="deck-builder-search-results" role="status"></div>
-          </section>
-        </aside>
+        <div class="deck-visual-area"><div class="deck-visual-grid">${indexedItems.map(entry => deckVisualCard(entry.item, entry.index)).join('')}</div><div id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></div></div>
+        ${deckBuilderSearchMarkup()}
       </div>
     </section>`;
 
-  const builderRows = [...document.querySelectorAll('.deck-builder-row')];
-  builderRows.forEach(row => {
+  const visualCards = [...document.querySelectorAll('.deck-visual-card')];
+  document.querySelectorAll('.deck-visual-card-select').forEach(row => {
     row.addEventListener('click', () => {
-      builderRows.forEach(candidate => candidate.classList.toggle('is-selected', candidate === row));
+      visualCards.forEach(candidate => candidate.classList.toggle('is-selected', Number(candidate.dataset.deckCardIndex) === Number(row.dataset.deckIndex)));
       deckBuilderSelectedIndex = Number(row.dataset.deckIndex);
       renderDeckBuilderPreview(renderedDeckItems[deckBuilderSelectedIndex], deckBuilderSelectedIndex);
     });
   });
-  if (builderRows.length) {
-    builderRows[0].classList.add('is-selected');
-    deckBuilderSelectedIndex = Number(builderRows[0].dataset.deckIndex);
+  document.querySelectorAll('[data-deck-card-quantity]').forEach(button => {
+    button.addEventListener('click', () => void updateDeckBuilderQuantity(Number(button.dataset.deckCardIndex), Number(button.dataset.deckCardQuantity)));
+  });
+  if (visualCards.length) {
+    visualCards[0].classList.add('is-selected');
+    deckBuilderSelectedIndex = Number(visualCards[0].dataset.deckCardIndex);
     renderDeckBuilderPreview(renderedDeckItems[deckBuilderSelectedIndex], deckBuilderSelectedIndex);
   }
   document.querySelectorAll('[data-substitute-item]').forEach(button => {
@@ -784,7 +793,7 @@ function renderResults(items, ignoredBasicEnergy = []) {
     ));
   });
   document.querySelector('#deck_copy_full_list')?.addEventListener('click', (event) => void copyCheckedDeckList(event.currentTarget));
-  document.querySelector('#deck_builder_search_form')?.addEventListener('submit', event => void searchDeckBuilderCatalog(event));
+  bindDeckBuilderSearch();
 }
 
 async function checkCurrentDeck() {
@@ -826,18 +835,15 @@ async function openSavedDeck(id) {
   if (!deck) return;
   displayCard.value = deck.display_image || '';
   showDeckWorkspace(deck.name);
-  revealDeckEditor();
   currentSavedDeckId = id;
   deckList.value = deck.deck_list;
   deckName.value = deck.name;
   renderDeckLibrary();
   if (desktopDeckView.matches) {
-    document.querySelector('#deck_import_panel').hidden = true;
-    newDeckButton.setAttribute('aria-expanded', 'false');
     document.querySelector('#deck_back').focus();
     window.scrollTo({top: 0, behavior: 'smooth'});
   } else {
-    form.scrollIntoView({behavior: 'smooth', block: 'start'});
+    window.scrollTo({top: 0, behavior: 'smooth'});
   }
   await checkCurrentDeck();
 }

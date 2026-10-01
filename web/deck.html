@@ -27,29 +27,16 @@
           <div>
             <p class="binder-view-eyebrow">Limitless · Pokémon TCG Live</p>
             <h1>Decks</h1>
-            <p>Paste a copied deck list and compare every card with your physical collection.</p>
+            <p>Build and store pictured deck lists, then compare them with your physical collection.</p>
           </div>
         </header>
 
-        <div class="deck-start-action"><button id="deck_new" class="catalog-search-button" type="button" aria-controls="deck_import_panel" aria-expanded="false">+ Check a new deck</button></div>
+        <div class="deck-start-action"><button id="deck_new" class="catalog-search-button" type="button">+ Build a new deck</button></div>
         <div class="deck-desktop-toolbar">
           <button id="deck_back" type="button">← Back to decks</button>
-          <h2 id="deck_workspace_title">Check a new deck</h2>
-          <button id="deck_edit_current" type="button" hidden>Edit deck list</button>
+          <h2 id="deck_workspace_title">Build a new deck</h2>
         </div>
-        <section id="deck_import_panel" class="deck-import-panel" hidden>
-          <form id="deck_form">
-            <div class="deck-editor-heading">
-              <label for="deck_list">Deck list</label>
-
-            </div>
-            <textarea id="deck_list" spellcheck="false" placeholder="Pokémon: 18&#10;4 Raging Bolt ex TEF 123&#10;&#10;Trainer: 34&#10;4 Professor's Research SVI 189&#10;&#10;Energy: 8&#10;6 Basic Lightning Energy SVE 4"></textarea>
-            <div class="deck-import-actions">
-              <p>Pokémon use the requested printing or a gameplay-identical alternate artwork. Trainers and Special Energy match by name. Basic Energy is ignored.</p>
-              <button id="deck_submit" class="catalog-search-button" type="submit">Check my inventory</button>
-            </div>
-          </form>
-        </section>
+        <form id="deck_form" hidden aria-hidden="true"><textarea id="deck_list" tabindex="-1"></textarea><button id="deck_submit" type="submit">Check my inventory</button></form>
 
         <section class="deck-library-panel" aria-labelledby="deck_library_heading">
           <header>
@@ -82,7 +69,7 @@
           <button id="deck_save" class="catalog-search-button" type="button">Save to deck library</button>
           <p id="deck_save_status" role="status">Saving automatically labels available owned copies without changing quantities or storage locations.</p>
         </section>
-        <p id="deck_status" class="deck-status" role="status">Paste a deck list when you are ready.</p>
+        <p id="deck_status" class="deck-status" role="status">Search by card name to start building your deck. Basic Energy is ignored.</p>
         <section id="deck_errors" class="deck-errors" hidden></section>
         <section id="deck_results" class="deck-results" aria-live="polite"></section>
       </section>
