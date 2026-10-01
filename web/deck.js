@@ -566,7 +566,28 @@ function replaceDeckItemQuantity(item, quantity) {
     return quantity ? [`${indentation}${quantity} ${name} ${setCode} ${number}${trailing}`] : [];
   });
   if (!changed) throw new Error('That deck entry could not be updated from the original list. Use Edit deck list to adjust it.');
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return refreshDeckSectionTotals(lines).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function refreshDeckSectionTotals(lines) {
+  let headingIndex = -1;
+  let total = 0;
+  const finish = () => {
+    if (headingIndex < 0) return;
+    lines[headingIndex] = lines[headingIndex].replace(/^(.*?):\s*\d*\s*$/, `$1: ${total}`);
+  };
+  for (let index = 0; index < lines.length; index += 1) {
+    if (/^(pok[eé]mon|trainer|energy)\s*:?\s*\d*\s*$/i.test(lines[index])) {
+      finish();
+      headingIndex = index;
+      total = 0;
+      continue;
+    }
+    const quantity = lines[index].match(/^\s*(\d+)\s+/);
+    if (headingIndex >= 0 && quantity) total += Number(quantity[1]);
+  }
+  finish();
+  return lines;
 }
 
 async function updateDeckBuilderQuantity(index, quantity) {
@@ -585,9 +606,10 @@ function appendCatalogCardToDeck(card) {
   const section = card.card_type === 'POKEMON' ? 'Pokémon' : card.card_type === 'ENERGY' ? 'Energy' : 'Trainer';
   const line = `1 ${card.name} ${card.set_code} ${card.number}`;
   const heading = new RegExp(`^${section}:`, 'im');
-  deckList.value = heading.test(deckList.value)
+  const updated = heading.test(deckList.value)
     ? `${deckList.value.trim()}\n${line}`
     : `${deckList.value.trim()}\n\n${section}: 1\n${line}`.trim();
+  deckList.value = refreshDeckSectionTotals(updated.split(/\r?\n/)).join('\n');
 }
 
 async function searchDeckBuilderCatalog(event) {
