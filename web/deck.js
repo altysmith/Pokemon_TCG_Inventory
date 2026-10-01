@@ -418,6 +418,7 @@ function renderErrors(errors) {
 }
 
 let renderedDeckItems = [];
+let deckBuilderSelectedIndex = 0;
 
 function deckGroup(item) {
   if (['pokemon', 'trainer', 'energy'].includes(item.deck_section)) return item.deck_section;
@@ -515,9 +516,14 @@ function deckBuilderGroup(title, indexedItems) {
     </section>`;
 }
 
-function renderDeckBuilderPreview(item) {
+function deckBuilderCanEdit() {
+  return Boolean(lastCheckedDeckList && deckList.value.trim() === lastCheckedDeckList);
+}
+
+function renderDeckBuilderPreview(item, index) {
   const preview = document.querySelector('#deck_builder_preview');
   if (!preview || !item) return;
+  const canEdit = deckBuilderCanEdit();
   preview.innerHTML = `
     <div class="deck-builder-preview-heading">
       <small>Selected card</small>
@@ -531,10 +537,81 @@ function renderDeckBuilderPreview(item) {
       <div><dt>Printing</dt><dd>${escapeHtml(printingLabel(item))}</dd></div>
       <div><dt>Inventory</dt><dd class="${item.allocation?.reserved ? 'is-reserved' : item.status === 'ready' ? 'is-ready' : item.status === 'ignored' ? 'is-ignored' : 'is-needed'}">${escapeHtml(deckItemState(item))}</dd></div>
     </dl>
+    ${canEdit ? `<div class="deck-builder-quantity-controls" aria-label="${escapeHtml(item.name)} deck quantity">
+      <button type="button" data-builder-quantity="${Math.max(0, item.requested - 1)}" aria-label="Remove one ${escapeHtml(item.name)}">−</button>
+      <strong>${item.requested}</strong>
+      <button type="button" data-builder-quantity="${Math.min(60, item.requested + 1)}" aria-label="Add one ${escapeHtml(item.name)}">+</button>
+    </div>` : '<p class="deck-builder-edit-hint">Choose Edit deck list to change card quantities.</p>'}
     ${allocationControls(item)}`;
+  preview.querySelectorAll('[data-builder-quantity]').forEach(button => {
+    button.addEventListener('click', () => void updateDeckBuilderQuantity(index, Number(button.dataset.builderQuantity)));
+  });
   preview.querySelectorAll('[data-allocation-source]').forEach(button => {
     button.addEventListener('click', () => moveDeckAllocation(item, Number(button.dataset.allocationSource), button));
   });
+}
+
+function replaceDeckItemQuantity(item, quantity) {
+  let changed = false;
+  const sourceName = String(item.name || '').trim().toLowerCase();
+  const sourceSet = String(item.set_code || '').trim().toLowerCase();
+  const sourceNumber = collectorNumberKey(item.number);
+  const lines = deckList.value.split(/\r?\n/).flatMap(line => {
+    if (changed) return [line];
+    const match = line.match(/^(\s*)(\d+)\s+(.+?)\s+(\S+)\s+(\S+)(\s*)$/);
+    if (!match) return [line];
+    const [, indentation, , name, setCode, number, trailing] = match;
+    if (name.trim().toLowerCase() !== sourceName || setCode.toLowerCase() !== sourceSet || collectorNumberKey(number) !== sourceNumber) return [line];
+    changed = true;
+    return quantity ? [`${indentation}${quantity} ${name} ${setCode} ${number}${trailing}`] : [];
+  });
+  if (!changed) throw new Error('That deck entry could not be updated from the original list. Use Edit deck list to adjust it.');
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function updateDeckBuilderQuantity(index, quantity) {
+  const item = renderedDeckItems[index];
+  if (!item || !Number.isInteger(quantity) || quantity < 0 || quantity > 60) return;
+  try {
+    deckList.value = replaceDeckItemQuantity(item, quantity);
+    await checkCurrentDeck();
+    if (currentSavedDeckId && !savePanel.hidden) await saveCheckedDeck();
+  } catch (error) {
+    statusText.textContent = error.message;
+  }
+}
+
+function appendCatalogCardToDeck(card) {
+  const section = card.card_type === 'POKEMON' ? 'Pokémon' : card.card_type === 'ENERGY' ? 'Energy' : 'Trainer';
+  const line = `1 ${card.name} ${card.set_code} ${card.number}`;
+  const heading = new RegExp(`^${section}:`, 'im');
+  deckList.value = heading.test(deckList.value)
+    ? `${deckList.value.trim()}\n${line}`
+    : `${deckList.value.trim()}\n\n${section}: 1\n${line}`.trim();
+}
+
+async function searchDeckBuilderCatalog(event) {
+  event.preventDefault();
+  const query = document.querySelector('#deck_builder_search_input')?.value.trim();
+  const results = document.querySelector('#deck_builder_search_results');
+  if (!query || !results) return;
+  results.textContent = 'Searching…';
+  try {
+    const response = await fetch(`/catalog/search?${new URLSearchParams({q: query, name_only: 'true', limit: '12', offset: '0'})}`, {cache: 'no-store'});
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Catalog search failed.');
+    results.innerHTML = (data.items || []).map((card, resultIndex) => `
+      <button type="button" class="deck-builder-search-result" data-builder-add="${resultIndex}">
+        <span>${escapeHtml(card.name)}</span><small>${escapeHtml(printingLabel(card))}</small><b>+ Add</b>
+      </button>`).join('') || '<p>No card names matched.</p>';
+    results.querySelectorAll('[data-builder-add]').forEach(button => button.addEventListener('click', async () => {
+      appendCatalogCardToDeck(data.items[Number(button.dataset.builderAdd)]);
+      await checkCurrentDeck();
+      if (currentSavedDeckId && !savePanel.hidden) await saveCheckedDeck();
+    }));
+  } catch (error) {
+    results.textContent = error.message;
+  }
 }
 
 function allocationControls(item) {
@@ -653,7 +730,14 @@ function renderResults(items, ignoredBasicEnergy = []) {
         <div class="deck-builder-column">
           ${deckBuilderGroup('Trainer', trainerItems)}
         </div>
-        <aside id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></aside>
+        <aside class="deck-builder-side">
+          <div id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></div>
+          <section class="deck-builder-search">
+            <small>FULL LOCAL CATALOG</small><h3>Add a card</h3>
+            <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search</button></form>
+            <div id="deck_builder_search_results" class="deck-builder-search-results" role="status"></div>
+          </section>
+        </aside>
       </div>
     </section>`;
 
@@ -661,12 +745,14 @@ function renderResults(items, ignoredBasicEnergy = []) {
   builderRows.forEach(row => {
     row.addEventListener('click', () => {
       builderRows.forEach(candidate => candidate.classList.toggle('is-selected', candidate === row));
-      renderDeckBuilderPreview(renderedDeckItems[Number(row.dataset.deckIndex)]);
+      deckBuilderSelectedIndex = Number(row.dataset.deckIndex);
+      renderDeckBuilderPreview(renderedDeckItems[deckBuilderSelectedIndex], deckBuilderSelectedIndex);
     });
   });
   if (builderRows.length) {
     builderRows[0].classList.add('is-selected');
-    renderDeckBuilderPreview(renderedDeckItems[Number(builderRows[0].dataset.deckIndex)]);
+    deckBuilderSelectedIndex = Number(builderRows[0].dataset.deckIndex);
+    renderDeckBuilderPreview(renderedDeckItems[deckBuilderSelectedIndex], deckBuilderSelectedIndex);
   }
   document.querySelectorAll('[data-substitute-item]').forEach(button => {
     button.addEventListener('click', () => void useSameNameSubstitute(
@@ -676,6 +762,7 @@ function renderResults(items, ignoredBasicEnergy = []) {
     ));
   });
   document.querySelector('#deck_copy_full_list')?.addEventListener('click', (event) => void copyCheckedDeckList(event.currentTarget));
+  document.querySelector('#deck_builder_search_form')?.addEventListener('submit', event => void searchDeckBuilderCatalog(event));
 }
 
 async function checkCurrentDeck() {

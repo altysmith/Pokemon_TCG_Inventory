@@ -887,7 +887,9 @@ body.card-inspector-open { overflow: hidden; }
 .deck-builder-row b { justify-self: end; color: #ff625b; font-size: 10px; white-space: nowrap; }
 .deck-builder-row.is-ready b { color: #65d6a2; }
 .deck-builder-row.is-ignored b { color: var(--binder-muted); }
+.deck-builder-side { position: sticky; top: 18px; display: grid; gap: 14px; }
 .deck-builder-preview { position: sticky; top: 18px; min-height: 460px; padding: 14px; border: 1px solid var(--binder-border); border-radius: 12px; background: var(--binder-panel); }
+.deck-builder-side .deck-builder-preview { position: static; min-height: 0; }
 .deck-builder-preview-heading { margin-bottom: 11px; }
 .deck-builder-preview-heading small { color: var(--binder-faint); font-size: 10px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
 .deck-builder-preview-heading h3 { margin: 4px 0 0; font-size: 20px; line-height: 1.2; }
@@ -901,6 +903,26 @@ body.card-inspector-open { overflow: hidden; }
 .deck-builder-preview dd.is-ready { color: #65d6a2; }
 .deck-builder-preview dd.is-needed { color: #ff625b; }
 .deck-builder-preview dd.is-ignored { color: var(--binder-muted); }
+.deck-builder-quantity-controls { display: grid; grid-template-columns: 1fr 54px 1fr; margin-top: 13px; }
+.deck-builder-quantity-controls button, .deck-builder-quantity-controls strong { min-height: 42px; border: 1px solid var(--binder-border-strong); background: var(--binder-panel-raised); color: var(--binder-text); display: grid; place-items: center; }
+.deck-builder-quantity-controls button { font-size: 24px; cursor: pointer; }
+.deck-builder-quantity-controls button:first-child { border-radius: 8px 0 0 8px; }
+.deck-builder-quantity-controls button:last-child { border-radius: 0 8px 8px 0; }
+.deck-builder-quantity-controls strong { border-inline: 0; font-size: 16px; }
+.deck-builder-quantity-controls button:hover { background: var(--binder-accent); color: #fff; }
+.deck-builder-edit-hint { margin: 13px 0 0; color: var(--binder-muted); font-size: 11px; line-height: 1.45; }
+.deck-builder-search { padding: 14px; border: 1px solid var(--binder-border); border-radius: 12px; background: var(--binder-panel); }
+.deck-builder-search > small { color: var(--binder-accent); font-size: 9px; font-weight: 850; letter-spacing: .1em; }
+.deck-builder-search h3 { margin: 4px 0 11px; font-size: 17px; }
+.deck-builder-search form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.deck-builder-search input { min-width: 0; min-height: 40px; border: 1px solid var(--binder-border-strong); border-radius: 7px; background: var(--binder-panel-raised); color: var(--binder-text); padding: 0 9px; font: 600 12px "Segoe UI", sans-serif; }
+.deck-builder-search form button { min-height: 40px; border: 1px solid var(--binder-accent); border-radius: 7px; background: var(--binder-accent); color: #fff; padding: 0 9px; font: 800 10px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-builder-search-results { display: grid; gap: 6px; margin-top: 10px; }
+.deck-builder-search-result { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; width: 100%; border: 1px solid var(--binder-border); border-radius: 7px; background: var(--binder-panel-raised); color: var(--binder-text); padding: 8px; text-align: left; cursor: pointer; }
+.deck-builder-search-result span { overflow: hidden; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.deck-builder-search-result small { color: var(--binder-muted); font-size: 9px; }
+.deck-builder-search-result b { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: #ff817b; font-size: 10px; }
+.deck-builder-search-result:hover { border-color: var(--binder-accent); }
 
 @media (max-width: 800px) {
   .deck-library-panel > header { align-items: start; flex-direction: column; }
@@ -914,7 +936,7 @@ body.card-inspector-open { overflow: hidden; }
   .deck-summary dl { grid-template-columns: repeat(3, 1fr); }
   .deck-missing-gallery { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
   .deck-builder-layout { grid-template-columns: 1fr; }
-  .deck-builder-preview { position: static; width: min(320px, 100%); min-height: 0; }
+  .deck-builder-side, .deck-builder-preview { position: static; width: min(320px, 100%); min-height: 0; }
   .deck-save-panel { grid-template-columns: 1fr; }
   .deck-save-panel p { grid-column: 1; }
 }
@@ -1405,7 +1427,7 @@ body.has-app-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
   .deck-page .deck-summary { flex-direction: column; align-items: stretch; }
   .deck-page .deck-summary dl { width: 100%; }
   .deck-page .deck-builder-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .deck-page .deck-builder-preview { position: static; grid-column: 1 / -1; width: 280px; }
+  .deck-page .deck-builder-side { position: static; grid-column: 1 / -1; grid-template-columns: minmax(240px, 280px) minmax(260px, 1fr); width: 100%; }
 }
 
 .deck-builder-row.is-reserved b { color: #f2c966; white-space: normal; text-align: right; }
