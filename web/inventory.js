@@ -1102,7 +1102,10 @@ function renderDeckEditorEntries() {
     plus.addEventListener('click', () => update(Math.min(60, entry.quantity + 1)));
     quantity.addEventListener('change', () => update(Number(quantity.value)));
     controls.append(minus, quantity, plus);
-    article.append(art, identity, controls);
+    const artFrame = document.createElement('div');
+    artFrame.className = 'deck-editor-entry-art-frame';
+    artFrame.append(art, controls);
+    article.append(artFrame, identity);
     const select = () => {
       deckEditorState.selectedEntryKey = key;
       renderDeckEditorEntries();
