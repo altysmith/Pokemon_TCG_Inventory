@@ -25,6 +25,25 @@ displayCard.addEventListener('change', () => {
 });
 const desktopDeckView = window.matchMedia('(min-width: 761px)');
 const workspaceTitle = document.querySelector('#deck_workspace_title');
+const importPanel = document.querySelector('#deck_import_panel');
+const importCloseButton = document.querySelector('#deck_import_close');
+
+function setDeckImportExpanded(expanded, focusEditor = false) {
+  importPanel.hidden = !expanded;
+  document.querySelectorAll('.deck-import-toggle').forEach(button => button.setAttribute('aria-expanded', String(expanded)));
+  if (expanded && focusEditor) {
+    deckList.focus({preventScroll: true});
+    importPanel.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+}
+
+function bindDeckImportButtons() {
+  document.querySelectorAll('.deck-import-toggle').forEach(button => {
+    if (button.dataset.importBound) return;
+    button.dataset.importBound = 'true';
+    button.addEventListener('click', () => setDeckImportExpanded(importPanel.hidden, true));
+  });
+}
 
 function showDeckWorkspace(title) {
   document.body.classList.add('deck-workspace-active');
@@ -363,6 +382,7 @@ function startNewDeck() {
   summary.hidden = true;
   errorsContainer.hidden = true;
   resultsContainer.replaceChildren();
+  setDeckImportExpanded(false);
   statusText.textContent = 'Search by card name to add the first card.';
   renderDeckLibrary();
   renderEmptyDeckBuilder();
@@ -687,7 +707,9 @@ function deckVisualCard(item, index) {
 
 function deckBuilderSearchMarkup() {
   return `<aside class="deck-builder-side"><section class="deck-builder-search">
-    <small>FULL LOCAL CATALOG</small><h3>Add a card</h3>
+    <small>ADD CARDS</small><h3>Build your deck</h3>
+    <button class="deck-import-toggle deck-builder-import" type="button" aria-controls="deck_import_panel" aria-expanded="${String(!importPanel.hidden)}">Paste deck list</button>
+    <span class="deck-builder-or">or search one card at a time</span>
     <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search</button></form>
     <div id="deck_builder_search_results" class="deck-builder-search-results" role="status"></div>
   </section></aside>`;
@@ -695,6 +717,7 @@ function deckBuilderSearchMarkup() {
 
 function bindDeckBuilderSearch() {
   document.querySelector('#deck_builder_search_form')?.addEventListener('submit', event => void searchDeckBuilderCatalog(event));
+  bindDeckImportButtons();
 }
 
 function renderEmptyDeckBuilder() {
@@ -820,13 +843,15 @@ async function checkCurrentDeck() {
     configureSavePanel(data);
     const ignored = data.summary.ignored_basic_energy_cards || 0;
     statusText.textContent = `${data.summary.unique_lines} deck entries checked. ${ignored ? `${ignored} Basic Energy ${ignored === 1 ? 'card was' : 'cards were'} ignored. ` : ''}Your collection was not changed.`;
+    return true;
   } catch (error) {
     lastCheckedDeckList = '';
     lastCheckedClipboardDeckList = '';
     statusText.textContent = error.message;
+    return false;
   } finally {
     submitButton.disabled = false;
-    submitButton.textContent = 'Check my inventory';
+    submitButton.textContent = 'Import and check';
   }
 }
 
@@ -850,8 +875,11 @@ async function openSavedDeck(id) {
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  await checkCurrentDeck();
+  if (await checkCurrentDeck()) setDeckImportExpanded(false);
 });
+
+importCloseButton.addEventListener('click', () => setDeckImportExpanded(false));
+bindDeckImportButtons();
 
 deckList.addEventListener('input', () => {
   if (deckList.value.trim() === lastCheckedDeckList) return;

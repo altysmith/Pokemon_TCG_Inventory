@@ -923,6 +923,9 @@ body.card-inspector-open { overflow: hidden; }
 .deck-builder-search-result small { color: var(--binder-muted); font-size: 9px; }
 .deck-builder-search-result b { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: #ff817b; font-size: 10px; }
 .deck-builder-search-result:hover { border-color: var(--binder-accent); }
+.deck-builder-import { width: 100%; min-height: 42px; margin-bottom: 9px; border: 1px solid var(--binder-accent); border-radius: 7px; background: var(--binder-accent); color: #fff; padding: 8px 12px; font: 800 11px "Segoe UI", sans-serif; cursor: pointer; }
+.deck-builder-import:hover { filter: brightness(1.08); }
+.deck-builder-or { display: block; margin: 0 0 9px; color: var(--binder-faint); font-size: 9px; text-align: center; text-transform: uppercase; }
 .deck-section-heading h2 small { display: inline-block; margin-left: 8px; color: var(--binder-muted); font-size: .5em; font-weight: 650; letter-spacing: 0; }
 .deck-needed-strip { padding: 18px 0 20px; }
 .deck-needed-strip .deck-section-heading { margin-bottom: 11px; }
@@ -1412,6 +1415,12 @@ body.has-app-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 
 /* Desktop deck gallery. Mobile keeps the existing stacked workflow. */
 .deck-desktop-toolbar { display: none; }
+.deck-mobile-import-action { display: none; }
+@media (max-width: 760px) {
+  .deck-workspace-active .deck-mobile-import-action { display: block; padding: 0 16px 14px; }
+  .deck-mobile-import-action button { width: 100%; min-height: 46px; border: 1px solid var(--binder-accent); border-radius: 8px; background: transparent; color: var(--binder-text); font: 800 13px "Segoe UI", sans-serif; cursor: pointer; }
+  .deck-mobile-import-action button:hover { background: var(--binder-panel-raised); }
+}
 @media (min-width: 761px) {
   .deck-page .catalog-sidebar { position: absolute; top: 12px; right: 24px; padding: 0; }
   .deck-page .catalog-sidebar .binder-brand { display: none; }

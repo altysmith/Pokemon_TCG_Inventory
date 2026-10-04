@@ -35,8 +35,24 @@
         <div class="deck-desktop-toolbar">
           <button id="deck_back" type="button">← Back to decks</button>
           <h2 id="deck_workspace_title">Build a new deck</h2>
+          <button class="deck-import-toggle" type="button" aria-controls="deck_import_panel" aria-expanded="false">Paste deck list</button>
         </div>
-        <form id="deck_form" hidden aria-hidden="true"><textarea id="deck_list" tabindex="-1"></textarea><button id="deck_submit" type="submit">Check my inventory</button></form>
+        <div class="deck-mobile-import-action">
+          <button class="deck-import-toggle" type="button" aria-controls="deck_import_panel" aria-expanded="false">Paste deck list</button>
+        </div>
+        <section id="deck_import_panel" class="deck-import-panel" hidden>
+          <form id="deck_form">
+            <div class="deck-editor-heading">
+              <label for="deck_list">Paste a deck list</label>
+              <button id="deck_import_close" type="button">Close</button>
+            </div>
+            <textarea id="deck_list" spellcheck="false" placeholder="Pokémon: 18&#10;4 Raging Bolt ex TEF 123&#10;&#10;Trainer: 34&#10;4 Professor's Research SVI 189&#10;&#10;Energy: 8&#10;6 Basic Lightning Energy SVE 4"></textarea>
+            <div class="deck-import-actions">
+              <p>Paste a Limitless or Pokémon TCG Live list. Pokémon use the requested printing or a gameplay-identical alternate artwork. Basic Energy is ignored.</p>
+              <button id="deck_submit" class="catalog-search-button" type="submit">Import and check</button>
+            </div>
+          </form>
+        </section>
 
         <section class="deck-library-panel" aria-labelledby="deck_library_heading">
           <header>
