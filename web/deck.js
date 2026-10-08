@@ -383,7 +383,7 @@ function startNewDeck() {
   errorsContainer.hidden = true;
   resultsContainer.replaceChildren();
   setDeckImportExpanded(false);
-  statusText.textContent = 'Search by card name to add the first card.';
+  statusText.textContent = '';
   renderDeckLibrary();
   renderEmptyDeckBuilder();
 }
@@ -705,12 +705,11 @@ function deckVisualCard(item, index) {
     </article>`;
 }
 
-function deckBuilderSearchMarkup() {
-  return `<aside class="deck-builder-side"><section class="deck-builder-search">
-    <small>ADD CARDS</small><h3>Build your deck</h3>
-    <button class="deck-import-toggle deck-builder-import" type="button" aria-controls="deck_import_panel" aria-expanded="${String(!importPanel.hidden)}">Paste deck list</button>
-    <span class="deck-builder-or">or search one card at a time</span>
-    <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search</button></form>
+function deckBuilderSearchMarkup(empty = false) {
+  return `<aside class="deck-builder-side${empty ? ' is-empty' : ''}"><section class="deck-builder-search">
+    <small>ADD CARDS</small><h3>${empty ? 'Find your first card' : 'Add another card'}</h3>
+    ${empty ? '<p>Search by card name, then choose the printing you want in your deck.</p>' : ''}
+    <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search cards</button></form>
     <div id="deck_builder_search_results" class="deck-builder-search-results" role="status"></div>
   </section></aside>`;
 }
@@ -724,7 +723,7 @@ function renderEmptyDeckBuilder() {
   resultsContainer.innerHTML = `
     <section class="deck-result-section is-full-deck deck-visual-workspace">
       <div class="deck-section-heading"><span>CURRENT LIST</span><h2>Cards in this deck <small>0 cards</small></h2></div>
-      <div class="deck-builder-layout"><div class="deck-visual-empty"><strong>Your deck starts here.</strong><p>Search the local catalog by card name to add a pictured card.</p></div>${deckBuilderSearchMarkup()}</div>
+      <div class="deck-builder-empty-state">${deckBuilderSearchMarkup(true)}</div>
     </section>`;
   bindDeckBuilderSearch();
 }
