@@ -705,13 +705,13 @@ function deckVisualCard(item, index) {
     </article>`;
 }
 
-function deckBuilderSearchMarkup(empty = false) {
+function deckBuilderSearchMarkup(empty = false, includePreview = false) {
   return `<aside class="deck-builder-side${empty ? ' is-empty' : ''}"><section class="deck-builder-search">
     <small>ADD CARDS</small><h3>${empty ? 'Find your first card' : 'Add another card'}</h3>
     ${empty ? '<p>Search by card name, then choose the printing you want in your deck.</p>' : ''}
     <form id="deck_builder_search_form"><input id="deck_builder_search_input" type="search" placeholder="Search by card name…" aria-label="Search cards to add by name"><button type="submit">Search cards</button></form>
     <div id="deck_builder_search_results" class="deck-builder-search-results" role="status"></div>
-  </section></aside>`;
+  </section>${includePreview ? '<div id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></div>' : ''}</aside>`;
 }
 
 function bindDeckBuilderSearch() {
@@ -786,8 +786,8 @@ function renderResults(items, ignoredBasicEnergy = []) {
         <button id="deck_copy_full_list" type="button">Copy deck list</button>
       </div>
       <div class="deck-builder-layout">
-        <div class="deck-visual-area"><div class="deck-visual-grid">${indexedItems.map(entry => deckVisualCard(entry.item, entry.index)).join('')}</div><div id="deck_builder_preview" class="deck-builder-preview" aria-live="polite"></div></div>
-        ${deckBuilderSearchMarkup()}
+        <div class="deck-visual-area"><div class="deck-visual-grid">${indexedItems.map(entry => deckVisualCard(entry.item, entry.index)).join('')}</div></div>
+        ${deckBuilderSearchMarkup(false, true)}
       </div>
     </section>`;
 
