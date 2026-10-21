@@ -25,25 +25,6 @@ displayCard.addEventListener('change', () => {
 });
 const desktopDeckView = window.matchMedia('(min-width: 761px)');
 const workspaceTitle = document.querySelector('#deck_workspace_title');
-const importPanel = document.querySelector('#deck_import_panel');
-const importCloseButton = document.querySelector('#deck_import_close');
-
-function setDeckImportExpanded(expanded, focusEditor = false) {
-  importPanel.hidden = !expanded;
-  document.querySelectorAll('.deck-import-toggle').forEach(button => button.setAttribute('aria-expanded', String(expanded)));
-  if (expanded && focusEditor) {
-    deckList.focus({preventScroll: true});
-    importPanel.scrollIntoView({behavior: 'smooth', block: 'start'});
-  }
-}
-
-function bindDeckImportButtons() {
-  document.querySelectorAll('.deck-import-toggle').forEach(button => {
-    if (button.dataset.importBound) return;
-    button.dataset.importBound = 'true';
-    button.addEventListener('click', () => setDeckImportExpanded(importPanel.hidden, true));
-  });
-}
 
 function showDeckWorkspace(title) {
   document.body.classList.add('deck-workspace-active');
@@ -319,8 +300,8 @@ async function saveCheckedDeck() {
       await requestJson('/decks/display-card', {method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({id: existing.id, display_image: displayCard.value})});
       await loadSavedDecks('Display card saved.');
-      configureSavePanel({errors: []});
-      saveStatus.textContent = 'Display card saved.';
+      startNewDeck();
+      statusText.textContent = 'Display card saved. Ready to build another deck.';
       return true;
     }
     const data = await requestJson('/decks/save', {
@@ -335,9 +316,8 @@ async function saveCheckedDeck() {
     });
     currentSavedDeckId = data.deck.id;
     await loadSavedDecks(`${data.deck.name} was saved and its owned-card assignments were refreshed.`);
-    configureSavePanel({errors: []});
-    await checkCurrentDeck();
-    saveStatus.textContent = 'The saved list and its owned-card assignments now match. Inventory quantities and storage locations were unchanged.';
+    startNewDeck();
+    statusText.textContent = `${data.deck.name} was saved. Ready to build another deck.`;
     return true;
   } catch (error) {
     saveButton.disabled = false;
@@ -370,6 +350,8 @@ function editSavedDeck(id) {
 
 function startNewDeck() {
   displayCard.value = '';
+  displayCard.replaceChildren(new Option('Choose a card…', ''));
+  displayPreview.hidden = true;
   showDeckWorkspace('Build a new deck');
   setLibraryExpanded(false);
   currentSavedDeckId = 0;
@@ -382,7 +364,6 @@ function startNewDeck() {
   summary.hidden = true;
   errorsContainer.hidden = true;
   resultsContainer.replaceChildren();
-  setDeckImportExpanded(false);
   statusText.textContent = '';
   renderDeckLibrary();
   renderEmptyDeckBuilder();
@@ -716,7 +697,6 @@ function deckBuilderSearchMarkup(empty = false, includePreview = false) {
 
 function bindDeckBuilderSearch() {
   document.querySelector('#deck_builder_search_form')?.addEventListener('submit', event => void searchDeckBuilderCatalog(event));
-  bindDeckImportButtons();
 }
 
 function renderEmptyDeckBuilder() {
@@ -874,11 +854,8 @@ async function openSavedDeck(id) {
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  if (await checkCurrentDeck()) setDeckImportExpanded(false);
+  await checkCurrentDeck();
 });
-
-importCloseButton.addEventListener('click', () => setDeckImportExpanded(false));
-bindDeckImportButtons();
 
 deckList.addEventListener('input', () => {
   if (deckList.value.trim() === lastCheckedDeckList) return;
