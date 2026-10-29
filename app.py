@@ -1774,6 +1774,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
             return
         files = {
             "/": "search.html",
+            "/search": "search.html",
             "/inventory": "inventory.html",
             "/deck": "deck.html",
             "/needed": "needed.html",
