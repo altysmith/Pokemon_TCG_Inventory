@@ -350,6 +350,10 @@ class AppTests(unittest.TestCase):
         self.assertFalse(allocation_summary["locations_changed"])
         self.assertEqual(next(item for item in options["options"] if item["id"] == "card-2")["available_quantity"], 1)
         self.assertEqual(sum(item["deck_assigned_quantity"] for item in snapshot["items"]), 2)
+        self.assertEqual(
+            {item["id"]: item["available_quantity"] for item in snapshot["items"]},
+            {"card-1": 1, "card-2": 0},
+        )
         self.assertTrue(
             all(
                 item["deck_assignments"][0]["deck_name"] == "Test Deck"
@@ -643,6 +647,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["id"], "card-pre-011")
         self.assertEqual(result["items"][0]["quantity"], 7)
+        self.assertEqual(result["items"][0]["available_quantity"], 7)
         self.assertEqual(result["language"], "en-US")
         self.assertEqual([item["id"] for item in name_match["items"]], ["card-pre-011"])
         self.assertEqual(set_only_match["total"], 0)

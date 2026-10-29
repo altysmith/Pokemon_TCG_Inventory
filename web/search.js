@@ -131,8 +131,11 @@ async function commitQuantity(card, input, feedback, requested) {
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Quantity update failed');
     card.quantity = result.inventory.quantity;
+    card.available_quantity = Math.max(0, card.quantity - Number(card.deck_assigned_quantity || 0));
     input.value = String(card.quantity);
     input.dataset.savedValue = String(card.quantity);
+    const availability = input.closest('.catalog-quantity')?.querySelector('.catalog-available-label');
+    if (availability) availability.textContent = `Available ${card.available_quantity}`;
     setQuantityFeedback(feedback, `Saved: ${card.quantity} owned`, 'saved');
   } catch (error) {
     input.value = String(card.quantity);
@@ -177,7 +180,16 @@ function quantityControls(card) {
     }
   });
   controls.append(minus, input, plus);
-  wrap.append(controls, feedback);
+  wrap.append(controls);
+  if (Number(card.deck_assigned_quantity || 0) > 0) {
+    const available = element(
+      'span',
+      'catalog-available-label',
+      `Available ${Math.max(0, Number(card.available_quantity || 0))}`,
+    );
+    wrap.append(available);
+  }
+  wrap.append(feedback);
   return wrap;
 }
 

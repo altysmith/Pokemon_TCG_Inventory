@@ -1514,11 +1514,19 @@ function cardElement(card, prioritizeImage = false) {
   const quantity = document.createElement('b');
   quantity.className = 'binder-card-quantity';
   quantity.textContent = `× ${visibleQuantity}`;
+  const available = Math.max(0, Number(card.available_quantity ?? card.quantity ?? 0));
+  const availability = card.deck_assignments?.length
+    ? document.createElement('span')
+    : null;
+  if (availability) {
+    availability.className = 'binder-card-available';
+    availability.textContent = `Available ${available}`;
+  }
   const check = document.createElement('span');
   check.className = 'binder-card-check';
   check.setAttribute('aria-hidden', 'true');
   check.textContent = selectionState.quantities.has(card.id) ? '✓' : '';
-  art.append(image, quantity, check);
+  art.append(image, quantity, availability, check);
 
   const name = document.createElement('strong');
   name.textContent = card.name;

@@ -327,10 +327,12 @@ input:focus { border-color: var(--ink); }
 @keyframes binder-art-loading { to { background-position-x: -220%; } }
 @media (prefers-reduced-motion: reduce) { .binder-card-art.image-loading::before { animation: none; } }
 .binder-card-quantity { position: absolute; right: 7px; bottom: 7px; min-width: 38px; padding: 4px 7px; border: 1px solid rgba(255,255,255,.1); border-radius: 7px; background: rgba(5, 7, 9, .88); color: #fff; font-size: 11px; text-align: center; box-shadow: 0 4px 13px rgba(0, 0, 0, .28); backdrop-filter: blur(8px); }
+.binder-card-available { position: absolute; top: 7px; left: 7px; border: 1px solid rgba(119, 224, 164, .48); border-radius: 7px; background: rgba(9, 43, 29, .9); color: #b9f7cf; padding: 4px 7px; font-size: 10px; font-weight: 850; line-height: 1; box-shadow: 0 4px 13px rgba(0, 0, 0, .28); backdrop-filter: blur(8px); }
 .binder-card > strong { display: block; margin: 9px 3px 0; overflow: hidden; font-size: 12px; font-weight: 730; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .binder-card > small { display: block; margin: 3px 3px 0; overflow: hidden; color: var(--binder-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .binder-card-deck-assignments { display: flex; flex-wrap: wrap; gap: 4px; margin: 7px 3px 0; }
 .binder-card-deck-assignments span { max-width: 100%; overflow: hidden; border: 1px solid rgba(80, 180, 230, .34); border-radius: 999px; background: rgba(46, 126, 168, .12); color: #7fd2ff; padding: 3px 6px; font-size: 8px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-available-label { display: block; margin-top: 6px; color: #65d6a2; font-size: 11px; font-weight: 800; }
 .deck-view-actions { display: flex; align-items: end; gap: 8px; }
 .deck-view-actions[hidden] { display: none; }
 .deck-view-actions button, .deck-view-actions a { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border: 1px solid var(--binder-border-strong); border-radius: 8px; background: var(--binder-panel); color: var(--binder-text); padding: 0 13px; font: 800 12px "Segoe UI", sans-serif; text-decoration: none; cursor: pointer; }

@@ -1029,9 +1029,18 @@ def catalog_search(
             [*parameters, selected_limit, selected_offset],
         ).fetchall()
     quantities = {holding.card_id: holding.quantity for holding in inventory_database().holdings()}
+    deck_assigned_quantities: dict[str, int] = {}
+    for assignment in saved_deck_database().assignments():
+        deck_assigned_quantities[assignment.card_id] = (
+            deck_assigned_quantities.get(assignment.card_id, 0) + assignment.quantity
+        )
     items = [dict(row) for row in rows]
     for item in items:
         item["quantity"] = quantities.get(item["id"], 0)
+        item["deck_assigned_quantity"] = deck_assigned_quantities.get(item["id"], 0)
+        item["available_quantity"] = max(
+            0, item["quantity"] - item["deck_assigned_quantity"]
+        )
     return {
         "items": items,
         "total": total,
@@ -1294,6 +1303,9 @@ def inventory_snapshot(sort_by: str = "name") -> dict:
         item["deck_assignments"] = deck_assignments_by_card.get(item["id"], [])
         item["deck_assigned_quantity"] = sum(
             assignment["quantity"] for assignment in item["deck_assignments"]
+        )
+        item["available_quantity"] = max(
+            0, item["quantity"] - item["deck_assigned_quantity"]
         )
         item["locations"] = allocations_by_card.get(item["id"], {})
         item["assigned_quantity"] = assigned_by_card.get(item["id"], 0)
