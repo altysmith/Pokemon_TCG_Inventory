@@ -1841,6 +1841,8 @@ async function saveDrawerQuantity() {
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'Quantity update failed');
     card.quantity = result.inventory.quantity;
+    card.deck_assigned_quantity = result.deck_assigned_quantity;
+    card.available_quantity = result.available_quantity;
     card.unassigned_quantity = Math.max(0, card.quantity - Number(card.assigned_quantity || 0));
     drawerQuantityInput.value = String(card.quantity);
     drawerQuantitySummary.textContent = `${card.quantity} ${card.quantity === 1 ? 'copy' : 'copies'}`;
@@ -1853,7 +1855,8 @@ async function saveDrawerQuantity() {
     renderCategoryNavigation();
     renderSetOptions();
     render();
-    if (card.quantity > 0) renderDrawerLocations(card);
+    await loadInventory({reopenDrawer: true});
+    if (card.quantity > 0) renderDrawerLocations(selectedCard());
     setDrawerQuantityFeedback(
       card.quantity === 0 ? 'Removed from collection.' : `Saved: ${card.quantity} owned`,
       'saved',

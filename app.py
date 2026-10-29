@@ -1862,7 +1862,18 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "inventory": asdict(change)})
             elif self.path == "/inventory/set-quantity":
                 change = set_catalog_inventory_quantity(data)
-                self._json({"ok": True, "inventory": asdict(change)})
+                refresh_saved_deck_assignments()
+                deck_assigned = sum(
+                    assignment.quantity
+                    for assignment in saved_deck_database().assignments()
+                    if assignment.card_id == change.card_id
+                )
+                self._json({
+                    "ok": True,
+                    "inventory": asdict(change),
+                    "deck_assigned_quantity": deck_assigned,
+                    "available_quantity": max(0, change.quantity - deck_assigned),
+                })
             elif self.path == "/inventory/locations/create":
                 location = create_inventory_location(data)
                 self._json(
